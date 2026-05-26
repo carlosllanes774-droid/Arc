@@ -54,7 +54,7 @@ app.use(express.json({ limit: "2mb" }));
 app.use("/js", express.static(path.join(ROOT, "js"), { index: false, dotfiles: "deny" }));
 
 app.get("/", (req, res) => {
-  res.sendFile(path.join(ROOT, "Index1.html"));
+  res.sendFile(path.join(ROOT, "index1.html"));
 });
 
 /** Public client config — anon key only (RLS-protected), no service role. */
