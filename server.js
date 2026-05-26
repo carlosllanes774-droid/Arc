@@ -25,6 +25,58 @@ const ArcApiConfig = loadArcApiConfig();
 const apiEnv = ArcApiConfig.loadFromEnv(process.env);
 const apiValidation = ArcApiConfig.validate(apiEnv);
 
+/** Production-safe pipeline tracing (no secrets, no PII). */
+function loadArcTrace() {
+  const src = readFileSync(path.join(__dirname, "js/arc-api/arcTrace.js"), "utf8");
+  const sandbox = { console, ArcApi: {} };
+  vm.runInContext(src, vm.createContext(sandbox));
+  return sandbox.ArcApi.Trace;
+}
+
+const ArcTrace = loadArcTrace();
+
+/**
+ * Time and log an upstream provider HTTP call from Express.
+ * @param {string} providerId spoonacular|edamam|usda|openai|kroger
+ * @param {string} operation short operation label
+ * @param {() => Promise<{ ok: boolean, status?: number, fallback?: boolean }>} run
+ */
+async function traceUpstream(providerId, operation, run) {
+  const startedAt = ArcTrace.nowIso();
+  const t0 = ArcTrace.timeStart();
+  try {
+    const result = await run();
+    const ok = !!(result && result.ok);
+    ArcTrace.logUpstream({
+      providerId,
+      operation,
+      success: ok,
+      httpStatus: result && typeof result.status === "number" ? result.status : null,
+      providerStatus: ok ? "ok" : "error",
+      startedAt,
+      completedAt: ArcTrace.nowIso(),
+      durationMs: ArcTrace.msSince(t0),
+      fallback: !!(result && result.fallback),
+      message: ok ? "success" : result && result.status === 503 ? "unavailable" : "failed",
+    });
+    return result;
+  } catch (err) {
+    ArcTrace.logUpstream({
+      providerId,
+      operation,
+      success: false,
+      httpStatus: err.status || null,
+      providerStatus: "error",
+      startedAt,
+      completedAt: ArcTrace.nowIso(),
+      durationMs: ArcTrace.msSince(t0),
+      fallback: false,
+      message: "failed",
+    });
+    throw err;
+  }
+}
+
 if (!apiValidation.valid) {
   console.warn("[Arc API] Missing credentials:", apiValidation.missing.join(", "));
 }
@@ -64,7 +116,7 @@ function requestPublicOrigin(req) {
 app.use("/js", express.static(path.join(ROOT, "js"), { index: false, dotfiles: "deny" }));
 
 app.get("/", (req, res) => {
-  res.sendFile(path.join(ROOT, "index.html"));
+  res.sendFile(path.join(ROOT, "index1.html"));
 });
 
 /** Public client config — anon key only (RLS-protected), no service role. */
@@ -134,11 +186,14 @@ app.post("/api/nutrition", async (req, res) => {
     url.searchParams.set("app_id", appId);
     url.searchParams.set("app_key", appKey);
 
-    const edResp = await fetch(url.toString(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, ingr: cleanIngr }),
-    });
+    const edResp = await traceUpstream("edamam", "nutrition-details", async () => {
+      const resp = await fetch(url.toString(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, ingr: cleanIngr }),
+      });
+      return { ok: resp.ok, status: resp.status, resp };
+    }).then((r) => r.resp);
 
     if (edResp.status === 304) {
       return res.status(200).json({
@@ -204,11 +259,14 @@ app.post("/api/edamam/parse", async (req, res) => {
     const lines = text.split(/\n+/).map((s) => s.trim()).filter(Boolean);
     const ingr = lines.length ? lines : [text];
 
-    const edResp = await fetch(url.toString(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "Parsed input", ingr }),
-    });
+    const edResp = await traceUpstream("edamam", "parse", async () => {
+      const resp = await fetch(url.toString(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "Parsed input", ingr }),
+      });
+      return { ok: resp.ok, status: resp.status, resp };
+    }).then((r) => r.resp);
 
     const rawText = await edResp.text();
     if (!edResp.ok) {
@@ -257,8 +315,11 @@ app.post("/api/spoonacular/search", async (req, res) => {
     if (body.maxPrice) params.set("maxPrice", String(body.maxPrice));
 
     const url = `https://api.spoonacular.com/recipes/complexSearch?${params}`;
-    const resp = await fetch(url);
-    const data = await resp.json();
+    const { resp, data } = await traceUpstream("spoonacular", "search", async () => {
+      const r = await fetch(url);
+      const d = await r.json();
+      return { ok: r.ok, status: r.status, resp: r, data: d };
+    });
     if (!resp.ok) {
       return res.status(resp.status).json({ error: "Spoonacular search failed", detail: data });
     }
@@ -297,8 +358,11 @@ app.post("/api/spoonacular/bulk", async (req, res) => {
     });
 
     const url = `https://api.spoonacular.com/recipes/informationBulk?${params}`;
-    const resp = await fetch(url);
-    const data = await resp.json();
+    const { resp, data } = await traceUpstream("spoonacular", "bulk", async () => {
+      const r = await fetch(url);
+      const d = await r.json();
+      return { ok: r.ok, status: r.status, resp: r, data: d };
+    });
     if (!resp.ok) {
       return res.status(resp.status).json({ error: "Spoonacular bulk failed", detail: data });
     }
@@ -376,8 +440,11 @@ app.get("/api/usda/search", async (req, res) => {
     url.searchParams.set("query", q);
     url.searchParams.set("pageSize", String(req.query.pageSize || 5));
 
-    const resp = await fetch(url);
-    const data = await resp.json();
+    const { resp, data } = await traceUpstream("usda", "search", async () => {
+      const r = await fetch(url);
+      const d = await r.json();
+      return { ok: r.ok, status: r.status, resp: r, data: d };
+    });
     if (!resp.ok) {
       return res.status(resp.status).json({ error: "USDA search failed", detail: data });
     }
@@ -402,8 +469,11 @@ app.get("/api/usda/food/:fdcId", async (req, res) => {
 
     const fdcId = req.params.fdcId;
     const url = `https://api.nal.usda.gov/fdc/v1/food/${fdcId}?api_key=${encodeURIComponent(key)}`;
-    const resp = await fetch(url);
-    const data = await resp.json();
+    const { resp, data } = await traceUpstream("usda", "food", async () => {
+      const r = await fetch(url);
+      const d = await r.json();
+      return { ok: r.ok, status: r.status, resp: r, data: d };
+    });
     if (!resp.ok) {
       return res.status(resp.status).json({ error: "USDA food lookup failed", detail: data });
     }
@@ -451,12 +521,15 @@ app.post("/api/ai", async (req, res) => {
       Math.max(64, parseInt(req.body?.max_tokens, 10) || 1200)
     );
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages,
-      max_tokens: maxTokens,
-      temperature: 0.4,
-    });
+    const completion = await traceUpstream("openai", "chat", async () => {
+      const out = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages,
+        max_tokens: maxTokens,
+        temperature: 0.4,
+      });
+      return { ok: true, status: 200, completion: out };
+    }).then((r) => r.completion);
 
     res.json({
       content: [
@@ -475,8 +548,10 @@ app.post("/api/ai", async (req, res) => {
 /** Edamam analysis → USDA consistency check → validation flags for client display. */
 app.post("/api/nutrition/pipeline", async (req, res) => {
   try {
+    ArcTrace.logOrchestrator("nutrition pipeline started");
     const creds = edamamCredentials();
     if (!creds) {
+      ArcTrace.logMessage("Edamam unavailable");
       return res.status(503).json({ verified: false, reason: "edamam_not_configured" });
     }
 
@@ -493,14 +568,18 @@ app.post("/api/nutrition/pipeline", async (req, res) => {
     url.searchParams.set("app_id", creds.appId);
     url.searchParams.set("app_key", creds.appKey);
 
-    const edResp = await fetch(url.toString(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, ingr: cleanIngr }),
-    });
+    const edResp = await traceUpstream("edamam", "pipeline-analysis", async () => {
+      const resp = await fetch(url.toString(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, ingr: cleanIngr }),
+      });
+      return { ok: resp.ok, status: resp.status, resp };
+    }).then((r) => r.resp);
 
     const rawText = await edResp.text();
     if (!edResp.ok) {
+      ArcTrace.logMessage("Edamam nutrition analysis failed");
       return res.status(edResp.status >= 400 ? edResp.status : 502).json({
         verified: false,
         reason: "edamam_failed",
@@ -547,10 +626,14 @@ app.post("/api/nutrition/pipeline", async (req, res) => {
         searchUrl.searchParams.set("api_key", usdaKey);
         searchUrl.searchParams.set("query", cleanIngr[0].slice(0, 80));
         searchUrl.searchParams.set("pageSize", "1");
-        const usdaResp = await fetch(searchUrl);
-        if (usdaResp.ok) {
+        const usdaResult = await traceUpstream("usda", "pipeline-sample", async () => {
+          const usdaResp = await fetch(searchUrl);
+          if (!usdaResp.ok) return { ok: false, status: usdaResp.status, resp: usdaResp, data: null };
           const usdaData = await usdaResp.json();
-          const food = (usdaData.foods || [])[0];
+          return { ok: true, status: usdaResp.status, resp: usdaResp, data: usdaData };
+        });
+        if (usdaResult.ok && usdaResult.data) {
+          const food = (usdaResult.data.foods || [])[0];
           if (food) {
             const norm = normalizeUsdaFood(food);
             if (norm && norm.calories > 0) {
@@ -584,6 +667,7 @@ app.post("/api/nutrition/pipeline", async (req, res) => {
     };
 
     if (!validation.safe) {
+      ArcTrace.logMessage("USDA validation failed");
       return res.json({
         verified: false,
         reason: "validation_failed",
@@ -593,6 +677,7 @@ app.post("/api/nutrition/pipeline", async (req, res) => {
       });
     }
 
+    ArcTrace.logMessage("Final meal generation complete");
     res.json({
       verified: true,
       macros,
@@ -647,14 +732,17 @@ async function getKrogerToken() {
     scope: KROGER_SCOPE,
   });
 
-  const resp = await fetch(`${KROGER_BASE}/connect/oauth2/token`, {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${basic}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body,
-  });
+  const resp = await traceUpstream("kroger", "oauth-token", async () => {
+    const r = await fetch(`${KROGER_BASE}/connect/oauth2/token`, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${basic}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body,
+    });
+    return { ok: r.ok, status: r.status, resp: r };
+  }).then((r) => r.resp);
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
@@ -678,12 +766,15 @@ async function krogerGet(path, params) {
       if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, v);
     }
   }
-  const resp = await fetch(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-    },
-  });
+  const resp = await traceUpstream("kroger", path.replace(/^\//, ""), async () => {
+    const r = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+    });
+    return { ok: r.ok, status: r.status, resp: r };
+  }).then((r) => r.resp);
   if (resp.status === 401) {
     krogerTokenCache = { token: null, expiresAt: 0 };
   }
@@ -868,6 +959,7 @@ app.get("/api/kroger/location", async (req, res) => {
 async function handleLiveGroceryPrices(req, res) {
   try {
     if (!krogerCredsConfigured()) {
+      ArcTrace.logMessage("Kroger unavailable");
       return res.status(503).json({ error: "Grocery pricing not configured" });
     }
 
