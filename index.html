@@ -2591,6 +2591,7 @@ button:not(:disabled):active,
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.js"></script>
 <script src="js/arc-config.js"></script>
 <script src="js/config/apiConfig.js"></script>
+<script src="js/arc-api-base.js"></script>
 <script src="js/arc-api/arcCache.js"></script>
 <script src="js/arc-api/arcRateLimit.js"></script>
 <script src="js/arc-api/providers/providerBase.js"></script>
@@ -12569,8 +12570,8 @@ function buildRealisticPurchaseLine(canonicalKey, displayName, qtys, uses) {
 // ── Local Grocery Pricing (home area from onboarding; passive shelf refinement)
 function arcApiBase() {
   if (typeof ArcRuntime !== 'undefined' && ArcRuntime.apiBaseUrl) return ArcRuntime.apiBaseUrl();
-  if (typeof ARC_API !== 'undefined' && ARC_API.baseUrl) return String(ARC_API.baseUrl).replace(/\/$/, '');
-  if (typeof location !== 'undefined' && location.origin) return location.origin;
+  if (typeof ArcApiBase !== 'undefined' && ArcApiBase.apiBaseUrl) return ArcApiBase.apiBaseUrl();
+  if (typeof location !== 'undefined' && location.origin) return String(location.origin).replace(/\/$/, '');
   return '';
 }
 function arcApiPath(path) {
