@@ -26,14 +26,38 @@
   }
 
   function postJson(path, body) {
+    var Trace = global.ArcApi && global.ArcApi.Trace;
+    var providerId = Trace ? Trace.pathToProvider(path) : null;
+    var operation = Trace ? Trace.pathOperation(path) : path;
+    var startedAt = Trace ? Trace.nowIso() : null;
+    var t0 = Trace ? Trace.timeStart() : 0;
+
     return fetch(apiUrl(path), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(body || {})
     }).then(function (resp) {
       return resp.json().then(function (json) {
-        return { ok: resp.ok, status: resp.status, json: json };
+        var res = { ok: resp.ok, status: resp.status, json: json };
+        if (Trace && providerId) Trace.logProxy(providerId, operation, res, startedAt, t0);
+        return res;
       });
+    }).catch(function (err) {
+      if (Trace && providerId) {
+        Trace.logProvider({
+          providerId: providerId,
+          outcome: 'failed',
+          message: 'failed',
+          success: false,
+          status: 'error',
+          startedAt: startedAt,
+          completedAt: Trace.nowIso(),
+          durationMs: Trace.msSince(t0),
+          fallback: false,
+          includeZeroMs: true
+        });
+      }
+      throw err;
     });
   }
 
@@ -72,17 +96,25 @@
       });
     }
 
+    var Trace = global.ArcApi && global.ArcApi.Trace;
+    if (Trace) Trace.logOrchestrator('recipe verify started');
+
     return postJson('/api/nutrition/pipeline', {
       title: recipe.name || 'Recipe',
       ingr: ingr,
       reported: reported
     }).then(function (res) {
       if (!res.ok || !res.json) {
+        if (Trace) Trace.logFallback('category_targets', 'pipeline_unavailable');
         return applyFallback(recipe, fallback, 'pipeline_unavailable');
       }
 
       var data = res.json;
       if (!data.verified || !data.macros) {
+        if (Trace && (data.reason === 'validation_failed' || !data.verified)) {
+          Trace.logMessage('USDA validation failed');
+        }
+        if (Trace) Trace.logFallback('category_targets', data.reason || 'validation_failed');
         return applyFallback(recipe, fallback, data.reason || 'validation_failed');
       }
 
@@ -90,9 +122,13 @@
       if (V && typeof V.detectImpossibleNutrition === 'function') {
         var check = V.detectImpossibleNutrition(Object.assign({}, data.macros, { context: 'meal' }));
         if (!check.safe) {
+          if (Trace) Trace.logMessage('USDA validation failed');
+          if (Trace) Trace.logFallback('category_targets', 'impossible_nutrition');
           return applyFallback(recipe, fallback, 'impossible_nutrition');
         }
       }
+
+      if (Trace) Trace.logMessage('Final meal generation complete');
 
       recipe.cal = Math.round(data.macros.calories);
       recipe.p = Math.round(data.macros.protein);
@@ -108,6 +144,8 @@
         validation: data.validation || null
       };
     }).catch(function () {
+      var TraceErr = global.ArcApi && global.ArcApi.Trace;
+      if (TraceErr) TraceErr.logFallback('category_targets', 'network_error');
       return applyFallback(recipe, fallback, 'network_error');
     });
   }
