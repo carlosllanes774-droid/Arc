@@ -41,6 +41,11 @@
     }
 
     if (!input.zipCode) {
+      var Trace = global.ArcApi && global.ArcApi.Trace;
+      if (Trace) {
+        Trace.logMessage('Kroger unavailable');
+        Trace.logFallback('arc_budget_engine', 'no_zip');
+      }
       return Promise.resolve(b.ok(ID, 'grocery_pricing', arcGroceryFallback(ingredients, input.budgetConstraints)));
     }
 
@@ -62,11 +67,17 @@
       zipCode: input.zipCode,
       items: items
     }).then(function (res) {
+      var Trace = global.ArcApi && global.ArcApi.Trace;
       if (!res.ok) {
         if (res.status === 503) {
+          if (Trace) {
+            Trace.logMessage('Kroger unavailable');
+            Trace.logFallback('arc_budget_engine', 'not_configured');
+          }
           var fb = arcGroceryFallback(ingredients, input.budgetConstraints);
           return b.ok(ID, 'grocery_pricing', fb);
         }
+        if (Trace) Trace.logFallback('arc_budget_engine', 'request_failed');
         var degraded = arcGroceryFallback(ingredients, input.budgetConstraints);
         degraded.warning = (res.json && res.json.error) || 'Kroger request failed';
         return b.ok(ID, 'grocery_pricing', degraded);
@@ -94,6 +105,8 @@
       if (c) c.set('pricing', cacheKey, out);
       return out;
     }).catch(function () {
+      var TraceCatch = global.ArcApi && global.ArcApi.Trace;
+      if (TraceCatch) TraceCatch.logFallback('arc_budget_engine', 'network_error');
       return b.ok(ID, 'grocery_pricing', arcGroceryFallback(ingredients, input.budgetConstraints));
     });
   }
