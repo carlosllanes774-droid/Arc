@@ -7,14 +7,14 @@
   var bootstrapPromise = null;
 
   function apiBaseUrl() {
+    if (global.ArcApiBase && global.ArcApiBase.apiBaseUrl) return global.ArcApiBase.apiBaseUrl();
+    if (typeof location !== 'undefined' && location.origin) return String(location.origin).replace(/\/$/, '');
     var cfg = global.ARC_API || {};
-    var base = (cfg.baseUrl || '').trim();
-    if (base) return base.replace(/\/$/, '');
-    if (typeof location !== 'undefined' && location.origin) return location.origin;
-    return '';
+    return String(cfg.baseUrl || '').trim().replace(/\/$/, '');
   }
 
   function apiUrl(path) {
+    if (global.ArcApiBase && global.ArcApiBase.apiUrl) return global.ArcApiBase.apiUrl(path);
     return apiBaseUrl() + path;
   }
 
@@ -254,8 +254,7 @@
 
   function bootstrap() {
     if (bootstrapPromise) return bootstrapPromise;
-    var base = apiBaseUrl();
-    var url = (base || '') + '/api/config/public';
+    var url = apiUrl('/api/config/public');
     bootstrapPromise = fetch(url, { headers: { Accept: 'application/json' } })
       .then(function (resp) {
         return resp.json().then(function (json) {
@@ -264,17 +263,10 @@
       })
       .then(function (res) {
         var json = res.json || {};
-        if (json.arcApiBase) {
-          global.ARC_API = global.ARC_API || {};
-          global.ARC_API.baseUrl = String(json.arcApiBase).replace(/\/$/, '');
-        } else if (!global.ARC_API || !global.ARC_API.baseUrl) {
-          global.ARC_API = { baseUrl: apiBaseUrl() };
-        }
         applySupabasePublicConfig(json);
         return json;
       })
       .catch(function () {
-        global.ARC_API = global.ARC_API || { baseUrl: apiBaseUrl() };
         global.ARC_SUPABASE = global.ARC_SUPABASE || { url: '', anonKey: '' };
         return null;
       });
