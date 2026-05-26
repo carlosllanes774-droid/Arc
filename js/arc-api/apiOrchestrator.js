@@ -118,6 +118,10 @@
     }
   };
 
+  function trace() {
+    return global.ArcApi && global.ArcApi.Trace;
+  }
+
   function dispatch(operationName, input) {
     var op = OPERATIONS[operationName];
     if (!op) {
@@ -185,6 +189,9 @@
    */
   function runAdaptiveMealPipeline(profile) {
     profile = profile || {};
+    var T = trace();
+    if (T) T.logOrchestrator('meal pipeline started');
+
     var arcResult = null;
 
     if (global.ArcEngine && typeof global.ArcEngine.run === 'function') {
@@ -211,6 +218,7 @@
         var recipe = recipes[0] || profile.recipe || null;
 
         if (!recipe) {
+          if (T) T.logMessage('Spoonacular no recipes found');
           return buildPipelineResult({
             arcResult: arcResult,
             scenario: scenario,
@@ -234,6 +242,10 @@
           var macros = nutrition.data && (nutrition.data.normalized || nutrition.data.totalNutrients);
           if (nutrition.data && nutrition.data.normalized) macros = nutrition.data.normalized;
 
+          if (nutrition.status !== 'ok' && T) {
+            T.logMessage('Edamam nutrition analysis failed');
+          }
+
           var usdaPromise = macros
             ? (S.usda ? S.usda.validateMacros(macros) : dispatch('validateMacros', macros))
             : Promise.resolve(null);
@@ -247,6 +259,7 @@
               : null;
 
             if (validationReport && !validationReport.safe) {
+              if (T) T.logMessage('USDA validation failed');
               return buildPipelineResult({
                 arcResult: arcResult,
                 scenario: scenario,
@@ -274,6 +287,10 @@
                 : dispatch('getGroceryPricing', { zipCode: profile.zipCode, items: groceryIngredients });
 
               return krogerPromise.then(function (pricing) {
+                if (T && pricing && pricing.status === 'not_configured') {
+                  T.logMessage('Kroger unavailable');
+                }
+
                 var recipeWithNutrition = Object.assign({}, recipe, {
                   nutrition: macros || {},
                   calories: macros && macros.calories,
@@ -294,7 +311,7 @@
                   });
                 }
 
-                return buildPipelineResult({
+                var finalResult = buildPipelineResult({
                   arcResult: arcResult,
                   scenario: scenario,
                   recipeSearch: recipeSearch,
@@ -306,10 +323,15 @@
                   pricing: pricing,
                   scaledRecipe: scaledRecipe
                 });
+                if (T) T.logMessage('Final meal generation complete');
+                return finalResult;
               });
             });
           });
         });
+      }).catch(function (err) {
+        if (T) T.logOrchestrator('meal pipeline failed');
+        throw err;
       });
   }
 
