@@ -47,21 +47,31 @@ function krogerCredentials() {
 }
 
 const app = express();
+app.set("trust proxy", 1);
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
+
+/** Public origin for config responses — respects reverse-proxy TLS (Render, etc.). */
+function requestPublicOrigin(req) {
+  const proto = String(req.get("x-forwarded-proto") || req.protocol || "http")
+    .split(",")[0]
+    .trim();
+  const host = req.get("x-forwarded-host") || req.get("host") || "";
+  return `${proto}://${host}`;
+}
 
 /** Scoped static assets only — never serve repo root or node_modules. */
 app.use("/js", express.static(path.join(ROOT, "js"), { index: false, dotfiles: "deny" }));
 
 app.get("/", (req, res) => {
-  res.sendFile(path.join(ROOT, "index.html"));
+  res.sendFile(path.join(ROOT, "index1.html"));
 });
 
 /** Public client config — anon key only (RLS-protected), no service role. */
 app.get("/api/config/public", (req, res) => {
   const supabaseUrl = (process.env.SUPABASE_URL || "").trim().replace(/\/rest\/v1\/?$/i, "").replace(/\/$/, "");
   res.json({
-    arcApiBase: `${req.protocol}://${req.get("host")}`,
+    arcApiBase: requestPublicOrigin(req),
     supabase: {
       url: supabaseUrl,
       anonKey: (process.env.SUPABASE_ANON_KEY || "").trim(),
@@ -78,7 +88,16 @@ app.get("/api/config/status", (req, res) => {
     renderReady: apiValidation.valid,
     providers: apiValidation.providers,
     missing: apiValidation.missing,
-    arcProxyBase: req.protocol + "://" + req.get("host"),
+    arcProxyBase: requestPublicOrigin(req),
+  });
+});
+
+/** Provider credential flags — no secrets exposed. */
+app.get("/api/providers", (req, res) => {
+  res.json({
+    environment: apiValidation.environment,
+    providers: apiValidation.providers,
+    renderReady: apiValidation.valid,
   });
 });
 
