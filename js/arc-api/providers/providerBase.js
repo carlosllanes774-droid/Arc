@@ -58,14 +58,40 @@
    */
   function postJson(path, body) {
     var url = apiBaseUrl() + path;
+    var Trace = global.ArcApi && global.ArcApi.Trace;
+    var providerId = Trace ? Trace.pathToProvider(path) : null;
+    var operation = Trace ? Trace.pathOperation(path) : path;
+    var startedAt = Trace ? Trace.nowIso() : null;
+    var t0 = Trace ? Trace.timeStart() : 0;
+
     return fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body || {})
     }).then(function (resp) {
       return resp.json().then(function (json) {
-        return { ok: resp.ok, status: resp.status, json: json };
+        var res = { ok: resp.ok, status: resp.status, json: json };
+        if (Trace && providerId) {
+          Trace.logProxy(providerId, operation, res, startedAt, t0);
+        }
+        return res;
       });
+    }).catch(function (err) {
+      if (Trace && providerId) {
+        Trace.logProvider({
+          providerId: providerId,
+          outcome: 'failed',
+          message: operation + ' failed',
+          success: false,
+          status: 'error',
+          startedAt: startedAt,
+          completedAt: Trace.nowIso(),
+          durationMs: Trace.msSince(t0),
+          fallback: false,
+          includeZeroMs: true
+        });
+      }
+      throw err;
     });
   }
 
