@@ -44,11 +44,10 @@
    * @returns {string}
    */
   function apiBaseUrl() {
+    if (global.ArcApiBase && global.ArcApiBase.apiBaseUrl) return global.ArcApiBase.apiBaseUrl();
+    if (typeof location !== 'undefined' && location.origin) return String(location.origin).replace(/\/$/, '');
     var cfg = global.ARC_API || {};
-    var base = (cfg.baseUrl || '').trim();
-    if (base) return base.replace(/\/$/, '');
-    if (typeof location !== 'undefined' && location.origin) return location.origin;
-    return '';
+    return String(cfg.baseUrl || '').trim().replace(/\/$/, '');
   }
 
   /**
