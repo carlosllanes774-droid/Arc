@@ -2590,6 +2590,21 @@ button:not(:disabled):active,
 </div><!-- .app -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.js"></script>
 <script src="js/arc-config.js"></script>
+<script src="js/config/apiConfig.js"></script>
+<script src="js/arc-api/arcCache.js"></script>
+<script src="js/arc-api/arcRateLimit.js"></script>
+<script src="js/arc-api/providers/providerBase.js"></script>
+<script src="js/arc-api/arcValidationService.js"></script>
+<script src="js/arc-engine/arcNutritionEngine.js"></script>
+<script src="js/arc-engine/arcGoalEngine.js"></script>
+<script src="js/arc-engine/arcAthleteEngine.js"></script>
+<script src="js/arc-engine/arcMealOptimizer.js"></script>
+<script src="js/arc-engine/arcBudgetEngine.js"></script>
+<script src="js/arc-engine/arcPortionScaler.js"></script>
+<script src="js/arc-engine/arcAdherenceEngine.js"></script>
+<script src="js/arc-engine/arcEngine.js"></script>
+<script src="js/arc-runtime.js"></script>
+<script src="js/arc-nutrition-pipeline.js"></script>
 <script src="js/arc-backend.js"></script>
 <script>
   // ✅ MUST be inside script
@@ -3408,7 +3423,7 @@ function arcIsProtectedMainScreenId(id) {
 function buildArcPersistBundle() {
   UP.useCustom = useCustom;
   UP.locDetected = locDetected;
-  return {
+  var bundle = {
     profile: UP,
     app: {
       recipes: recipes,
@@ -3423,6 +3438,11 @@ function buildArcPersistBundle() {
       locDetected: locDetected
     }
   };
+  if (typeof ArcRuntime !== 'undefined' && ArcRuntime.stampBundle) {
+    return ArcRuntime.stampBundle(bundle);
+  }
+  bundle.updatedAt = new Date().toISOString();
+  return bundle;
 }
 
 function persistAppData() {
@@ -3612,7 +3632,13 @@ function arcRestoreSessionIntoApp(session, pendingGen) {
   arcAuthUser = user;
   return ArcBackend.fetchProfileRow(user.id).then(function (rowRes) {
     var row = rowRes && rowRes.data && !rowRes.error ? rowRes.data : null;
-    var bundle = row && row.profile ? { profile: row.profile, app: row.app_state || {} } : null;
+    var localBundle = null;
+    try {
+      var prLocal = localStorage.getItem(LS_PROFILE);
+      if (prLocal) localBundle = JSON.parse(prLocal);
+    } catch (eLoc) {}
+    var merged = ArcBackend.mergeProfileState(localBundle, row);
+    var bundle = merged.bundle;
     if (bundle && bundle.profile && typeof bundle.profile === 'object') {
       applyJsonBundleToApp(bundle);
       arcRestoredFromStorage = true;
@@ -4518,13 +4544,18 @@ function arcRunBootAuthGate() {
           } catch (eRem) {}
         }
 
-        if (row && row.profile) {
-          var bundle = { profile: row.profile, app: row.app_state || {} };
-          applyJsonBundleToApp(bundle);
+        var localBundleBoot = null;
+        try {
+          var prBoot = localStorage.getItem(LS_PROFILE);
+          if (prBoot) localBundleBoot = JSON.parse(prBoot);
+        } catch (eBoot) {}
+        var mergedBoot = ArcBackend.mergeProfileState(localBundleBoot, row);
+        if (mergedBoot.bundle && mergedBoot.bundle.profile) {
+          applyJsonBundleToApp(mergedBoot.bundle);
           DAYS.forEach(function(d) { if (!mealPlan[d]) mealPlan[d] = {}; });
           arcRestoredFromStorage = true;
           try {
-            localStorage.setItem(LS_PROFILE, JSON.stringify(bundle));
+            localStorage.setItem(LS_PROFILE, JSON.stringify(mergedBoot.bundle));
           } catch (e) {}
           arcBootInitialScreen = 'none';
         } else {
@@ -4609,260 +4640,41 @@ function fmtPrice(base) {
   return r.sym + v.toFixed(2);
 }
 
-// ── BMR + maintenance + Arc calorie target (Mifflin-St Jeor) ─────────────────
-var ACTIVITY_FACTORS_TDEE = {
-  'Sedentary':   1.2,
-  'Light':       1.375,
-  'Moderate':    1.55,
-  'Very active': 1.725,
-  'Athlete':     1.9
-};
-
+// ── Nutrition targets — Arc Engine only (js/arc-engine/) ─────────────────────
 function normalizeArcGoal(goal) {
   var g = goal != null ? String(goal).trim() : '';
   if (g === 'Build muscle') return 'Gain muscle';
   return g;
 }
 
-function arcDailyDeltaFromPaceLbWeek(paceLbWeek) {
-  var p = Number(paceLbWeek);
-  if (!isFinite(p) || p <= 0) p = 0.5;
-  if (p < 0.25) p = 0.25;
-  if (p > 1) p = 1;
-  return Math.round((p * 3500) / 7);
-}
-
-/** Human-readable weekly pace for copy (matches 0.25–1 lb/week chips). */
 function formatPaceLbWeekForCopy(paceLbWeek) {
-  var n = Number(paceLbWeek);
-  if (!isFinite(n) || n <= 0) n = 0.5;
-  n = Math.min(1, Math.max(0.25, n));
-  if (n === 1) return '1 lb/week';
-  if (n === 0.75) return '0.75 lb/week';
-  if (n === 0.5) return '0.5 lb/week';
-  if (n === 0.25) return '0.25 lb/week';
-  return (Math.round(n * 100) / 100) + ' lb/week';
+  return ArcRuntime.formatPaceLbWeekForCopy(paceLbWeek);
 }
 
 function computePhysiologyMetrics(profile) {
-  profile = profile || UP;
-  var wt = parseFloat(profile.weight);
-  if (!(wt > 0)) wt = 154;
-  var hIn = parseFloat(profile.heightInches);
-  if (!(hIn > 0)) {
-    var hp = parseHeightInput(profile.height);
-    if (hp.ok) hIn = hp.inches;
-  }
-  var heightCm = (hIn > 0) ? (hIn * 2.54) : 170;
-  var weightKg = wt * 0.453592;
-  var age = parseInt(profile.age, 10) || 30;
-  var sex = (profile.sex || 'Male').toLowerCase();
-  var bmr;
-  if (sex === 'female') {
-    bmr = (10 * weightKg) + (6.25 * heightCm) - (5 * age) - 161;
-  } else {
-    bmr = (10 * weightKg) + (6.25 * heightCm) - (5 * age) + 5;
-  }
-  var actKey = profile.activity || 'Moderate';
-  var factor = ACTIVITY_FACTORS_TDEE[actKey] || 1.55;
-  var maintenance = Math.round(bmr * factor);
-  return { bmr: bmr, maintenance: maintenance, weightKg: weightKg, heightCm: heightCm, age: age, sex: sex, activityFactor: factor };
+  return ArcRuntime.computePhysiologyMetrics(profile || UP);
 }
 
 function computeMaintenanceCalories(profile) {
-  return computePhysiologyMetrics(profile).maintenance;
+  return ArcRuntime.computeMaintenanceCalories(profile || UP);
 }
 
 function computeCalorieRecommendation(maintenance, goalRaw, paceLbWeek, opts) {
-  opts = opts || {};
-  var muscleEmphasis = opts.muscleEmphasis;
-  var g = normalizeArcGoal(goalRaw);
-  var m = Math.round(maintenance);
-  if (!isFinite(m) || m <= 0) m = 2000;
-
-  var paceFromWeek = arcDailyDeltaFromPaceLbWeek(paceLbWeek);
-  var rawTarget;
-  var paceLabel = formatPaceLbWeekForCopy(paceLbWeek);
-  var adjustmentSummary = '';
-  var muscleFloorKcal = null;
-
-  if (g === 'Lose weight') {
-    rawTarget = m - paceFromWeek;
-    adjustmentSummary = '−' + Math.round(paceFromWeek) + ' kcal/day for ~' + paceLabel + ' loss';
-  } else if (g === 'Gain weight') {
-    rawTarget = m + paceFromWeek;
-    adjustmentSummary = '+' + Math.round(paceFromWeek) + ' kcal/day for ~' + paceLabel + ' gain';
-  } else if (g === 'Gain muscle') {
-    var floorSurplus = 95;
-    if (muscleEmphasis === 'Strength') floorSurplus = 115;
-    else if (muscleEmphasis === 'Size') floorSurplus = 155;
-    else if (muscleEmphasis === 'Athletic performance') floorSurplus = 135;
-    else if (muscleEmphasis === 'General fitness') floorSurplus = 95;
-    muscleFloorKcal = floorSurplus;
-    var surplus = Math.max(paceFromWeek, floorSurplus);
-    rawTarget = m + surplus;
-    if (surplus > paceFromWeek) {
-      adjustmentSummary = '+' + Math.round(surplus) + ' kcal/day (~' + paceLabel + ' pace, with a small training-friendly baseline)';
-    } else {
-      adjustmentSummary = '+' + Math.round(surplus) + ' kcal/day for ~' + paceLabel + ' gain';
-    }
-  } else if (g === 'Body recomp') {
-    var trimBr = Math.min(240, Math.max(90, Math.round(paceFromWeek * 0.5)));
-    rawTarget = m - trimBr;
-    adjustmentSummary = '−' + Math.round(trimBr) + ' kcal/day (patient deficit near maintenance)';
-  } else if (g === 'Maintain weight' || g === 'Improve energy' || g === 'Eat healthier') {
-    rawTarget = m;
-    adjustmentSummary = 'No calorie shift for this goal';
-  } else {
-    rawTarget = m;
-    adjustmentSummary = 'No calorie shift';
-  }
-
-  var target = Math.max(1200, Math.min(5500, Math.round(rawTarget)));
-  var appliedDelta = target - m;
-  var clampNote = '';
-  if (Math.round(rawTarget) !== target) {
-    clampNote = target < Math.round(rawTarget)
-      ? 'Arc does not go below ~1200 kcal/day without your explicit choice.'
-      : 'Arc caps very high outputs—tune with a clinician if you need more.';
-  }
-
-  return {
-    maintenance: m,
-    target: target,
-    rawTarget: rawTarget,
-    appliedDelta: appliedDelta,
-    paceKcalPerDay: paceFromWeek,
-    goal: g,
-    adjustmentSummary: adjustmentSummary,
-    muscleFloorKcal: muscleFloorKcal,
-    clampNote: clampNote
-  };
+  return ArcRuntime.computeCalorieRecommendation(maintenance, goalRaw, paceLbWeek, opts);
 }
 
 function computeRecommendedCalories(maintenance, goalRaw, paceLbWeek, opts) {
-  return computeCalorieRecommendation(maintenance, goalRaw, paceLbWeek, opts).target;
+  return ArcRuntime.computeRecommendedCalories(maintenance, goalRaw, paceLbWeek, opts);
 }
 
-/** Stored daily calorie guide (goal- and pace-aware). */
+/** Stored daily calorie guide (goal- and pace-aware) — Arc Engine. */
 function calcTDEE() {
-  var maint = computeMaintenanceCalories(UP);
-  return computeRecommendedCalories(maint, UP.goal, UP.weightGoalPaceLbWeek, { muscleEmphasis: UP.muscleGainEmphasis });
+  return ArcRuntime.calcTDEEForProfile(UP);
 }
 
-function arcProteinTFromProfile(goal, activity, muscleEmphasis) {
-  var g = normalizeArcGoal(goal);
-  var act = activity != null ? String(activity).trim() : '';
-  var intense = (act === 'Athlete' || act === 'Very active');
-  var t = 0.28;
-  if (intense) t += 0.14;
-  var pace = Number(UP.weightGoalPaceLbWeek);
-  if (g === 'Lose weight' && isFinite(pace) && pace >= 0.75) t += 0.05;
-  if (g === 'Gain weight') t -= 0.06;
-  if (g === 'Gain muscle') {
-    if (muscleEmphasis === 'Strength') t += 0.07;
-    else if (muscleEmphasis === 'Size') t += 0.09;
-    else if (muscleEmphasis === 'Athletic performance') t += 0.08;
-  }
-  return Math.min(1, Math.max(0, t));
-}
-
-function arcProteinGramsPerLb(goal, activity, muscleEmphasis) {
-  var g = normalizeArcGoal(goal);
-  var minR = 0.65;
-  var maxR = 0.82;
-  if (g === 'Lose weight') { minR = 0.6; maxR = 0.9; }
-  else if (g === 'Body recomp' || g === 'Gain muscle') { minR = 0.78; maxR = 0.95; }
-  else if (g === 'Maintain weight' || g === 'Improve energy') { minR = 0.6; maxR = 0.8; }
-  else if (g === 'Gain weight') { minR = 0.66; maxR = 0.8; }
-  var t = arcProteinTFromProfile(g, activity, muscleEmphasis);
-  return minR + (maxR - minR) * t;
-}
-
-function arcProteinDailyCapGrams(weightLb, activity, goal, muscleEmphasis) {
-  var g = normalizeArcGoal(goal);
-  var act = activity != null ? String(activity).trim() : '';
-  var athlete = act === 'Athlete';
-  var very = act === 'Very active';
-  if (athlete && (g === 'Gain muscle' || g === 'Body recomp')) {
-    return Math.min(260, Math.max(175, Math.round(weightLb * 0.98)));
-  }
-  if (athlete) return Math.min(240, Math.max(165, Math.round(weightLb * 0.9)));
-  if (very) return Math.min(220, Math.max(155, Math.round(weightLb * 0.86)));
-  if (weightLb >= 260) return Math.min(215, Math.round(weightLb * 0.8));
-  if (weightLb >= 220) return Math.min(200, Math.round(weightLb * 0.82));
-  if (g === 'Gain muscle' && muscleEmphasis === 'Size') return Math.min(195, Math.round(weightLb * 0.92));
-  return Math.min(185, Math.round(weightLb * 0.82 + 28));
-}
-
-function arcRoundProteinClean(g) {
-  if (!isFinite(g) || g <= 0) return 0;
-  var step = 5;
-  var r = Math.round(g / step) * step;
-  if (r < 55) r = 55;
-  return r;
-}
-
-function arcMacroCarbShare(goal, muscleEmphasis) {
-  var g = normalizeArcGoal(goal);
-  if (g === 'Lose weight') return 0.48;
-  if (g === 'Gain muscle') {
-    if (muscleEmphasis === 'Athletic performance') return 0.56;
-    if (muscleEmphasis === 'Strength') return 0.46;
-    if (muscleEmphasis === 'Size') return 0.54;
-    return 0.52;
-  }
-  if (g === 'Gain weight') return 0.52;
-  if (g === 'Body recomp') return 0.5;
-  if (g === 'Improve energy') return 0.54;
-  return 0.5;
-}
-
-// Returns recommended macros in grams based on goal, bodyweight-aware protein, and calorie target
+/** Daily macro targets in grams — Arc Engine. */
 function getMacroTargets(cals) {
-  cals = Number(cals);
-  if (!isFinite(cals) || cals <= 0) cals = getCalTarget();
-  var g = normalizeArcGoal(UP.goal);
-  var weightLb = parseFloat(UP.weight);
-  if (!isFinite(weightLb) || weightLb <= 0) weightLb = 170;
-  var activity = UP.activity || 'Moderate';
-  var muscleEm = UP.muscleGainEmphasis;
-
-  var perLb = arcProteinGramsPerLb(g, activity, muscleEm);
-  var rawP = weightLb * perLb;
-  var capG = arcProteinDailyCapGrams(weightLb, activity, g, muscleEm);
-  if (rawP > capG) rawP = capG;
-  var pr = arcRoundProteinClean(rawP);
-
-  var maxProtByCal = Math.floor((cals * 0.4) / 4);
-  if (pr > maxProtByCal) pr = arcRoundProteinClean(maxProtByCal);
-
-  var rem = cals - pr * 4;
-  if (rem < 260) {
-    pr = arcRoundProteinClean(Math.max(55, (cals - 280) / 4));
-    rem = cals - pr * 4;
-  }
-
-  var carbShare = arcMacroCarbShare(g, muscleEm);
-  var cCals = rem * carbShare;
-  var fCals = rem * (1 - carbShare);
-  var cr = Math.max(45, Math.round(cCals / 4));
-  var fr = Math.max(38, Math.round(fCals / 9));
-
-  var cur = pr * 4 + cr * 4 + fr * 9;
-  var diff = cals - cur;
-  if (Math.abs(diff) >= 10) {
-    cr = Math.max(45, cr + Math.round(diff / 8));
-    cur = pr * 4 + cr * 4 + fr * 9;
-    diff = cals - cur;
-    fr = Math.max(38, fr + Math.round(diff / 9));
-  }
-
-  return {
-    protein: isFinite(pr) ? pr : 0,
-    carbs: isFinite(cr) ? cr : 0,
-    fat: isFinite(fr) ? fr : 0
-  };
+  return ArcRuntime.getMacroTargetsForProfile(UP, cals);
 }
 
 function getCalTarget() {
@@ -4889,6 +4701,20 @@ function buildNutritionEngine() {
   var slots = getSlots();
   var mealTargets = computeMealNutritionTargets(calT, macros, slots);
   return { calT: calT, macros: macros, slots: slots, mealTargets: mealTargets };
+}
+
+/** Edamam → USDA → Arc Validation before persisting or displaying recipe macros. */
+function arcVerifyRecipesBeforeSave(list, mt, done) {
+  if (!list || !list.length) { done(list); return; }
+  if (typeof ArcNutritionPipeline === 'undefined' || !ArcNutritionPipeline.verifyRecipes) {
+    done(list);
+    return;
+  }
+  ArcNutritionPipeline.verifyRecipes(list, mt, 3).then(function(verified) {
+    done(verified);
+  }).catch(function() {
+    done(list);
+  });
 }
 
 function buildFeedbackPromptBlock() {
@@ -8361,14 +8187,17 @@ function extractAiResponseText(data) {
 
 function callAI(system, userMsg, maxTok, callback) {
   maxTok = maxTok || 1200;
+  var messages = [
+    { role: 'system', content: system || 'You assist Arc. Propose meal ideas and structure only; Arc Engine owns calorie and macro targets.' },
+    { role: 'user', content: userMsg || '' }
+  ];
 
-  fetch('https://nutriai-backend-44mg.onrender.com/api/ai', {
+  fetch(arcApiPath('/api/ai'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      system: system,
-      max_tokens: maxTok,
-      messages: [{ role: "user", content: userMsg }]
+      messages: messages,
+      max_tokens: maxTok
     })
   })
   .then(function(resp) {
@@ -10079,69 +9908,81 @@ function generateWeeklyPlan(intent) {
     setGenPhase('recipes');
     recipes = parsed.recipes.map(function(r, i) { return normalizeGeneratedRecipe(r, i, built.mt); });
 
-    // Re-key plan by recipe id presence in the freshly-normalized recipes array.
-    var recById = {};
-    for (var ri = 0; ri < recipes.length; ri++) recById[recipes[ri].id] = recipes[ri];
+    function finishWeekPlanAfterNutrition() {
+      var recById = {};
+      for (var ri = 0; ri < recipes.length; ri++) recById[recipes[ri].id] = recipes[ri];
 
-    for (var d = 0; d < DAYS.length; d++) mealPlan[DAYS[d]] = {};
-    mealJournal = {};
-    var slots = built.slots;
-    var assignmentCounts = {};
-    for (var dd = 0; dd < DAYS.length; dd++) {
-      var day = DAYS[dd];
-      var dayPlan = parsed.plan[day] || {};
-      for (var ss = 0; ss < slots.length; ss++) {
-        var slot = slots[ss];
-        var rid  = parseInt(dayPlan[slot], 10);
-        if (rid && recById[rid]) {
-          mealPlan[day][slot] = rid;
-          assignmentCounts[rid] = (assignmentCounts[rid] || 0) + 1;
-          recordRecipeSavedEngagement(rid, 'plan', true);
+      for (var d = 0; d < DAYS.length; d++) mealPlan[DAYS[d]] = {};
+      mealJournal = {};
+      var slots = built.slots;
+      var assignmentCounts = {};
+      for (var dd = 0; dd < DAYS.length; dd++) {
+        var day = DAYS[dd];
+        var dayPlan = parsed.plan[day] || {};
+        for (var ss = 0; ss < slots.length; ss++) {
+          var slot = slots[ss];
+          var rid  = parseInt(dayPlan[slot], 10);
+          if (rid && recById[rid]) {
+            mealPlan[day][slot] = rid;
+            assignmentCounts[rid] = (assignmentCounts[rid] || 0) + 1;
+            recordRecipeSavedEngagement(rid, 'plan', true);
+          }
         }
       }
-    }
 
-    // Resolve recipe.servings = AI batch size, or plan-driven repeat count as a sane default.
-    // (UP.servingOverrides is reserved for user adjustments and stays untouched here.)
-    for (var rj = 0; rj < recipes.length; rj++) {
-      var rec = recipes[rj];
-      var aiServings = parseInt(rec.servings, 10);
-      var planServings = assignmentCounts[rec.id] || 1;
-      rec.servings = aiServings > 0 ? aiServings : planServings;
-    }
+      for (var rj = 0; rj < recipes.length; rj++) {
+        var rec = recipes[rj];
+        var aiServings = parseInt(rec.servings, 10);
+        var planServings = assignmentCounts[rec.id] || 1;
+        rec.servings = aiServings > 0 ? aiServings : planServings;
+      }
 
-    UP.weeklyPlan = {
-      builtAt: Date.now(),
-      style: intent.style,
-      focus: intent.focus,
-      weeklyBudget: normalizeBudgetValue(intent.weeklyBudget || UP.weeklyBudget || UP.budget),
-      cuisines: intent.cuisines.slice(),
-      household: parseInt(UP.household, 10) || 1,
-      uniqueRecipeIds: recipes.map(function(r) { return r.id; }),
-      repeatMap: assignmentCounts
-    };
-    // Wipe stale per-recipe servings overrides — they're tied to last week's recipe ids.
-    UP.servingOverrides = {};
-    UP.weeklyPlanDraft = null;
+      UP.weeklyPlan = {
+        builtAt: Date.now(),
+        style: intent.style,
+        focus: intent.focus,
+        weeklyBudget: normalizeBudgetValue(intent.weeklyBudget || UP.weeklyBudget || UP.budget),
+        cuisines: intent.cuisines.slice(),
+        household: parseInt(UP.household, 10) || 1,
+        uniqueRecipeIds: recipes.map(function(r) { return r.id; }),
+        repeatMap: assignmentCounts
+      };
+      UP.servingOverrides = {};
+      UP.weeklyPlanDraft = null;
 
-    setGenPhase('grocery');
-    renderLibrary();
-    renderPlanner();
-    renderNutrition();
-    renderShopping();
+      setGenPhase('grocery');
+      renderLibrary();
+      renderPlanner();
+      renderNutrition();
+      renderShopping();
 
-    setTimeout(function() {
-      if (myGen !== recipeGenId) return;
-      setGenPhase('finalize');
-      completeGenLoadingUI();
       setTimeout(function() {
         if (myGen !== recipeGenId) return;
-        saveUserProfile();
-        tab('plan'); // Land on the new week, not Today
-        scheduleWeeklyRecapAutoCheck();
-        stopGenLoadingUI();
-      }, 420);
-    }, 380);
+        setGenPhase('finalize');
+        completeGenLoadingUI();
+        setTimeout(function() {
+          if (myGen !== recipeGenId) return;
+          saveUserProfile();
+          tab('plan');
+          scheduleWeeklyRecapAutoCheck();
+          stopGenLoadingUI();
+        }, 420);
+      }, 380);
+    }
+
+    setGenPhase('balancing');
+    if (typeof ArcNutritionPipeline !== 'undefined' && ArcNutritionPipeline.verifyRecipes) {
+      ArcNutritionPipeline.verifyRecipes(recipes, built.mt, 3).then(function(verified) {
+        if (myGen !== recipeGenId) return;
+        recipes = verified;
+        finishWeekPlanAfterNutrition();
+      }).catch(function() {
+        if (myGen !== recipeGenId) return;
+        finishWeekPlanAfterNutrition();
+      });
+    } else {
+      finishWeekPlanAfterNutrition();
+    }
   }
 
   callAIWithRetry(built.sysMsg, built.userMsg, 9000, applyWeek, 3);
@@ -10390,8 +10231,30 @@ function generateRecipes() {
 
     if (parsed && Array.isArray(parsed) && parsed.length >= 10) {
       setGenPhase('recipes');
-      recipes = parsed.map(function(r, i) { return normalizeGeneratedRecipe(r, i, mt); });
-      saveSessionState();
+      var normalized = parsed.map(function(r, i) { return normalizeGeneratedRecipe(r, i, mt); });
+      arcVerifyRecipesBeforeSave(normalized, mt, function(verified) {
+        if (myGen !== recipeGenId) return;
+        recipes = verified;
+        saveSessionState();
+        setGenPhase('grocery');
+        renderRecipes();
+        renderPlanner();
+        renderNutrition();
+        renderShopping();
+        setTimeout(function() {
+          if (myGen !== recipeGenId) return;
+          setGenPhase('finalize');
+          completeGenLoadingUI();
+          setTimeout(function() {
+            if (myGen !== recipeGenId) return;
+            tab('today');
+            saveSessionState();
+            scheduleWeeklyRecapAutoCheck();
+            stopGenLoadingUI();
+          }, 420);
+        }, 380);
+      });
+      return;
     } else {
       if (myGen !== recipeGenId) return;
       stopGenLoadingUI();
@@ -10413,24 +10276,6 @@ function generateRecipes() {
       return;
     }
 
-    setGenPhase('grocery');
-    renderRecipes();
-    renderPlanner();
-    renderNutrition();
-    renderShopping();
-
-    setTimeout(function() {
-      if (myGen !== recipeGenId) return;
-      setGenPhase('finalize');
-      completeGenLoadingUI();
-      setTimeout(function() {
-        if (myGen !== recipeGenId) return;
-        tab('today');
-        saveSessionState();
-        scheduleWeeklyRecapAutoCheck();
-        stopGenLoadingUI();
-      }, 420);
-    }, 380);
   }
 
   // Try with retries
@@ -11277,24 +11122,28 @@ function refreshSingleSlotMeal() {
       var nr = normalizeGeneratedRecipe(r0, nid - 1, mt);
       nr.id = nid;
       nr.cat = slotCat;
-      recipes.push(nr);
-      if (!mealPlan[day]) mealPlan[day] = {};
-      mealPlan[day][slot] = nr.id;
-      setSlotJournal(day, slot, null);
-      if (UP.weeklyPlan && UP.weeklyPlan.repeatMap) UP.weeklyPlan.repeatMap = computeRepeatMapFromPlan();
-      ensureArcSmartReplace(UP);
-      UP.arcSmartReplace.lastRefreshAt = new Date().toISOString();
-      UP.arcSmartReplace.refreshStreak = (UP.arcSmartReplace.refreshStreak || 0) + 1;
-      arcBehaviorObserve('meal_refresh', { day: day, slot: slot }, { skipSync: true });
-      arcBehaviorRecomputeScores(UP);
-      syncBehaviorToArcAdaptive(UP);
-      saveSessionState();
-      closeAssign();
-      renderPlanner();
-      renderNutrition();
-      renderShopping();
-      renderToday();
-      showToast('New meal placed in this slot');
+      arcVerifyRecipesBeforeSave([nr], mt, function(verified) {
+        if (mtToken !== refreshMealGen) return;
+        var placed = verified[0] || nr;
+        recipes.push(placed);
+        if (!mealPlan[day]) mealPlan[day] = {};
+        mealPlan[day][slot] = placed.id;
+        setSlotJournal(day, slot, null);
+        if (UP.weeklyPlan && UP.weeklyPlan.repeatMap) UP.weeklyPlan.repeatMap = computeRepeatMapFromPlan();
+        ensureArcSmartReplace(UP);
+        UP.arcSmartReplace.lastRefreshAt = new Date().toISOString();
+        UP.arcSmartReplace.refreshStreak = (UP.arcSmartReplace.refreshStreak || 0) + 1;
+        arcBehaviorObserve('meal_refresh', { day: day, slot: slot }, { skipSync: true });
+        arcBehaviorRecomputeScores(UP);
+        syncBehaviorToArcAdaptive(UP);
+        saveSessionState();
+        closeAssign();
+        renderPlanner();
+        renderNutrition();
+        renderShopping();
+        renderToday();
+        showToast('New meal placed in this slot');
+      });
       return;
     }
     showToast(ARC_COPY.toast.composeAdjusted);
@@ -12718,8 +12567,16 @@ function buildRealisticPurchaseLine(canonicalKey, displayName, qtys, uses) {
 }
 
 // ── Local Grocery Pricing (home area from onboarding; passive shelf refinement)
-var ARC_API_BASE = 'https://nutriai-backend-44mg.onrender.com';
-var GROCERY_LIVE_PRICE_URL = ARC_API_BASE + '/api/grocery/prices';
+function arcApiBase() {
+  if (typeof ArcRuntime !== 'undefined' && ArcRuntime.apiBaseUrl) return ArcRuntime.apiBaseUrl();
+  if (typeof ARC_API !== 'undefined' && ARC_API.baseUrl) return String(ARC_API.baseUrl).replace(/\/$/, '');
+  if (typeof location !== 'undefined' && location.origin) return location.origin;
+  return '';
+}
+function arcApiPath(path) {
+  return arcApiBase() + path;
+}
+var GROCERY_LIVE_PRICE_URL = arcApiPath('/api/grocery/prices');
 
 var krogerPriceCache = {};
 var krogerPendingKeys = {};
@@ -13931,7 +13788,7 @@ function arcWireApplicationDom() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', function() {
+function arcBootAfterConfig() {
   applyArcBrandingToStaticDom();
   arcRegisterAuthListener();
   if (!arcIsCloudAuthEnabled()) {
@@ -13951,6 +13808,14 @@ document.addEventListener('DOMContentLoaded', function() {
     return;
   }
   arcRunBootAuthGate();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  if (typeof ArcRuntime !== 'undefined' && ArcRuntime.bootstrap) {
+    ArcRuntime.bootstrap().then(arcBootAfterConfig).catch(arcBootAfterConfig);
+  } else {
+    arcBootAfterConfig();
+  }
 });
   
 function arcSplashHandoffTarget() {
