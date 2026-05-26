@@ -18,6 +18,7 @@ const ARC_BASE = path.join(__dirname, '..', 'js', 'arc-api-base.js');
 const LOAD_ORDER = [
   'arcCache.js',
   'arcRateLimit.js',
+  'arcTrace.js',
   'providers/providerBase.js',
   'spoonacularService.js',
   'edamamService.js',
@@ -406,5 +407,47 @@ describe('Arc Phase 2 adaptive pipeline (mocked APIs)', () => {
 
     assert.equal(out.pricing.status, 'ok');
     assert.equal(out.pricing.data.source, 'arc_budget_engine');
+  });
+});
+
+describe('Arc API pipeline tracing', () => {
+  test('postJson emits production-safe provider log', async () => {
+    const logs = [];
+    const sandbox = loadArcApi({
+      fetch: mockFetch((url) => ({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ results: [], total: 0 })
+      })),
+      console: {
+        log: (...args) => logs.push(args.join(' '))
+      }
+    });
+
+    await sandbox.ArcApi.Services.spoonacular.searchRecipes({ query: 'chicken' });
+    const pipelineLog = logs.find((line) => line.includes('[ARC PIPELINE] Spoonacular'));
+    assert.ok(pipelineLog, 'expected Spoonacular trace line');
+    assert.ok(pipelineLog.includes('success'), pipelineLog);
+    assert.ok(pipelineLog.includes('ms'), pipelineLog);
+    assert.equal(pipelineLog.includes('apiKey'), false);
+    assert.equal(pipelineLog.includes('sk-'), false);
+  });
+
+  test('USDA validateMacros logs validation outcome', async () => {
+    const logs = [];
+    const sandbox = loadArcApi({
+      console: { log: (...args) => logs.push(args.join(' ')) }
+    });
+
+    await sandbox.ArcApi.Services.usda.validateMacros({
+      calories: 100,
+      protein: 50,
+      carbs: 0,
+      fat: 0
+    });
+
+    const line = logs.find((l) => l.includes('[ARC PIPELINE] USDA'));
+    assert.ok(line, 'expected USDA trace');
+    assert.ok(line.includes('validation failed') || line.includes('success'), line);
   });
 });
