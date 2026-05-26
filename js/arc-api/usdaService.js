@@ -35,11 +35,34 @@
       if (hit) return Promise.resolve(hit);
     }
     var rl = RateLimit();
+    var Trace = global.ArcApi && global.ArcApi.Trace;
+    var operation = Trace ? Trace.pathOperation(path) : path;
+    var startedAt = Trace ? Trace.nowIso() : null;
+    var t0 = Trace ? Trace.timeStart() : 0;
+
     var call = function () {
       return fetch(url, { method: 'GET', headers: { Accept: 'application/json' } }).then(function (resp) {
         return resp.json().then(function (json) {
-          return { ok: resp.ok, status: resp.status, json: json };
+          var res = { ok: resp.ok, status: resp.status, json: json };
+          if (Trace) Trace.logProxy(ID, operation, res, startedAt, t0);
+          return res;
         });
+      }).catch(function (err) {
+        if (Trace) {
+          Trace.logProvider({
+            providerId: ID,
+            outcome: 'failed',
+            message: operation + ' failed',
+            success: false,
+            status: 'error',
+            startedAt: startedAt,
+            completedAt: Trace.nowIso(),
+            durationMs: Trace.msSince(t0),
+            fallback: false,
+            includeZeroMs: true
+          });
+        }
+        throw err;
       });
     };
     var p = rl ? rl.withRetry(call) : call();
@@ -176,15 +199,31 @@
     var tolerance = Number(input.tolerance) || 0.12;
     var delta = Math.abs(computed - cals) / cals;
     var valid = delta <= tolerance;
-
-    return Promise.resolve(b.ok(ID, 'macro_validation', {
+    var out = b.ok(ID, 'macro_validation', {
       valid: valid,
       computedCalories: Math.round(computed),
       reportedCalories: Math.round(cals),
       deltaPercent: Math.round(delta * 1000) / 10,
       tolerancePercent: tolerance * 100,
       source: 'usda_rules'
-    }));
+    });
+
+    var Trace = global.ArcApi && global.ArcApi.Trace;
+    if (Trace) {
+      Trace.logProvider({
+        providerId: ID,
+        outcome: valid ? 'success' : 'validation failed',
+        success: valid,
+        status: valid ? 'ok' : 'error',
+        startedAt: Trace.nowIso(),
+        completedAt: Trace.nowIso(),
+        durationMs: 0,
+        fallback: false,
+        includeZeroMs: false
+      });
+    }
+
+    return Promise.resolve(out);
   }
 
   var api = {
