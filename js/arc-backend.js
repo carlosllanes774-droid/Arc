@@ -176,7 +176,26 @@
   function fetchProfileRow(userId) {
     var c = getClient();
     if (!c || !userId) return Promise.resolve({ data: null, error: new Error('no client') });
-    return c.from(TABLE).select('profile, app_state, onboarding_completed_at').eq('id', userId).maybeSingle();
+    return c.from(TABLE).select('profile, app_state, onboarding_completed_at, updated_at').eq('id', userId).maybeSingle();
+  }
+
+  /**
+   * Newest state wins — delegates to ArcRuntime when available.
+   * @param {object|null} localBundle
+   * @param {object|null} cloudRow
+   * @returns {{ bundle: object|null, source: string }}
+   */
+  function mergeProfileState(localBundle, cloudRow) {
+    if (global.ArcRuntime && typeof global.ArcRuntime.mergeProfileState === 'function') {
+      return global.ArcRuntime.mergeProfileState(localBundle, cloudRow);
+    }
+    if (cloudRow && cloudRow.profile) {
+      return {
+        bundle: { profile: cloudRow.profile, app: cloudRow.app_state || {}, updatedAt: cloudRow.updated_at },
+        source: 'cloud'
+      };
+    }
+    return { bundle: localBundle, source: 'local' };
   }
 
   function upsertProfileBundle(userId, bundle, onboardingCompletedAt) {
@@ -214,6 +233,7 @@
     signOut: signOut,
     onAuthStateChange: onAuthStateChange,
     fetchProfileRow: fetchProfileRow,
+    mergeProfileState: mergeProfileState,
     upsertProfileBundle: upsertProfileBundle
   };
 })(typeof window !== 'undefined' ? window : this);
