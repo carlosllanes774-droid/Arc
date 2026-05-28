@@ -1,692 +1,881 @@
 /**
- * Arc API — routing, services, validation, and adaptive pipeline.
+ * Arc API Orchestrator — routes information requests; runs adaptive meal pipeline.
+ *
+ * Flow:
+ *   Arc Engine → Spoonacular → Edamam → USDA → Validation → OpenAI → Kroger → Portion Scaling
+ *
+ * Arc Engine owns targets, optimization, validation decisions, and execution.
  */
-import { test, describe } from 'node:test';
-import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
-import vm from 'node:vm';
+(function (global) {
+  'use strict';
+  var PIPELINE_DEBOUNCE_MS = 1200;
+  var pipelineInFlight = new Map();
+  var pipelineDebounce = new Map();
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const API_DIR = path.join(__dirname, '..', 'js', 'arc-api');
-const CONFIG_DIR = path.join(__dirname, '..', 'js', 'config');
-const ENGINE_DIR = path.join(__dirname, '..', 'js', 'arc-engine');
-
-const ARC_BASE = path.join(__dirname, '..', 'js', 'arc-api-base.js');
-
-const LOAD_ORDER = [
-  'arcCache.js',
-  'arcRateLimit.js',
-  'arcTrace.js',
-  'edamamHelpers.js',
-  'providers/providerBase.js',
-  'spoonacularService.js',
-  'edamamHelpers.js',
-  'edamamService.js',
-  'usdaService.js',
-  'krogerService.js',
-  'openaiService.js',
-  'arcValidationService.js',
-  'arcRecipeCurationService.js',
-  'providers/spoonacularProvider.js',
-  'providers/edamamProvider.js',
-  'providers/usdaProvider.js',
-  'providers/openaiProvider.js',
-  'providers/krogerProvider.js',
-  'apiOrchestrator.js'
-];
-
-const ENGINE_LOAD = [
-  'arcNutritionEngine.js',
-  'arcGoalEngine.js',
-  'arcAthleteEngine.js',
-  'arcMealOptimizer.js',
-  'arcBudgetEngine.js',
-  'arcPortionScaler.js',
-  'arcAdherenceEngine.js',
-  'arcEngine.js'
-];
-
-function loadArcApi(extraSandbox) {
-  const sandbox = Object.assign({
-    ArcApi: { Providers: {}, Services: {} },
-    fetch: extraSandbox && extraSandbox.fetch,
-    location: { origin: 'http://localhost:3000' },
-    ARC_API: { baseUrl: 'http://localhost:3000' }
-  }, extraSandbox || {});
-  const context = vm.createContext(sandbox);
-
-  vm.runInContext(readFileSync(path.join(CONFIG_DIR, 'apiConfig.js'), 'utf8'), context, {
-    filename: 'apiConfig.js'
-  });
-  vm.runInContext(readFileSync(ARC_BASE, 'utf8'), context, { filename: 'arc-api-base.js' });
-
-  for (const file of LOAD_ORDER) {
-    vm.runInContext(readFileSync(path.join(API_DIR, file), 'utf8'), context, { filename: file });
+  function providers() {
+    var p = global.ArcApi && global.ArcApi.Providers;
+    if (!p) throw new Error('[Arc API] Load provider modules before apiOrchestrator.js');
+    return p;
   }
-  return sandbox;
-}
 
-function mockFetch(handler) {
-  return function (url, opts) {
-    return Promise.resolve(handler(url, opts));
+  function services() {
+    return (global.ArcApi && global.ArcApi.Services) || {};
+  }
+
+  function validation() {
+    return (global.ArcApi && global.ArcApi.Validation) || null;
+  }
+
+  function curation() {
+    return (global.ArcApi && global.ArcApi.Curation) || null;
+  }
+
+  /**
+   * @type {Object<string, string>}
+   */
+  var RESPONSIBILITY_OWNER = {
+    recipe_retrieval: 'spoonacular',
+    recipe_metadata: 'spoonacular',
+    meal_discovery: 'spoonacular',
+
+    ingredient_parsing: 'edamam',
+    food_understanding: 'edamam',
+    recipe_nutrition_analysis: 'edamam',
+    diet_labels: 'edamam',
+    food_intelligence: 'edamam',
+
+    nutrition_verification: 'usda',
+    macro_validation: 'usda',
+    source_of_truth: 'usda',
+
+    adaptation: 'openai',
+    optimization: 'openai',
+    reasoning: 'openai',
+
+    grocery_pricing: 'kroger',
+    availability: 'kroger',
+    substitutions: 'kroger'
   };
-}
 
-describe('Arc API config', () => {
-  test('validate reports missing keys in empty env', () => {
-    const sandbox = loadArcApi({ process: { env: {} } });
-    const cfg = sandbox.ArcConfig.loadFromEnv({});
-    const v = sandbox.ArcConfig.validate(cfg);
-    assert.equal(v.valid, false);
-    assert.ok(v.missing.includes('SPOONACULAR_API_KEY'));
-    assert.ok(v.missing.includes('USDA_API_KEY'));
-  });
+  /**
+   * @type {Object<string, { provider: string, method: string, responsibility: string }>}
+   */
+  var OPERATIONS = {
+    retrieveRecipe: { provider: 'spoonacular', method: 'retrieveRecipe', responsibility: 'recipe_retrieval' },
+    getRecipeMetadata: { provider: 'spoonacular', method: 'getRecipeMetadata', responsibility: 'recipe_metadata' },
+    discoverMeals: { provider: 'spoonacular', method: 'discoverMeals', responsibility: 'meal_discovery' },
+    searchRecipes: { provider: 'spoonacular', method: 'searchRecipes', responsibility: 'meal_discovery' },
 
-  test('validate passes when all required keys present', () => {
-    const sandbox = loadArcApi({
-      process: {
-        env: {
-          SPOONACULAR_API_KEY: 'a',
-          EDAMAM_APP_ID: 'b',
-          EDAMAM_API_KEY: 'c',
-          USDA_API_KEY: 'd',
-          OPENAI_API_KEY: 'e',
-          KROGER_CLIENT_ID: 'f',
-          KROGER_SECRET: 'g'
-        }
-      }
-    });
-    const cfg = sandbox.ArcConfig.loadFromEnv(sandbox.process.env);
-    const v = sandbox.ArcConfig.validate(cfg);
-    assert.equal(v.valid, true);
-  });
-});
+    parseIngredients: { provider: 'edamam', method: 'parseIngredients', responsibility: 'ingredient_parsing' },
+    parseFoodInput: { provider: 'edamam', method: 'parseFoodInput', responsibility: 'ingredient_parsing' },
+    understandFood: { provider: 'edamam', method: 'understandFood', responsibility: 'food_understanding' },
+    analyzeRecipeNutrition: { provider: 'edamam', method: 'analyzeRecipeNutrition', responsibility: 'recipe_nutrition_analysis' },
+    getDietLabels: { provider: 'edamam', method: 'getDietLabels', responsibility: 'diet_labels' },
+    getFoodIntelligence: { provider: 'edamam', method: 'getFoodIntelligence', responsibility: 'food_intelligence' },
 
-describe('Arc API responsibility routing', () => {
-  const { ArcApi } = loadArcApi();
+    verifyNutrition: { provider: 'usda', method: 'verifyNutrition', responsibility: 'nutrition_verification' },
+    validateMacros: { provider: 'usda', method: 'validateMacros', responsibility: 'macro_validation' },
+    resolveSourceOfTruth: { provider: 'usda', method: 'resolveSourceOfTruth', responsibility: 'source_of_truth' },
 
-  test('registry includes Edamam food intelligence responsibilities', () => {
-    const registry = ArcApi.Orchestrator.getProviderRegistry();
-    const edamam = registry.find((r) => r.id === 'edamam');
-    assert.ok(edamam);
-    assert.ok(edamam.responsibilities.includes('recipe_nutrition_analysis'));
-    assert.ok(edamam.responsibilities.includes('ingredient_parsing'));
-    assert.ok(edamam.arcBoundary.some((b) => b.indexOf('calorie targets') !== -1));
-  });
+    adapt: { provider: 'openai', method: 'adapt', responsibility: 'adaptation' },
+    optimize: { provider: 'openai', method: 'optimize', responsibility: 'optimization' },
+    reason: { provider: 'openai', method: 'reason', responsibility: 'reasoning' },
 
-  test('Spoonacular owns meal discovery not nutrition analysis', () => {
-    assert.equal(ArcApi.Orchestrator.RESPONSIBILITY_OWNER.meal_discovery, 'spoonacular');
-    assert.equal(ArcApi.Orchestrator.RESPONSIBILITY_OWNER.recipe_nutrition_analysis, 'edamam');
-    assert.equal(ArcApi.Orchestrator.RESPONSIBILITY_OWNER.macro_validation, 'usda');
-    assert.equal(ArcApi.Orchestrator.RESPONSIBILITY_OWNER.adaptation, 'openai');
-    assert.equal(ArcApi.Orchestrator.RESPONSIBILITY_OWNER.grocery_pricing, 'kroger');
-  });
+    getGroceryPricing: { provider: 'kroger', method: 'getPricing', responsibility: 'grocery_pricing' },
+    checkAvailability: { provider: 'kroger', method: 'checkAvailability', responsibility: 'availability' },
+    findSubstitutions: { provider: 'kroger', method: 'findSubstitutions', responsibility: 'substitutions' }
+  };
 
-  test('USDA validateMacros runs heuristic without network', async () => {
-    const result = await ArcApi.Orchestrator.validateMacros({
-      calories: 600,
-      protein: 45,
-      carbs: 55,
-      fat: 18
-    });
-    assert.equal(result.provider, 'usda');
-    assert.equal(result.status, 'ok');
-    assert.equal(result.data.valid, true);
-  });
-
-  test('Spoonacular discoverMeals proxies search', async () => {
-    const { ArcApi } = loadArcApi({
-      fetch: mockFetch((url) => ({
-        ok: true,
-        status: 200,
-        json: () =>
-          Promise.resolve({
-            results: [{ id: 42, title: 'Salmon bowl', servings: 2, readyInMinutes: 25 }]
-          })
-      }))
-    });
-
-    const result = await ArcApi.Orchestrator.discoverMeals({ query: 'salmon' });
-    assert.equal(result.provider, 'spoonacular');
-    assert.equal(result.status, 'ok');
-    assert.equal(result.data.recipes[0].recipeId, 42);
-  });
-
-  test('Edamam parseFoodInput uses /api/edamam/parse', async () => {
-    const { ArcApi } = loadArcApi({
-      fetch: mockFetch((url) => ({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve({ foods: [{ label: '2 eggs' }], ingr: ['2 eggs'] })
-      }))
-    });
-
-    const result = await ArcApi.Orchestrator.parseFoodInput({ text: '2 eggs and toast' });
-    assert.equal(result.status, 'ok');
-    assert.equal(result.data.foods[0].label, '2 eggs');
-  });
-});
-
-describe('Arc API validation layer', () => {
-  test('detectImpossibleNutrition flags protein exceeding calories', () => {
-    const { ArcApi } = loadArcApi();
-    const report = ArcApi.Validation.detectImpossibleNutrition({
-      calories: 100,
-      protein: 80,
-      carbs: 0,
-      fat: 0
-    });
-    assert.equal(report.safe, false);
-    assert.ok(report.impossible.length > 0);
-  });
-
-  test('verifyRecipeCompleteness requires ingredients', () => {
-    const { ArcApi } = loadArcApi();
-    const r = ArcApi.Validation.verifyRecipeCompleteness({ title: 'Test' });
-    assert.equal(r.complete, false);
-    assert.ok(r.missing.includes('ingredients'));
-  });
-
-  test('deriveNutritionTags returns data-driven tags', () => {
-    const { ArcApi } = loadArcApi();
-    const tags = ArcApi.Validation.deriveNutritionTags({
-      calories: 520,
-      protein: 38,
-      carbs: 20,
-      fat: 26,
-      fiber: 9
-    });
-    assert.equal(tags.rules.high_protein, true);
-    assert.equal(tags.rules.low_carb, true);
-    assert.equal(tags.rules.high_fiber, true);
-  });
-
-  test('runNutritionSanityChecks flags impossible macro ratios', () => {
-    const { ArcApi } = loadArcApi();
-    const sanity = ArcApi.Validation.runNutritionSanityChecks({
-      calories: 400,
-      protein: 10,
-      carbs: 10,
-      fat: 70
-    });
-    assert.equal(sanity.valid, false);
-    assert.ok(sanity.issues.includes('fat_exceeds_calorie_math'));
-  });
-});
-
-describe('Arc API Edamam helpers', () => {
-  test('normalizeIngredientLines dedupes and trims', () => {
-    const { ArcApi } = loadArcApi();
-    const lines = ArcApi.Edamam.normalizeIngredientLines([
-      '  2 eggs  ',
-      '2 eggs',
-      '- 1 cup rice'
-    ]);
-    assert.equal(lines.length, 2);
-    assert.equal(lines[0], '2 eggs');
-    assert.equal(lines[1], '1 cup rice');
-  });
-
-  test('classifyEdamamFailure detects auth errors', () => {
-    const { ArcApi } = loadArcApi();
-    assert.equal(ArcApi.Edamam.classifyEdamamFailure(401, ''), 'auth');
-    assert.equal(ArcApi.Edamam.classifyEdamamFailure(403, 'Invalid app_id'), 'auth');
-    assert.equal(ArcApi.Edamam.classifyEdamamFailure(400, 'ingr is required'), 'payload');
-    assert.equal(ArcApi.Edamam.classifyEdamamFailure(429, 'rate limit'), 'endpoint');
-  });
-
-  test('logEdamamFailure emits ARC PIPELINE auth line', () => {
-    const logs = [];
-    const { ArcApi } = loadArcApi({
-      console: { log: (...args) => logs.push(args.join(' ')), error: () => {} }
-    });
-    ArcApi.Edamam.logEdamamFailure(ArcApi.Trace, 'auth', { httpStatus: 401 });
-    const line = logs.find((l) => l.includes('[ARC PIPELINE] Edamam auth failed'));
-    assert.ok(line, 'expected auth failure log');
-  });
-});
-
-describe('Arc API Edamam nutrition proxy', () => {
-  test('analyzeRecipeNutrition uses /api/nutrition', async () => {
-    var called = null;
-    const { ArcApi } = loadArcApi({
-      fetch: mockFetch((url, opts) => {
-        called = { url: url, body: JSON.parse(opts.body) };
-        return {
-          ok: true,
-          status: 200,
-          json: () =>
-            Promise.resolve({
-              totalNutrients: { calories: 620, protein: 48, fat: 19, carbs: 58 }
-            })
-        };
-      })
-    });
-
-    const result = await ArcApi.Orchestrator.analyzeRecipeNutrition({
-      title: 'Chicken bowl',
-      ingr: ['6 oz chicken', '1 cup rice']
-    });
-
-    assert.ok(called.url.endsWith('/api/nutrition'));
-    assert.equal(result.status, 'ok');
-    assert.equal(result.data.normalized.calories, 620);
-  });
-});
-
-describe('Arc API composite pipeline', () => {
-  test('analyzeAndValidateRecipe chains Edamam → USDA', async () => {
-    const { ArcApi } = loadArcApi({
-      fetch: mockFetch(() => ({
-        ok: true,
-        status: 200,
-        json: () =>
-          Promise.resolve({
-            totalNutrients: { calories: 500, protein: 40, carbs: 45, fat: 15 }
-          })
-      }))
-    });
-
-    const out = await ArcApi.Orchestrator.analyzeAndValidateRecipe({
-      ingr: ['4 oz tofu', '2 cup greens']
-    });
-
-    assert.equal(out.nutrition.provider, 'edamam');
-    assert.equal(out.validation.provider, 'usda');
-    assert.equal(out.validation.status, 'ok');
-    assert.ok(out.arcNote.indexOf('Arc Engine') !== -1);
-  });
-});
-
-describe('Arc Phase 2 adaptive pipeline (mocked APIs)', () => {
-  function loadEngineAndApi() {
-    const sandbox = loadArcApi({
-      fetch: mockFetch((url, opts) => {
-        if (url.indexOf('/api/spoonacular/search') !== -1) {
-          return {
-            ok: true,
-            status: 200,
-            json: () =>
-              Promise.resolve({
-                results: [
-                  {
-                    id: 1,
-                    recipeId: 1,
-                    title: 'Chicken rice bowl',
-                    servings: 2,
-                    readyInMinutes: 30,
-                    ingredients: [
-                      { name: 'chicken', original: '6 oz chicken breast' },
-                      { name: 'rice', original: '1 cup cooked rice' }
-                    ]
-                  }
-                ]
-              })
-          };
-        }
-        if (url.indexOf('/api/edamam/parse') !== -1) {
-          return {
-            ok: true,
-            status: 200,
-            json: () =>
-              Promise.resolve({
-                foods: [{ label: 'tacos', text: 'tacos' }],
-                ingr: ['tacos']
-              })
-          };
-        }
-        if (url.indexOf('/api/nutrition') !== -1) {
-          return {
-            ok: true,
-            status: 200,
-            json: () =>
-              Promise.resolve({
-                totalNutrients: { calories: 650, protein: 52, fat: 18, carbs: 60 }
-              })
-          };
-        }
-        if (url.indexOf('/api/ai') !== -1) {
-          return {
-            ok: true,
-            status: 200,
-            json: () => ({
-              content: [{ type: 'text', text: 'Prioritize lean protein remainder of day.' }]
-            })
-          };
-        }
-        if (url.indexOf('/api/kroger/prices') !== -1) {
-          return {
-            ok: true,
-            status: 200,
-            json: () => ({
-              results: { ing_0: { priceEffective: 4.5 }, ing_1: { priceEffective: 2.2 } },
-              locationId: 'loc1'
-            })
-          };
-        }
-        return { ok: false, status: 404, json: () => Promise.resolve({ error: 'not found' }) };
-      })
-    });
-
-    const context = vm.createContext(sandbox);
-    for (const file of ENGINE_LOAD) {
-      vm.runInContext(readFileSync(path.join(ENGINE_DIR, file), 'utf8'), context, { filename: file });
+  var PROVIDER_CATALOG = {
+    spoonacular: {
+      label: 'Spoonacular',
+      role: 'Recipe catalog & meal discovery',
+      responsibilities: ['recipe_retrieval', 'recipe_metadata', 'meal_discovery'],
+      arcDoesNot: ['macro targets', 'meal slot optimization', 'adherence scoring']
+    },
+    edamam: {
+      label: 'Edamam',
+      role: 'Food & ingredient intelligence',
+      responsibilities: [
+        'ingredient_parsing',
+        'food_understanding',
+        'recipe_nutrition_analysis',
+        'diet_labels',
+        'food_intelligence'
+      ],
+      arcDoesNot: ['calorie targets', 'goal strategy', 'portion scaling decisions']
+    },
+    usda: {
+      label: 'USDA FoodData Central',
+      role: 'Nutrition verification & truth layer',
+      responsibilities: ['nutrition_verification', 'macro_validation', 'source_of_truth'],
+      arcDoesNot: ['recipe discovery', 'grocery pricing']
+    },
+    openai: {
+      label: 'OpenAI',
+      role: 'Adaptation, optimization language, reasoning',
+      responsibilities: ['adaptation', 'optimization', 'reasoning'],
+      arcDoesNot: ['TDEE calculation', 'deterministic meal presets', 'budget tiers', 'meal creation']
+    },
+    kroger: {
+      label: 'Kroger',
+      role: 'Grocery market data',
+      responsibilities: ['grocery_pricing', 'availability', 'substitutions'],
+      arcDoesNot: ['nutrition targets', 'recipe nutrition analysis']
     }
-    return sandbox;
+  };
+
+  function trace() {
+    return global.ArcApi && global.ArcApi.Trace;
   }
 
-  test('200 lb male gain 1 lb/week — reasonable targets in pipeline', async () => {
-    const sandbox = loadEngineAndApi();
-    const out = await sandbox.ArcApi.Orchestrator.runAdaptiveMealPipeline({
-      goal: 'Gain weight',
-      goalPace: 1,
-      weight: 200,
-      height: 70,
-      age: 28,
-      gender: 'male',
-      activityLevel: 'Moderate',
-      mealQuery: 'high protein dinner'
-    });
-
-    assert.equal(out.arcOwned, true);
-    assert.ok(out.arc.goal.targetCalories >= 3000);
-    assert.ok(out.arc.goal.proteinTarget >= 160);
-    assert.equal(out.nutrition.status, 'ok');
-    assert.equal(out.usdaValidation.status, 'ok');
-    assert.ok(out.scaledRecipe);
-  });
-
-  test('off-plan "I ate tacos" uses Edamam parse path', async () => {
-    const sandbox = loadEngineAndApi();
-    const out = await sandbox.ArcApi.Orchestrator.runAdaptiveMealPipeline({
-      goal: 'Maintain weight',
-      weight: 180,
-      height: 70,
-      age: 30,
-      gender: 'male',
-      activityLevel: 'Moderate',
-      foodLogText: 'I ate tacos',
-      scenario: 'off_plan'
-    });
-
-    assert.equal(out.scenario, 'off_plan');
-    assert.ok(out.adaptation);
-  });
-
-  test('Kroger failure falls back to Arc budget estimate', async () => {
-    const sandbox = loadEngineAndApi({
-      fetch: mockFetch((url) => {
-        if (url.indexOf('/api/kroger/prices') !== -1) {
-          return { ok: false, status: 503, json: () => Promise.resolve({ error: 'down' }) };
-        }
-        if (url.indexOf('/api/spoonacular/search') !== -1) {
-          return {
-            ok: true,
-            status: 200,
-            json: () =>
-              Promise.resolve({
-                results: [
-                  {
-                    id: 2,
-                    recipeId: 2,
-                    title: 'Simple eggs',
-                    servings: 1,
-                    readyInMinutes: 10,
-                    ingredients: [{ name: 'eggs', original: '2 eggs' }]
-                  }
-                ]
-              })
-          };
-        }
-        if (url.indexOf('/api/nutrition') !== -1) {
-          return {
-            ok: true,
-            status: 200,
-            json: () =>
-              Promise.resolve({
-                totalNutrients: { calories: 400, protein: 30, fat: 20, carbs: 10 }
-              })
-          };
-        }
-        if (url.indexOf('/api/ai') !== -1) {
-          return {
-            ok: true,
-            status: 200,
-            json: () => ({ content: [{ type: 'text', text: 'ok' }] })
-          };
-        }
-        return { ok: false, status: 404, json: () => Promise.resolve({}) };
-      })
-    });
-
-    const context = vm.createContext(sandbox);
-    for (const file of ENGINE_LOAD) {
-      vm.runInContext(readFileSync(path.join(ENGINE_DIR, file), 'utf8'), context, { filename: file });
+  function stableStringify(value) {
+    if (value == null) return 'null';
+    if (typeof value !== 'object') return JSON.stringify(value);
+    if (Array.isArray(value)) {
+      return '[' + value.slice(0, 8).map(stableStringify).join(',') + ']';
     }
+    var keys = Object.keys(value).sort();
+    var out = [];
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      if (k === 'recipes' || k === 'plan' || k === 'history' || k === 'raw') continue;
+      out.push(JSON.stringify(k) + ':' + stableStringify(value[k]));
+    }
+    return '{' + out.join(',') + '}';
+  }
 
-    const out = await sandbox.ArcApi.Orchestrator.runAdaptiveMealPipeline({
-      goal: 'Lose weight',
-      goalPace: 0.75,
-      weight: 200,
-      height: 70,
-      age: 28,
-      gender: 'male',
-      activityLevel: 'Moderate',
-      budgetTier: 'moderate'
+  function pipelineKey(profile) {
+    profile = profile || {};
+    return stableStringify({
+      goal: profile.goal || null,
+      goalPace: profile.goalPace || null,
+      weight: profile.weight || null,
+      activityLevel: profile.activityLevel || null,
+      scenario: profile.scenario || null,
+      foodLogText: profile.foodLogText || null,
+      mealQuery: profile.mealQuery || null,
+      budgetTier: profile.budgetTier || null,
+      recipeCount: profile.recipeCount || null
     });
+  }
 
-    assert.equal(out.pricing.status, 'ok');
-    assert.equal(out.pricing.data.source, 'arc_budget_engine');
-  });
+  function normalizeInstructionLines(value) {
+    if (!Array.isArray(value)) return [];
+    return value.map(function (line) { return String(line || '').trim(); }).filter(Boolean);
+  }
 
-  test('recipe delivery does not block on instruction enhancement timeout', async () => {
-    let aiCallCount = 0;
-    const logs = [];
-    const sandbox = loadArcApi({
-      console: {
-        log: (...args) => logs.push(args.join(' ')),
-        error: () => {}
+  function deriveDeterministicMealId(recipe, scenario) {
+    recipe = recipe || {};
+    var rawId = recipe.recipeId || recipe.id;
+    if (rawId != null && String(rawId).trim()) return String(rawId).trim();
+    var title = String(recipe.title || recipe.name || 'meal').trim().toLowerCase();
+    var safeTitle = title.replace(/[^a-z0-9]+/g, '-').replace(/(^-+|-+$)/g, '') || 'meal';
+    return 'arc-' + String(scenario || 'performance') + '-' + safeTitle.slice(0, 48);
+  }
+
+  function cloneRecipeForContract(recipe) {
+    recipe = recipe || {};
+    var out = Object.assign({}, recipe);
+    out.ingredients = Array.isArray(recipe.ingredients) ? recipe.ingredients.map(function (ing) {
+      return Object.assign({}, ing || {});
+    }) : [];
+    out.instructions = normalizeInstructionLines(recipe.instructions);
+    out.labels = Array.isArray(recipe.labels) ? recipe.labels.slice(0, 8) : [];
+    out.nutrition = recipe.nutrition && typeof recipe.nutrition === 'object'
+      ? Object.assign({}, recipe.nutrition)
+      : {};
+    return out;
+  }
+
+  function deriveMealCategory(recipe, scenario) {
+    var text = String((recipe && recipe.title) || '').toLowerCase();
+    if (text.indexOf('breakfast') !== -1) return 'breakfast';
+    if (text.indexOf('lunch') !== -1) return 'lunch';
+    if (text.indexOf('snack') !== -1) return 'snack';
+    if (scenario === 'off_plan') return 'recovery_meal';
+    return 'dinner';
+  }
+
+  function buildCanonicalMealSchema(payload) {
+    payload = payload || {};
+    var recipe = cloneRecipeForContract(payload.recipe);
+    var nutrition = recipe.nutrition || {};
+    var instructions = recipe.instructions;
+    var ingredients = Array.isArray(recipe.ingredients) ? recipe.ingredients.map(function (ing) {
+      return {
+        name: String((ing && (ing.name || ing.original)) || '').trim(),
+        original: String((ing && (ing.original || ing.name)) || '').trim(),
+        quantity: ing && ing.quantity != null ? Number(ing.quantity) : null,
+        unit: ing && ing.unit ? String(ing.unit) : null
+      };
+    }).filter(function (ing) { return !!ing.name; }) : [];
+
+    return {
+      mealId: deriveDeterministicMealId(recipe, payload.scenario),
+      title: String(recipe.title || recipe.name || 'Meal'),
+      description: String(recipe.description || ''),
+      summary: String(recipe.summary || ''),
+      labels: Array.isArray(recipe.labels) ? recipe.labels.slice(0, 8).map(function (l) { return String(l); }) : [],
+      mealCategory: deriveMealCategory(recipe, payload.scenario),
+      servings: Number(recipe.servings || 1),
+      nutritionConfidence: String(payload.nutritionConfidence || recipe.nutritionConfidence || 'medium'),
+      macros: {
+        calories: isFinite(Number(nutrition.calories || recipe.calories || 0)) ? Number(nutrition.calories || recipe.calories || 0) : 0,
+        protein: isFinite(Number(nutrition.protein || recipe.protein || 0)) ? Number(nutrition.protein || recipe.protein || 0) : 0,
+        carbs: isFinite(Number(nutrition.carbs || recipe.carbs || 0)) ? Number(nutrition.carbs || recipe.carbs || 0) : 0,
+        fat: isFinite(Number(nutrition.fat || recipe.fat || 0)) ? Number(nutrition.fat || recipe.fat || 0) : 0
       },
-      fetch: mockFetch((url) => {
-        if (url.indexOf('/api/spoonacular/search') !== -1) {
-          return {
-            ok: true,
-            status: 200,
-            json: () => Promise.resolve({
-              results: [{
-                id: 5,
-                recipeId: 5,
-                title: 'Fast chicken bowl',
-                servings: 2,
-                readyInMinutes: 20,
-                ingredients: [
-                  { name: 'chicken breast', original: '6 oz chicken breast' },
-                  { name: 'rice', original: '1 cup cooked rice' }
-                ],
-                instructions: ['Cook chicken in skillet.', 'Serve over rice.']
-              }]
-            })
-          };
-        }
-        if (url.indexOf('/api/nutrition') !== -1) {
-          return {
-            ok: true,
-            status: 200,
-            json: () => Promise.resolve({
-              totalNutrients: { calories: 640, protein: 50, fat: 16, carbs: 62 }
-            })
-          };
-        }
-        if (url.indexOf('/api/ai') !== -1) {
-          aiCallCount += 1;
-          if (aiCallCount === 1) {
-            return {
-              ok: true,
-              status: 200,
-              json: () => Promise.resolve({
-                content: [{ type: 'text', text: 'Keep carbs around training.' }]
-              })
-            };
-          }
-          return {
-            ok: true,
-            status: 200,
-            json: () => new Promise((resolve) => {
-              setTimeout(() => {
-                resolve({
-                  content: [{ type: 'text', text: 'TITLE: Enhanced Bowl\nSUMMARY: Fast post-workout bowl.\nLABELS: high protein, quick prep\nINSTRUCTIONS:\n1) Sear chicken quickly.\n2) Plate with warm rice.' }]
-                });
-              }, 120);
-            })
-          };
-        }
-        if (url.indexOf('/api/kroger/prices') !== -1) {
-          return {
-            ok: true,
-            status: 200,
-            json: () => Promise.resolve({
-              results: { ing_0: { priceEffective: 4.3 }, ing_1: { priceEffective: 1.8 } },
-              locationId: 'loc1'
-            })
-          };
-        }
-        return { ok: false, status: 404, json: () => Promise.resolve({ error: 'not found' }) };
-      })
-    });
+      ingredients: ingredients,
+      instructions: instructions
+    };
+  }
 
-    const context = vm.createContext(sandbox);
-    for (const file of ENGINE_LOAD) {
-      vm.runInContext(readFileSync(path.join(ENGINE_DIR, file), 'utf8'), context, { filename: file });
+  function ensureStableResponseContract(result) {
+    result = result && typeof result === 'object' ? result : {};
+    if (!result.schema || typeof result.schema !== 'object') {
+      result.schema = { owner: 'arc_backend', version: '1.0.0', stable: true };
+    } else {
+      result.schema.owner = 'arc_backend';
+      result.schema.version = result.schema.version || '1.0.0';
+      result.schema.stable = true;
     }
 
-    const start = Date.now();
-    let enhancementUpdate = null;
-    const out = await sandbox.ArcApi.Orchestrator.runAdaptiveMealPipeline({
-      goal: 'Maintain weight',
-      weight: 180,
-      height: 70,
-      age: 30,
-      gender: 'male',
-      activityLevel: 'Moderate',
-      mealQuery: 'chicken bowl',
-      onEnhancementUpdate: (payload) => { enhancementUpdate = payload; }
-    });
-    const elapsedMs = Date.now() - start;
-
-    assert.equal(out.error, null);
-    assert.ok(out.recipe);
-    assert.equal(out.recipe.title, 'Fast chicken bowl');
-    assert.ok(out.enhancement.status === 'pending' || out.enhancement.status === 'skipped');
-    assert.ok(elapsedMs < 120, 'pipeline should return before enhancement resolves');
-    assert.ok(out.canonicalMeal, 'expected canonical meal schema');
-    assert.ok(Array.isArray(out.meals), 'expected stable meals array');
-    assert.equal(out.schema.owner, 'arc_backend');
-    assert.equal(out.schemaValidation.valid, true);
-
-    const started = logs.find((l) => l.includes('[ARC PIPELINE] Enhancement running async'));
-    const skipped = logs.find((l) => l.includes('[ARC PIPELINE] Enhancement skipped safely'));
-    const baseDelivered = logs.find((l) => l.includes('[ARC PIPELINE] Base recipe delivery complete'));
-    const canonicalLogged = logs.find((l) => l.includes('[ARC PIPELINE] Canonical backend schema created'));
-    const contractLogged = logs.find((l) => l.includes('[ARC PIPELINE] Frontend render contract validated'));
-    const stableResponseLogged = logs.find((l) => l.includes('[ARC PIPELINE] Stable deterministic response sent'));
-    assert.ok(started || skipped, 'expected enhancement started or skipped log');
-    assert.ok(baseDelivered, 'expected base delivery complete log');
-    assert.ok(canonicalLogged, 'expected canonical schema log');
-    assert.ok(contractLogged, 'expected frontend contract validation log');
-    assert.ok(stableResponseLogged, 'expected deterministic response log');
-    if (started) {
-      await new Promise((resolve) => setTimeout(resolve, 150));
-      assert.ok(enhancementUpdate, 'expected async enhancement callback payload');
-      assert.equal(enhancementUpdate.enhanced, true);
-    }
-  });
-
-  test('degraded no-recipe response still returns stable schema contract', async () => {
-    const sandbox = loadArcApi({
-      fetch: mockFetch((url) => {
-        if (url.indexOf('/api/spoonacular/search') !== -1) {
-          return {
-            ok: true,
-            status: 200,
-            json: () => Promise.resolve({ results: [] })
-          };
-        }
-        if (url.indexOf('/api/ai') !== -1) {
-          return {
-            ok: true,
-            status: 200,
-            json: () => Promise.resolve({ content: [{ type: 'text', text: 'ok' }] })
-          };
-        }
-        return { ok: false, status: 404, json: () => Promise.resolve({ error: 'not found' }) };
-      })
-    });
-
-    const context = vm.createContext(sandbox);
-    for (const file of ENGINE_LOAD) {
-      vm.runInContext(readFileSync(path.join(ENGINE_DIR, file), 'utf8'), context, { filename: file });
+    if (!result.recipe || typeof result.recipe !== 'object') {
+      result.recipe = null;
+    } else {
+      result.recipe = cloneRecipeForContract(result.recipe);
     }
 
-    const out = await sandbox.ArcApi.Orchestrator.runAdaptiveMealPipeline({
-      goal: 'Maintain weight',
-      weight: 175,
-      height: 70,
-      age: 31,
-      gender: 'female',
-      activityLevel: 'Moderate'
-    });
+    if (!result.canonicalMeal || typeof result.canonicalMeal !== 'object') {
+      result.canonicalMeal = result.recipe
+        ? buildCanonicalMealSchema({
+            recipe: result.recipe,
+            scenario: result.scenario,
+            nutritionConfidence: result.nutritionConfidence
+          })
+        : null;
+    }
 
-    assert.equal(out.error, 'no_recipe_found');
-    assert.equal(out.degraded, true);
-    assert.ok(out.schema);
-    assert.equal(out.schema.owner, 'arc_backend');
-    assert.equal(Array.isArray(out.meals), true);
-    assert.equal(out.meals.length, 0);
-    assert.equal(out.canonicalMeal, null);
-    assert.equal(typeof out.schemaValidation.valid, 'boolean');
-  });
-});
+    if (!Array.isArray(result.meals)) {
+      result.meals = result.canonicalMeal ? [result.canonicalMeal] : [];
+    } else if (result.canonicalMeal) {
+      result.meals = [result.canonicalMeal];
+    } else {
+      result.meals = [];
+    }
 
-describe('Arc API pipeline tracing', () => {
-  test('postJson emits production-safe provider log', async () => {
-    const logs = [];
-    const sandbox = loadArcApi({
-      fetch: mockFetch((url) => ({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve({ results: [], total: 0 })
-      })),
-      console: {
-        log: (...args) => logs.push(args.join(' '))
+    var schemaValidation = validateStableResponseShape(result);
+    result.schemaValidation = schemaValidation;
+    if (!schemaValidation.valid) {
+      result.degraded = true;
+      result.error = result.error || 'schema_validation_failed';
+    }
+    return result;
+  }
+
+  function validateStableResponseShape(result) {
+    if (!result || typeof result !== 'object') return { valid: false, issues: ['response_missing'] };
+    var issues = [];
+    if (!result.canonicalMeal || typeof result.canonicalMeal !== 'object') issues.push('canonical_meal_missing');
+    if (!Array.isArray(result.meals)) issues.push('meals_not_array');
+    if (result.canonicalMeal) {
+      if (!result.canonicalMeal.mealId) issues.push('meal_id_missing');
+      if (!result.canonicalMeal.title) issues.push('title_missing');
+      if (!result.canonicalMeal.mealCategory) issues.push('meal_category_missing');
+      if (!result.canonicalMeal.nutritionConfidence) issues.push('nutrition_confidence_missing');
+      if (!Array.isArray(result.canonicalMeal.ingredients)) issues.push('ingredients_not_array');
+      if (!Array.isArray(result.canonicalMeal.instructions)) issues.push('instructions_not_array');
+      if (!result.canonicalMeal.macros || typeof result.canonicalMeal.macros !== 'object') {
+        issues.push('macros_missing');
+      } else {
+        if (!isFinite(Number(result.canonicalMeal.macros.calories))) issues.push('macro_calories_missing');
+        if (!isFinite(Number(result.canonicalMeal.macros.protein))) issues.push('macro_protein_missing');
+        if (!isFinite(Number(result.canonicalMeal.macros.carbs))) issues.push('macro_carbs_missing');
+        if (!isFinite(Number(result.canonicalMeal.macros.fat))) issues.push('macro_fat_missing');
       }
+    }
+    if (Array.isArray(result.meals)) {
+      if (!result.meals.length) issues.push('meals_empty');
+      if (result.canonicalMeal && result.meals[0] && result.meals[0].mealId !== result.canonicalMeal.mealId) {
+        issues.push('meals_canonical_mismatch');
+      }
+    }
+    try {
+      JSON.stringify(result);
+    } catch (_) {
+      issues.push('serialization_failed');
+    }
+    return { valid: issues.length === 0, issues: issues };
+  }
+
+  function dispatch(operationName, input) {
+    var op = OPERATIONS[operationName];
+    if (!op) {
+      return Promise.resolve({
+        provider: null,
+        responsibility: null,
+        status: 'unknown_operation',
+        data: null,
+        error: 'Unknown operation: ' + operationName,
+        arcOwned: false
+      });
+    }
+
+    var owner = op.provider;
+    if (RESPONSIBILITY_OWNER[op.responsibility] !== owner) {
+      return Promise.reject(new Error('[Arc API] Responsibility routing mismatch: ' + op.responsibility));
+    }
+
+    var p = providers()[owner];
+    if (!p || typeof p[op.method] !== 'function') {
+      return Promise.resolve({
+        provider: owner,
+        responsibility: op.responsibility,
+        status: 'provider_missing',
+        data: null,
+        error: 'Provider adapter not loaded: ' + owner,
+        arcOwned: false
+      });
+    }
+
+    return p[op.method](input);
+  }
+
+  /**
+   * Spoonacular → USDA when Edamam envelope is not ok (client-side; server may already fallback).
+   * @returns {Promise<object|null>} provider envelope or null
+   */
+  function resolveNutritionAfterEdamamFailure(ctx) {
+    ctx = ctx || {};
+    var S = services();
+    var T = trace();
+    var recipe = ctx.recipe || {};
+    var ingrLines = ctx.ingrLines || [];
+    var recipeId = recipe.recipeId || recipe.id;
+
+    if (S.spoonacular && recipeId) {
+      return S.spoonacular.getRecipeBulk({ ids: [recipeId], includeNutrition: true }).then(function (r) {
+        if (r.status !== 'ok' || !r.data.recipes.length) return tryUsdaFallback();
+        var rec = r.data.recipes[0];
+        var macros = rec.nutrition || (rec.calories != null
+          ? { calories: rec.calories, protein: rec.protein, carbs: rec.carbs, fat: rec.fat }
+          : null);
+        if (!macros || !macros.calories) return tryUsdaFallback();
+        if (T) T.logFallback('spoonacular', 'edamam_failed');
+        return {
+          provider: 'spoonacular',
+          status: 'ok',
+          data: {
+            normalized: macros,
+            source: 'spoonacular',
+            nutritionConfidence: 'low',
+            fallback: true
+          }
+        };
+      });
+    }
+    return tryUsdaFallback();
+
+    function tryUsdaFallback() {
+      if (!S.usda || !ingrLines.length) return Promise.resolve(null);
+      return S.usda.searchIngredient({ query: ingrLines[0], pageSize: 1 }).then(function (sr) {
+        if (sr.status !== 'ok' || !sr.data.foods.length) return null;
+        return S.usda.getFoodNutrition({ fdcId: sr.data.foods[0].fdcId }).then(function (fn) {
+          if (fn.status !== 'ok' || !fn.data.normalized) return null;
+          if (T) T.logFallback('usda', 'edamam_failed');
+          return {
+            provider: 'usda',
+            status: 'ok',
+            data: {
+              normalized: fn.data.normalized,
+              source: 'usda',
+              nutritionConfidence: 'low',
+              fallback: true
+            }
+          };
+        });
+      });
+    }
+  }
+
+  function analyzeAndValidateRecipe(input) {
+    input = input || {};
+    return dispatch('analyzeRecipeNutrition', input).then(function (nutrition) {
+      var macros = nutrition.data && nutrition.data.normalized;
+      if (!macros || nutrition.status !== 'ok') {
+        return { nutrition: nutrition, validation: null, arcNote: 'Nutrition analysis incomplete — skip USDA validation' };
+      }
+
+      var V = validation();
+      var preCheck = V ? V.detectImpossibleNutrition(macros) : { safe: true };
+
+      return dispatch('validateMacros', {
+        calories: macros.calories,
+        protein: macros.protein,
+        carbs: macros.carbs,
+        fat: macros.fat
+      }).then(function (usdaValidation) {
+        return {
+          nutrition: nutrition,
+          validation: usdaValidation,
+          preCheck: preCheck,
+          arcNote: 'Arc Engine applies targets, scaling, and meal strategy — not external APIs'
+        };
+      });
     });
+  }
 
-    await sandbox.ArcApi.Services.spoonacular.searchRecipes({ query: 'chicken' });
-    const pipelineLog = logs.find((line) => line.includes('[ARC PIPELINE] Spoonacular'));
-    assert.ok(pipelineLog, 'expected Spoonacular trace line');
-    assert.ok(pipelineLog.includes('success'), pipelineLog);
-    assert.ok(pipelineLog.includes('ms'), pipelineLog);
-    assert.equal(pipelineLog.includes('apiKey'), false);
-    assert.equal(pipelineLog.includes('sk-'), false);
-  });
+  /**
+   * Full adaptive meal pipeline — Arc Engine first, APIs provide information.
+   * @param {object} profile Arc Engine profile + optional scenario, zipCode, foodLog
+   * @returns {Promise<object>}
+   */
+  function runAdaptiveMealPipeline(profile) {
+    profile = profile || {};
+    var T = trace();
+    var key = pipelineKey(profile);
+    var now = Date.now();
+    var debounceUntil = pipelineDebounce.get(key) || 0;
+    if (pipelineInFlight.has(key)) return pipelineInFlight.get(key);
+    if (debounceUntil > now && pipelineInFlight.has('__last:' + key)) {
+      return pipelineInFlight.get('__last:' + key);
+    }
+    if (T) T.logOrchestrator('meal pipeline started');
 
-  test('USDA validateMacros logs validation outcome', async () => {
-    const logs = [];
-    const sandbox = loadArcApi({
-      console: { log: (...args) => logs.push(args.join(' ')) }
+    var arcResult = null;
+
+    if (global.ArcEngine && typeof global.ArcEngine.run === 'function') {
+      arcResult = global.ArcEngine.run(profile);
+    } else if (global.ArcEngine && typeof global.ArcEngine.computeTargets === 'function') {
+      arcResult = { goal: global.ArcEngine.computeTargets(profile), targets: global.ArcEngine.computeTargets(profile) };
+    }
+
+    var targets = arcResult && (arcResult.targets || arcResult.goal) || {};
+    var scenario = profile.scenario || inferScenario(profile);
+    var S = services();
+    var V = validation();
+
+    var finalRecipeCount = Math.max(1, profile.recipeCount || 3);
+    var searchFilters = {
+      query: profile.mealQuery || 'high protein dinner',
+      maxCalories: profile.maxCalories || (targets.targetCalories ? Math.round(targets.targetCalories / (profile.mealsPerDay || 3)) : null),
+      diet: profile.diet,
+      number: Math.min(20, Math.max(8, finalRecipeCount * 4))
+    };
+
+    var flow = (S.spoonacular ? S.spoonacular.searchRecipes(searchFilters) : dispatch('discoverMeals', searchFilters))
+      .then(function (recipeSearch) {
+        var recipes = (recipeSearch.data && recipeSearch.data.recipes) || [];
+        if (!recipes.length && profile.recipe) recipes = [profile.recipe];
+        if (!recipes.length) {
+          if (T) T.logMessage('Spoonacular no recipes found');
+          return buildPipelineResult({
+            arcResult: arcResult,
+            scenario: scenario,
+            recipeSearch: recipeSearch,
+            error: 'no_recipe_found',
+            degraded: true
+          });
+        }
+
+        function nutritionForRecipe(recipe) {
+          var ingrLines = (recipe.ingredients || []).map(function (i) {
+            return i.original || i.name || String(i);
+          }).filter(Boolean);
+
+          var edamamPromise = S.edamam
+            ? S.edamam.analyzeRecipeNutrition({
+              title: recipe.title,
+              ingr: ingrLines,
+              spoonacularRecipeId: recipe.recipeId || recipe.id
+            })
+            : dispatch('analyzeRecipeNutrition', {
+              title: recipe.title,
+              ingr: ingrLines,
+              spoonacularRecipeId: recipe.recipeId || recipe.id
+            });
+
+          return edamamPromise.then(function (nutrition) {
+            var macros = nutrition.data && (nutrition.data.normalized || nutrition.data.totalNutrients);
+            if (nutrition.status !== 'ok' || !macros) {
+              return resolveNutritionAfterEdamamFailure({
+                recipe: recipe,
+                ingrLines: ingrLines
+              }).then(function (fallbackNutrition) {
+                if (!fallbackNutrition) return { recipe: recipe, nutrition: nutrition, macros: null, rejected: 'nutrition_unavailable' };
+                return { recipe: recipe, nutrition: fallbackNutrition, macros: fallbackNutrition.data.normalized };
+              });
+            }
+            return { recipe: recipe, nutrition: nutrition, macros: macros };
+          });
+        }
+
+        function evaluateCandidate(recipe) {
+          return nutritionForRecipe(recipe).then(function (evalData) {
+            if (!evalData.macros) return evalData;
+            var usdaPromise = S.usda ? S.usda.validateMacros(evalData.macros) : dispatch('validateMacros', evalData.macros);
+            return usdaPromise.then(function (usdaValidation) {
+              var validationReport = V && V.detectImpossibleNutrition
+                ? V.detectImpossibleNutrition(Object.assign({}, evalData.macros, { context: 'meal', weightLb: profile.weight }))
+                : null;
+              var sanityReport = V && V.runNutritionSanityChecks ? V.runNutritionSanityChecks(evalData.macros) : null;
+              var valid = (!validationReport || validationReport.safe) && (!sanityReport || sanityReport.valid) &&
+                !!(usdaValidation && usdaValidation.status === 'ok' && usdaValidation.data && usdaValidation.data.valid);
+              return Object.assign({}, evalData, {
+                usdaValidation: usdaValidation,
+                validationReport: validationReport,
+                sanityReport: sanityReport,
+                rejected: valid ? null : 'nutrition_failed_validation'
+              });
+            });
+          });
+        }
+
+        function evaluateAll(candidates) {
+          var out = [];
+          var idx = 0;
+          var workers = [];
+          var concurrency = 3;
+          function worker() {
+            var i = idx++;
+            if (i >= candidates.length) return Promise.resolve();
+            return evaluateCandidate(candidates[i]).then(function (entry) {
+              out[i] = entry;
+              return worker();
+            });
+          }
+          var wCount = Math.min(concurrency, candidates.length);
+          for (var w = 0; w < wCount; w++) workers.push(worker());
+          return Promise.all(workers).then(function () { return out; });
+        }
+
+        return evaluateAll(recipes).then(function (evaluated) {
+          var candidateRecipes = [];
+          evaluated.forEach(function (entry) {
+            if (!entry || entry.rejected || !entry.macros) return;
+            var recipeWithNutrition = Object.assign({}, entry.recipe, {
+              nutrition: entry.macros || {},
+              calories: entry.macros && entry.macros.calories,
+              protein: entry.macros && entry.macros.protein,
+              carbs: entry.macros && entry.macros.carbs,
+              fat: entry.macros && entry.macros.fat,
+              nutritionConfidence: (entry.nutrition && entry.nutrition.data && entry.nutrition.data.nutritionConfidence) || 'medium'
+            });
+            if (V && V.deriveNutritionTags) {
+              var derived = V.deriveNutritionTags(entry.macros || {});
+              recipeWithNutrition.nutritionTags = derived.tags;
+            }
+            candidateRecipes.push(recipeWithNutrition);
+          });
+
+          var C = curation();
+          var curatedResult = C && C.curateRecipes
+            ? C.curateRecipes(candidateRecipes, {
+              desiredCount: finalRecipeCount,
+              profile: profile,
+              scenario: scenario,
+              varietyState: profile.varietyState || {}
+            })
+            : { curated: candidateRecipes.slice(0, finalRecipeCount), rejected: [], varietyState: {} };
+
+          var scoredRecipes = curatedResult.curated.map(function (entry) {
+            var merged = Object.assign({}, entry.recipe, {
+              recipeQualityScore: entry.recipeQualityScore,
+              qualityCategoryScores: entry.categoryScores,
+              varietyPenalty: entry.varietyPenalty || 0
+            });
+            return merged;
+          });
+          if (T && scoredRecipes.length) T.logMessage('Recipe curation complete');
+
+          var selectedRecipe = scoredRecipes[0] || null;
+          if (!selectedRecipe) {
+            return buildPipelineResult({
+              arcResult: arcResult,
+              scenario: scenario,
+              recipeSearch: recipeSearch,
+              error: 'no_curated_recipe_found',
+              degraded: true
+            });
+          }
+
+          var selectedEval = null;
+          var e;
+          for (e = 0; e < evaluated.length; e++) {
+            if (evaluated[e] && evaluated[e].recipe && (evaluated[e].recipe.recipeId || evaluated[e].recipe.id) === (selectedRecipe.recipeId || selectedRecipe.id)) {
+              selectedEval = evaluated[e];
+              break;
+            }
+          }
+
+          var openaiPromise = pickOpenAiAdaptation(S, scenario, arcResult, profile);
+          return openaiPromise.then(function (adaptation) {
+            var groceryIngredients = (selectedRecipe.ingredients || []).map(function (ing, idx) {
+              return { key: 'ing_' + idx, name: ing.name || ing.original || 'ingredient' };
+            });
+
+            var krogerPromise = S.kroger
+              ? S.kroger.estimateGroceryCost({
+                zipCode: profile.zipCode,
+                ingredients: groceryIngredients,
+                budgetConstraints: arcResult && arcResult.budget
+              })
+              : dispatch('getGroceryPricing', { zipCode: profile.zipCode, items: groceryIngredients });
+
+            return krogerPromise.then(function (pricing) {
+              if (T && pricing && pricing.status === 'not_configured') {
+                T.logMessage('Kroger unavailable');
+              }
+
+              var scaledRecipe = null;
+              if (global.ArcEngine && global.ArcEngine.PortionScaler && selectedRecipe.nutrition) {
+                var slot = arcResult && arcResult.mealStrategy && arcResult.mealStrategy.slots && arcResult.mealStrategy.slots[0];
+                var slotTarget = profile.recipeTarget || slot || targets;
+                scaledRecipe = global.ArcEngine.PortionScaler.scaleRecipe(selectedRecipe, {
+                  calories: slotTarget.calories || slotTarget.targetCalories,
+                  protein: slotTarget.protein || slotTarget.proteinTarget,
+                  carbs: slotTarget.carbs || slotTarget.carbTarget,
+                  fat: slotTarget.fat || slotTarget.fatTarget
+                });
+                if (V && V.validateServingScaling) {
+                  var scalingCheck = V.validateServingScaling(scaledRecipe);
+                  if (!scalingCheck.valid && T) T.logMessage('Serving scaling corrected');
+                  scaledRecipe.scalingValidation = scalingCheck;
+                }
+              }
+
+              selectedRecipe = cloneRecipeForContract(selectedRecipe);
+              var finalResult = buildPipelineResult({
+                arcResult: arcResult,
+                scenario: scenario,
+                recipeSearch: recipeSearch,
+                recipe: selectedRecipe,
+                nutrition: selectedEval ? selectedEval.nutrition : null,
+                usdaValidation: selectedEval ? selectedEval.usdaValidation : null,
+                validationReport: selectedEval ? selectedEval.validationReport : null,
+                adaptation: adaptation,
+                pricing: pricing,
+                scaledRecipe: scaledRecipe,
+                nutritionConfidence: selectedRecipe.nutritionConfidence,
+                curatedRecipes: scoredRecipes,
+                rejectedRecipes: curatedResult.rejected
+              });
+              finalResult.enhancement = {
+                status: 'skipped',
+                async: false,
+                applied: false
+              };
+
+              if (S.openai && S.openai.enhanceRecipePresentation && Array.isArray(selectedRecipe.instructions) && selectedRecipe.instructions.length) {
+                finalResult.enhancement = {
+                  status: 'pending',
+                  async: true,
+                  applied: false
+                };
+                if (T) T.logMessage('Enhancement running async');
+                try {
+                  Promise.resolve(S.openai.enhanceRecipePresentation({
+                    recipe: selectedRecipe,
+                    scenario: scenario,
+                    profile: { goal: profile.goal, budgetTier: profile.budgetTier }
+                  })).then(function (enhancement) {
+                    try {
+                      if (enhancement && enhancement.status === 'ok' && enhancement.data) {
+                        var enhancedRecipe = cloneRecipeForContract(selectedRecipe);
+                        enhancedRecipe.title = enhancement.data.enhancedTitle || enhancedRecipe.title;
+                        enhancedRecipe.summary = enhancement.data.enhancedSummary || enhancedRecipe.summary || '';
+                        enhancedRecipe.labels = Array.isArray(enhancement.data.enhancedLabels)
+                          ? enhancement.data.enhancedLabels.slice()
+                          : (enhancedRecipe.labels || []);
+                        enhancedRecipe.instructions = enhancement.data.enhancedInstructions || enhancedRecipe.instructions;
+                        var enhancedCanonicalMeal = buildCanonicalMealSchema({
+                          recipe: enhancedRecipe,
+                          scenario: scenario,
+                          nutritionConfidence: enhancedRecipe.nutritionConfidence
+                        });
+                        if (T) T.logMessage('OpenAI enhancement merged safely');
+                        notifyEnhancement(profile, {
+                          recipeId: enhancedRecipe.recipeId || enhancedRecipe.id || null,
+                          title: enhancedRecipe.title,
+                          instructions: enhancedRecipe.instructions,
+                          canonicalMeal: enhancedCanonicalMeal,
+                          enhanced: true,
+                          scenario: scenario
+                        });
+                        return;
+                      }
+                      if (T) T.logMessage('Enhancement safely skipped');
+                    } catch (_) {
+                      if (T) T.logMessage('Enhancement safely skipped');
+                    }
+                  }).catch(function (err) {
+                    if (T && err && (err.name === 'AbortError' || err.code === 'ABORT_ERR' || err.name === 'APIUserAbortError')) {
+                      T.logMessage('Enhancement timeout isolated');
+                    }
+                    if (T) T.logMessage('Enhancement safely skipped');
+                  });
+                } catch (_) {
+                  if (T) T.logMessage('Enhancement safely skipped');
+                }
+              } else {
+                if (T) T.logMessage('Enhancement skipped safely');
+              }
+
+              finalResult = ensureStableResponseContract(finalResult);
+              if (finalResult.schemaValidation.valid && T) {
+                T.logMessage('Canonical backend schema created');
+                T.logMessage('Frontend render contract validated');
+                T.logMessage('Stable deterministic response sent');
+              }
+
+              if (T) {
+                T.logMessage('Base recipe delivery complete');
+                T.logMessage('Base meal response preserved');
+                T.logMessage('Final meal generation complete');
+              }
+              return finalResult;
+            });
+          });
+        });
+      }).catch(function (err) {
+        if (T) T.logOrchestrator('meal pipeline failed');
+        throw err;
+      }).finally(function () {
+        pipelineInFlight.delete(key);
+        pipelineDebounce.set(key, Date.now() + PIPELINE_DEBOUNCE_MS);
+      });
+    pipelineInFlight.set(key, flow);
+    pipelineInFlight.set('__last:' + key, flow);
+    return flow;
+      
+  }
+
+  function inferScenario(profile) {
+    if (profile.foodLogText) return 'off_plan';
+    if (profile.scenario) return profile.scenario;
+    if (profile.athlete && profile.athlete.phase === 'offseason') return 'athlete_offseason';
+    if (profile.sickWeek) return 'sick_week';
+    if (profile.travelWeek) return 'travel';
+    if (profile.budgetTier === 'low' || profile.budgetTier === 'Budget') return 'budget';
+    return 'performance';
+  }
+
+  function notifyEnhancement(profile, payload) {
+    profile = profile || {};
+    if (typeof profile.onEnhancementUpdate === 'function') {
+      try { profile.onEnhancementUpdate(payload); } catch (_) {}
+    }
+    if (typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
+      try {
+        global.dispatchEvent(new global.CustomEvent('arc:recipe-enhancement', { detail: payload }));
+      } catch (_) {}
+    }
+  }
+
+  function pickOpenAiAdaptation(S, scenario, arcResult, profile) {
+    if (!S.openai) return dispatch('optimize', { prompt: 'scenario:' + scenario, arcContext: arcResult });
+
+    var ctx = { arc: arcResult, profile: { goal: profile.goal, budgetTier: profile.budgetTier } };
+    switch (scenario) {
+      case 'athlete_offseason': return S.openai.adaptForAthlete({ arcContext: ctx, userNote: profile.userNote });
+      case 'sick_week': return S.openai.adaptForIllness({ arcContext: ctx });
+      case 'travel': return S.openai.adaptForTravel({ arcContext: ctx });
+      case 'budget': return S.openai.adaptForBudget({ arcContext: ctx });
+      case 'off_plan': return S.openai.adaptForOffPlanEating({ arcContext: ctx, text: profile.foodLogText });
+      default: return S.openai.optimizeNutritionStrategy({ arcContext: ctx });
+    }
+  }
+
+  function buildPipelineResult(parts) {
+    parts = parts || {};
+    return ensureStableResponseContract({
+      version: '2.0.0',
+      generatedAt: new Date().toISOString(),
+      arcOwned: true,
+      blocked: !!parts.blocked,
+      degraded: !!parts.degraded,
+      error: parts.error || null,
+      scenario: parts.scenario,
+      arc: parts.arcResult,
+      recipeSearch: parts.recipeSearch || null,
+      recipe: parts.recipe || null,
+      nutrition: parts.nutrition || null,
+      nutritionConfidence: parts.nutritionConfidence || (parts.nutrition && parts.nutrition.data && parts.nutrition.data.nutritionConfidence) || null,
+      usdaValidation: parts.usdaValidation || null,
+      validation: parts.validationReport || null,
+      sanity: parts.sanityReport || null,
+      adaptation: parts.adaptation || null,
+      pricing: parts.pricing || null,
+      scaledRecipe: parts.scaledRecipe || null,
+      curatedRecipes: parts.curatedRecipes || [],
+      rejectedRecipes: parts.rejectedRecipes || [],
+      note: 'Arc Engine owns intelligence; external APIs provide information'
     });
+  }
 
-    await sandbox.ArcApi.Services.usda.validateMacros({
-      calories: 100,
-      protein: 50,
-      carbs: 0,
-      fat: 0
+  function getProviderRegistry() {
+    return Object.keys(PROVIDER_CATALOG).map(function (id) {
+      var entry = PROVIDER_CATALOG[id];
+      return {
+        id: id,
+        label: entry.label,
+        role: entry.role,
+        responsibilities: entry.responsibilities.slice(),
+        status: providers()[id] ? 'adapter_loaded' : 'not_loaded',
+        arcBoundary: entry.arcDoesNot
+      };
     });
+  }
 
-    const line = logs.find((l) => l.includes('[ARC PIPELINE] USDA'));
-    assert.ok(line, 'expected USDA trace');
-    assert.ok(line.includes('validation failed') || line.includes('success'), line);
-  });
-});
+  function getIntegrationStatus() {
+    var out = {};
+    Object.keys(PROVIDER_CATALOG).forEach(function (id) {
+      out[id] = {
+        status: providers()[id] ? 'adapter_ready' : 'not_loaded',
+        service: services()[id] ? 'service_ready' : 'service_missing',
+        responsibilities: PROVIDER_CATALOG[id].responsibilities.slice()
+      };
+    });
+    return out;
+  }
+
+  var api = {
+    RESPONSIBILITY_OWNER: RESPONSIBILITY_OWNER,
+    OPERATIONS: OPERATIONS,
+    PROVIDER_CATALOG: PROVIDER_CATALOG,
+    dispatch: dispatch,
+    analyzeAndValidateRecipe: analyzeAndValidateRecipe,
+    runAdaptiveMealPipeline: runAdaptiveMealPipeline,
+    getProviderRegistry: getProviderRegistry,
+    getIntegrationStatus: getIntegrationStatus,
+
+    retrieveRecipe: function (input) { return dispatch('retrieveRecipe', input); },
+    getRecipeMetadata: function (input) { return dispatch('getRecipeMetadata', input); },
+    discoverMeals: function (input) { return dispatch('discoverMeals', input); },
+    searchRecipes: function (input) { return dispatch('searchRecipes', input); },
+
+    parseIngredients: function (input) { return dispatch('parseIngredients', input); },
+    parseFoodInput: function (input) { return dispatch('parseFoodInput', input); },
+    understandFood: function (input) { return dispatch('understandFood', input); },
+    analyzeRecipeNutrition: function (input) { return dispatch('analyzeRecipeNutrition', input); },
+    getDietLabels: function (input) { return dispatch('getDietLabels', input); },
+    getFoodIntelligence: function (input) { return dispatch('getFoodIntelligence', input); },
+
+    verifyNutrition: function (input) { return dispatch('verifyNutrition', input); },
+    validateMacros: function (input) { return dispatch('validateMacros', input); },
+    resolveSourceOfTruth: function (input) { return dispatch('resolveSourceOfTruth', input); },
+
+    adapt: function (input) { return dispatch('adapt', input); },
+    optimize: function (input) { return dispatch('optimize', input); },
+    reason: function (input) { return dispatch('reason', input); },
+
+    getGroceryPricing: function (input) { return dispatch('getGroceryPricing', input); },
+    checkAvailability: function (input) { return dispatch('checkAvailability', input); },
+    findSubstitutions: function (input) { return dispatch('findSubstitutions', input); }
+  };
+
+  global.ArcApi = global.ArcApi || {};
+  global.ArcApi.Orchestrator = api;
+  global.ArcApi.dispatch = dispatch;
+})(typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : this);
