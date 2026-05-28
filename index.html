@@ -8434,6 +8434,25 @@ function callAI(system, userMsg, maxTok, callback, taskType) {
 
     var text = extractAiResponseText(data).trim();
     if (text) {
+      function hasWeekGenerationSchemaShape(v) {
+        if (!isPlainObject(v)) return false;
+        return Array.isArray(v.recipes) && isPlainObject(v.plan);
+      }
+      var nestedWeek = null;
+      if (data && data.content != null) {
+        console.log('[ARC PIPELINE] Nested week payload detected');
+        var nestedParsed = parseJSON(text);
+        if (nestedParsed && hasWeekGenerationSchemaShape(nestedParsed)) {
+          console.log('[ARC PIPELINE] Nested JSON parsed successfully');
+          nestedWeek = nestedParsed;
+        }
+      }
+      if (nestedWeek) {
+        console.log('[ARC PIPELINE] Week-generation payload classified correctly');
+        console.log('[ARC PIPELINE] Enhancement classification bypassed for valid week schema');
+        callback(null, nestedWeek, { source: 'week_generation', taskType: taskType });
+        return nestedWeek;
+      }
       console.log('[ARC PIPELINE] Enhancement payload received', {
         taskType: taskType,
         hasContent: true
