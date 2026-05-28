@@ -480,6 +480,110 @@ describe('Arc Phase 2 adaptive pipeline (mocked APIs)', () => {
     assert.equal(out.pricing.status, 'ok');
     assert.equal(out.pricing.data.source, 'arc_budget_engine');
   });
+
+  test('recipe delivery does not block on instruction enhancement timeout', async () => {
+    let aiCallCount = 0;
+    const logs = [];
+    const sandbox = loadArcApi({
+      console: {
+        log: (...args) => logs.push(args.join(' ')),
+        error: () => {}
+      },
+      fetch: mockFetch((url) => {
+        if (url.indexOf('/api/spoonacular/search') !== -1) {
+          return {
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({
+              results: [{
+                id: 5,
+                recipeId: 5,
+                title: 'Fast chicken bowl',
+                servings: 2,
+                readyInMinutes: 20,
+                ingredients: [
+                  { name: 'chicken breast', original: '6 oz chicken breast' },
+                  { name: 'rice', original: '1 cup cooked rice' }
+                ],
+                instructions: ['Cook chicken in skillet.', 'Serve over rice.']
+              }]
+            })
+          };
+        }
+        if (url.indexOf('/api/nutrition') !== -1) {
+          return {
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({
+              totalNutrients: { calories: 640, protein: 50, fat: 16, carbs: 62 }
+            })
+          };
+        }
+        if (url.indexOf('/api/ai') !== -1) {
+          aiCallCount += 1;
+          if (aiCallCount === 1) {
+            return {
+              ok: true,
+              status: 200,
+              json: () => Promise.resolve({
+                content: [{ type: 'text', text: 'Keep carbs around training.' }]
+              })
+            };
+          }
+          return {
+            ok: true,
+            status: 200,
+            json: () => new Promise((resolve) => {
+              setTimeout(() => {
+                resolve({
+                  content: [{ type: 'text', text: '{"title":"Enhanced Bowl","instructions":["Sear chicken quickly.","Plate with warm rice."]}' }]
+                });
+              }, 120);
+            })
+          };
+        }
+        if (url.indexOf('/api/kroger/prices') !== -1) {
+          return {
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({
+              results: { ing_0: { priceEffective: 4.3 }, ing_1: { priceEffective: 1.8 } },
+              locationId: 'loc1'
+            })
+          };
+        }
+        return { ok: false, status: 404, json: () => Promise.resolve({ error: 'not found' }) };
+      })
+    });
+
+    const context = vm.createContext(sandbox);
+    for (const file of ENGINE_LOAD) {
+      vm.runInContext(readFileSync(path.join(ENGINE_DIR, file), 'utf8'), context, { filename: file });
+    }
+
+    const start = Date.now();
+    const out = await sandbox.ArcApi.Orchestrator.runAdaptiveMealPipeline({
+      goal: 'Maintain weight',
+      weight: 180,
+      height: 70,
+      age: 30,
+      gender: 'male',
+      activityLevel: 'Moderate',
+      mealQuery: 'chicken bowl'
+    });
+    const elapsedMs = Date.now() - start;
+
+    assert.equal(out.error, null);
+    assert.ok(out.recipe);
+    assert.equal(out.recipe.title, 'Fast chicken bowl');
+    assert.ok(elapsedMs < 120, 'pipeline should return before enhancement resolves');
+
+    const started = logs.find((l) => l.includes('[ARC PIPELINE] Instruction enhancement started'));
+    const skipped = logs.find((l) => l.includes('[ARC PIPELINE] Instruction enhancement skipped'));
+    const basePreserved = logs.find((l) => l.includes('[ARC PIPELINE] Base recipe delivery preserved'));
+    assert.ok(started || skipped, 'expected enhancement started or skipped log');
+    assert.ok(basePreserved, 'expected base delivery preserved log');
+  });
 });
 
 describe('Arc API pipeline tracing', () => {
