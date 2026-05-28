@@ -28,8 +28,7 @@ function loadSandbox() {
   vm.runInContext(readFileSync(CONTRACT_JS, 'utf8'), ctx, { filename: 'arc-frontend-contract.js' });
   const chunks = [
     sliceLines(2616, 2686),
-    sliceLines(2688, 2792),
-    sliceLines(2800, 2808),
+    sliceLines(2761, 3036),
     sliceLines(6478, 6537)
   ];
   for (const src of chunks) vm.runInContext(src, ctx);
