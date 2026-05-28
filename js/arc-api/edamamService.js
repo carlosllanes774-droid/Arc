@@ -8,6 +8,8 @@
   var Base = function () { return global.ArcApi && global.ArcApi.Base; };
   var Cache = function () { return global.ArcApi && global.ArcApi.Cache; };
   var RateLimit = function () { return global.ArcApi && global.ArcApi.RateLimit; };
+  var Edamam = function () { return global.ArcApi && global.ArcApi.Edamam; };
+  var Trace = function () { return global.ArcApi && global.ArcApi.Trace; };
 
   function normalizeFoodData(item) {
     item = item || {};
@@ -79,30 +81,169 @@
    * @param {{ title?: string, ingr: string[] }} input
    * @returns {Promise<object>}
    */
+  function normalizeIngr(input) {
+    var E = Edamam();
+    if (E && E.normalizeIngredientLines) {
+      var raw = Array.isArray(input.ingr) ? input.ingr : input.ingredients;
+      return E.normalizeIngredientLines(Array.isArray(raw) ? raw : []);
+    }
+    var ingr = Array.isArray(input.ingr) ? input.ingr : input.ingredients;
+    return Array.isArray(ingr) ? ingr.map(function (s) { return String(s || '').trim(); }).filter(Boolean) : [];
+  }
+
+  function logEdamamClientFailure(res) {
+    var E = Edamam();
+    var T = Trace();
+    if (!E || !T) return;
+    var kind = 'other';
+    if (res && res.json && res.json.failureKind) {
+      kind = res.json.failureKind;
+    } else if (res && res.status === 401) {
+      kind = 'auth';
+    } else if (res && res.status === 400) {
+      kind = 'payload';
+    } else if (res && res.status >= 400 && res.status < 500) {
+      kind = 'endpoint';
+    }
+    E.logEdamamFailure(T, kind, {
+      httpStatus: res && res.status,
+      endpoint: E.EDAMAM_NUTRITION_ENDPOINT,
+      operation: 'recipe_nutrition_analysis',
+      bodyPreview: res && res.json && res.json.detail ? E.sanitizeEdamamBody(res.json.detail, 200) : null
+    });
+  }
+
+  function nutritionFromUsdaFallback(ingr) {
+    var b = Base();
+    var usda = global.ArcApi && global.ArcApi.Services && global.ArcApi.Services.usda;
+    if (!usda || !ingr.length) return Promise.resolve(null);
+    var T = Trace();
+    var line = ingr[0];
+    return usda.searchIngredient({ query: line, pageSize: 1 }).then(function (sr) {
+      if (sr.status !== 'ok' || !sr.data.foods.length) return null;
+      return usda.getFoodNutrition({ fdcId: sr.data.foods[0].fdcId }).then(function (fn) {
+        if (fn.status !== 'ok') return null;
+        if (T) T.logFallback('usda', 'edamam_failed');
+        return {
+          normalized: fn.data.normalized,
+          source: 'usda',
+          nutritionConfidence: 'low',
+          fallback: true
+        };
+      });
+    }).catch(function () {
+      return null;
+    });
+  }
+
+  function nutritionFromSpoonacularFallback(input) {
+    var spoon = global.ArcApi && global.ArcApi.Services && global.ArcApi.Services.spoonacular;
+    var recipeId = input.spoonacularRecipeId || input.recipeId;
+    if (!spoon || !recipeId) return Promise.resolve(null);
+    var T = Trace();
+    return spoon.getRecipeBulk({ ids: [recipeId], includeNutrition: true }).then(function (r) {
+      if (r.status !== 'ok' || !r.data.recipes.length) return null;
+      var rec = r.data.recipes[0];
+      var macros = rec.nutrition || (rec.calories != null
+        ? { calories: rec.calories, protein: rec.protein, carbs: rec.carbs, fat: rec.fat }
+        : null);
+      if (!macros || !macros.calories) return null;
+      if (T) T.logFallback('spoonacular', 'edamam_failed');
+      return {
+        normalized: macros,
+        source: 'spoonacular',
+        nutritionConfidence: 'low',
+        fallback: true
+      };
+    }).catch(function () {
+      return null;
+    });
+  }
+
   function analyzeRecipeNutrition(input) {
     var b = Base();
     input = input || {};
-    var ingr = Array.isArray(input.ingr) ? input.ingr : input.ingredients;
-    ingr = Array.isArray(ingr) ? ingr.map(function (s) { return String(s || '').trim(); }).filter(Boolean) : [];
+    var ingr = normalizeIngr(input);
     if (!ingr.length) return Promise.resolve(b.fail(ID, 'recipe_nutrition_analysis', 'ingr must be a non-empty array'));
 
-    var cacheKey = 'nutrition:' + (input.title || '') + ':' + ingr.join('|');
-    return cachedProxy('/api/nutrition', { title: input.title || 'Recipe', ingr: ingr }, 'parsedFoods', cacheKey)
+    var body = {
+      title: input.title || 'Recipe',
+      ingr: ingr,
+      spoonacularRecipeId: input.spoonacularRecipeId || input.recipeId || null
+    };
+    var cacheKey = 'nutrition:' + body.title + ':' + ingr.join('|');
+    return cachedProxy('/api/nutrition', body, 'parsedFoods', cacheKey)
       .then(function (res) {
         if (!res.ok) {
           if (res.status === 503) return b.notConfigured(ID, 'recipe_nutrition_analysis');
-          return b.fail(ID, 'recipe_nutrition_analysis', (res.json && res.json.error) || 'Edamam nutrition failed');
+          logEdamamClientFailure(res);
+          return nutritionFromSpoonacularFallback(input).then(function (fb) {
+            if (fb) {
+              return b.ok(ID, 'recipe_nutrition_analysis', {
+                totalNutrients: fb.normalized,
+                normalized: fb.normalized,
+                source: fb.source,
+                nutritionConfidence: fb.nutritionConfidence,
+                fallback: true,
+                dietLabels: [],
+                healthLabels: []
+              });
+            }
+            return nutritionFromUsdaFallback(ingr).then(function (usdaFb) {
+              if (usdaFb) {
+                return b.ok(ID, 'recipe_nutrition_analysis', {
+                  totalNutrients: usdaFb.normalized,
+                  normalized: usdaFb.normalized,
+                  source: usdaFb.source,
+                  nutritionConfidence: usdaFb.nutritionConfidence,
+                  fallback: true,
+                  dietLabels: [],
+                  healthLabels: []
+                });
+              }
+              return b.fail(ID, 'recipe_nutrition_analysis', (res.json && res.json.error) || 'Edamam nutrition failed');
+            });
+          });
         }
+        var isFallback = !!(res.json && res.json.fallback);
         return b.ok(ID, 'recipe_nutrition_analysis', {
           totalNutrients: res.json.totalNutrients || null,
           notModified: !!res.json.notModified,
-          source: 'edamam',
+          source: (res.json && res.json.source) || 'edamam',
           normalized: normalizeNutrients(res.json.totalNutrients),
           dietLabels: res.json.dietLabels || [],
-          healthLabels: res.json.healthLabels || []
+          healthLabels: res.json.healthLabels || [],
+          nutritionConfidence: isFallback ? 'low' : ((res.json && res.json.nutritionConfidence) || 'high'),
+          fallback: isFallback
         });
       }).catch(function (err) {
-        return b.fail(ID, 'recipe_nutrition_analysis', err && err.message ? err.message : 'Network error');
+        return nutritionFromSpoonacularFallback(input).then(function (fb) {
+          if (fb) {
+            return b.ok(ID, 'recipe_nutrition_analysis', {
+              totalNutrients: fb.normalized,
+              normalized: fb.normalized,
+              source: fb.source,
+              nutritionConfidence: fb.nutritionConfidence,
+              fallback: true,
+              dietLabels: [],
+              healthLabels: []
+            });
+          }
+          return nutritionFromUsdaFallback(ingr).then(function (usdaFb) {
+            if (usdaFb) {
+              return b.ok(ID, 'recipe_nutrition_analysis', {
+                totalNutrients: usdaFb.normalized,
+                normalized: usdaFb.normalized,
+                source: usdaFb.source,
+                nutritionConfidence: usdaFb.nutritionConfidence,
+                fallback: true,
+                dietLabels: [],
+                healthLabels: []
+              });
+            }
+            return b.fail(ID, 'recipe_nutrition_analysis', err && err.message ? err.message : 'Network error');
+          });
+        });
       });
   }
 
