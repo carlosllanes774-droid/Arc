@@ -2632,6 +2632,106 @@ function parseJSON(raw) {
   return null;
 }
 
+function isPlainObject(v) {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
+function safeNum(v, fallback) {
+  var n = Number(v);
+  return isFinite(n) ? n : fallback;
+}
+
+function normalizeWeekPayloadContract(parsed, slots) {
+  if (!isPlainObject(parsed)) return null;
+  var src = isPlainObject(parsed.week) ? parsed.week : (isPlainObject(parsed.data) ? parsed.data : parsed);
+  var recipesInput = Array.isArray(src.recipes) ? src.recipes : [];
+  var mealsObj = isPlainObject(src.meals) ? src.meals : {};
+  if (!recipesInput.length && (Array.isArray(mealsObj.breakfast) || Array.isArray(mealsObj.lunch) || Array.isArray(mealsObj.dinner))) {
+    recipesInput = []
+      .concat(Array.isArray(mealsObj.breakfast) ? mealsObj.breakfast : [])
+      .concat(Array.isArray(mealsObj.lunch) ? mealsObj.lunch : [])
+      .concat(Array.isArray(mealsObj.dinner) ? mealsObj.dinner : []);
+  }
+  if (!recipesInput.length) return null;
+
+  var recipes = recipesInput.map(function (r, idx) {
+    r = isPlainObject(r) ? r : {};
+    var macros = isPlainObject(r.macros) ? r.macros : {};
+    var catRaw = String(r.cat || r.mealType || r.slot || '').toLowerCase();
+    var cat = /breakfast/.test(catRaw) ? 'Breakfast' : /dinner/.test(catRaw) ? 'Dinner' : /snack/.test(catRaw) ? 'Snack' : 'Lunch';
+    var ingredients = Array.isArray(r.ing) ? r.ing.slice() : (
+      Array.isArray(r.ingredients)
+        ? r.ingredients.map(function (x) {
+            if (typeof x === 'string') return x;
+            if (!isPlainObject(x)) return '';
+            return x.original || x.name || '';
+          }).filter(Boolean)
+        : []
+    );
+    var instructions = Array.isArray(r.steps) ? r.steps : (Array.isArray(r.instructions) ? r.instructions : []);
+    var cal = Math.round(safeNum(r.cal, safeNum(macros.calories, 0)));
+    var p = Math.round(safeNum(r.p, safeNum(macros.protein, 0)));
+    var c = Math.round(safeNum(r.c, safeNum(macros.carbs, 0)));
+    var f = Math.round(safeNum(r.f, safeNum(macros.fat, 0)));
+    return {
+      id: safeNum(r.id, idx + 1),
+      name: r.name || r.title || ('Recipe ' + (idx + 1)),
+      cal: cal,
+      p: p,
+      c: c,
+      f: f,
+      macros: { calories: cal, protein: p, carbs: c, fat: f },
+      cat: cat,
+      ing: ingredients,
+      ingredients: ingredients.slice(),
+      ingQty: isPlainObject(r.ingQty) ? r.ingQty : {},
+      steps: instructions,
+      instructions: instructions,
+      tags: Array.isArray(r.tags) ? r.tags : [],
+      nutritionConfidence: r.nutritionConfidence || 'medium',
+      servings: Math.max(1, Math.round(safeNum(r.servings, 1))),
+      time: r.time || '20 min',
+      difficulty: r.difficulty || 'Easy',
+      price: safeNum(r.price, 6)
+    };
+  });
+
+  var idSet = {};
+  recipes.forEach(function (r, idx) {
+    var rid = parseInt(r.id, 10);
+    r.id = rid > 0 ? rid : (idx + 1);
+    idSet[r.id] = true;
+  });
+
+  var fallbackId = recipes[0] ? recipes[0].id : 1;
+  var dayNames = DAYS.slice();
+  var normalizedPlan = {};
+  var inputPlan = isPlainObject(src.plan) ? src.plan : {};
+  var usedFallback = false;
+  for (var d = 0; d < dayNames.length; d++) {
+    var day = dayNames[d];
+    normalizedPlan[day] = {};
+    var dayPlan = isPlainObject(inputPlan[day]) ? inputPlan[day] : {};
+    var activeSlots = Array.isArray(slots) && slots.length ? slots : SLOT_SETS[String(UP.meals)] || SLOT_SETS['3'];
+    for (var s = 0; s < activeSlots.length; s++) {
+      var slot = activeSlots[s];
+      var rid = parseInt(dayPlan[slot], 10);
+      if (!rid || !idSet[rid]) {
+        usedFallback = true;
+        var preferred = recipes.find(function (r) {
+          return (slot.toLowerCase().indexOf('breakfast') !== -1 && r.cat === 'Breakfast') ||
+                 (slot.toLowerCase().indexOf('dinner') !== -1 && r.cat === 'Dinner') ||
+                 (slot.toLowerCase().indexOf('snack') !== -1 && r.cat === 'Snack');
+        });
+        rid = preferred ? preferred.id : fallbackId;
+      }
+      normalizedPlan[day][slot] = rid;
+    }
+  }
+
+  return { recipes: recipes, plan: normalizedPlan, fallbackApplied: usedFallback };
+}
+
 // ============================================================
 //  Arc v9 — Fully Fixed & Improved
 //  Mifflin-St Jeor TDEE · Retry logic · Better AI prompts
@@ -6349,7 +6449,25 @@ function normalizeRecipeSteps(steps) {
 }
 
 function normalizeGeneratedRecipe(r, i, mt) {
-  var cat = r.cat || 'Lunch';
+  r = r || {};
+  var cat = r.cat || r.mealType || 'Lunch';
+  if (String(cat).toLowerCase().indexOf('breakfast') !== -1) cat = 'Breakfast';
+  else if (String(cat).toLowerCase().indexOf('dinner') !== -1) cat = 'Dinner';
+  else if (String(cat).toLowerCase().indexOf('snack') !== -1) cat = 'Snack';
+  else cat = 'Lunch';
+  var macros = (r.macros && typeof r.macros === 'object') ? r.macros : {};
+  var rawIngredients = Array.isArray(r.ing) ? r.ing : (
+    Array.isArray(r.ingredients)
+      ? r.ingredients.map(function (x) {
+          if (typeof x === 'string') return x;
+          if (!x || typeof x !== 'object') return '';
+          return x.original || x.name || '';
+        }).filter(Boolean)
+      : []
+  );
+  var rawSteps = Array.isArray(r.steps) ? r.steps : (
+    Array.isArray(r.instructions) ? r.instructions : []
+  );
   var t = categoryTargetsFor(cat, mt);
   function num(v, fallback) {
     var n = Number(v);
@@ -6357,19 +6475,21 @@ function normalizeGeneratedRecipe(r, i, mt) {
   }
   return {
     id:         i + 1,
-    name:       r.name || ('Recipe ' + (i + 1)),
-    cal:        Math.round(num(r.cal, t.cal)),
-    p:          Math.round(num(r.p, t.p)),
-    c:          Math.round(num(r.c, t.c)),
-    f:          Math.round(num(r.f, t.f)),
+    name:       r.name || r.title || ('Recipe ' + (i + 1)),
+    cal:        Math.round(num(r.cal, num(macros.calories, t.cal))),
+    p:          Math.round(num(r.p, num(macros.protein, t.p))),
+    c:          Math.round(num(r.c, num(macros.carbs, t.c))),
+    f:          Math.round(num(r.f, num(macros.fat, t.f))),
     time:       r.time || '20 min',
     difficulty: r.difficulty || 'Easy',
     price:      num(r.price, 6.00),
     cat:        cat,
     tags:       Array.isArray(r.tags) ? r.tags : [],
-    ing:        Array.isArray(r.ing) ? r.ing : [],
+    ing:        rawIngredients,
     ingQty:     (r.ingQty && typeof r.ingQty === 'object') ? r.ingQty : {},
-    steps:      normalizeRecipeSteps(Array.isArray(r.steps) ? r.steps : [])
+    steps:      normalizeRecipeSteps(rawSteps),
+    nutritionConfidence: String(r.nutritionConfidence || 'medium'),
+    servings:   Math.max(1, parseInt(r.servings, 10) || 1)
   };
 }
 
@@ -8226,6 +8346,12 @@ function callAI(system, userMsg, maxTok, callback, taskType) {
     });
   })
   .then(function(result) {
+    console.log('[ARC PIPELINE] Frontend parser received payload', {
+      ok: result.ok,
+      status: result.status,
+      hasData: !!result.data,
+      keys: result.data && typeof result.data === 'object' ? Object.keys(result.data) : []
+    });
     if (result.badJson) {
       callback(new Error(result.ok ? 'Unable to read server response' : 'Request adjusted (HTTP ' + (result.status || '?') + ')'), null);
       return;
@@ -9911,10 +10037,27 @@ function generateWeeklyPlan(intent) {
   function applyWeek(err, raw) {
     if (myGen !== recipeGenId) return;
 
+    console.log('[ARC PIPELINE] Raw backend payload', {
+      hasError: !!err,
+      rawType: typeof raw,
+      rawPreview: raw ? String(raw).slice(0, 500) : null
+    });
+
     var parsed = null;
     if (!err && raw) parsed = parseJSON(raw);
+    var normalized = normalizeWeekPayloadContract(parsed, built.slots);
+    if (normalized && normalized.fallbackApplied) {
+      console.log('[ARC PIPELINE] Parser fallback applied', { reason: 'plan_slots_recovered' });
+    }
+    if (normalized) {
+      parsed = { recipes: normalized.recipes, plan: normalized.plan };
+      console.log('[ARC PIPELINE] Response schema normalized', {
+        recipes: parsed.recipes.length,
+        days: Object.keys(parsed.plan || {}).length
+      });
+    }
 
-    var validRecipes = parsed && parsed.recipes && Array.isArray(parsed.recipes) && parsed.recipes.length;
+    var validRecipes = parsed && Array.isArray(parsed.recipes) && parsed.recipes.length;
     var validPlan = parsed && parsed.plan && typeof parsed.plan === 'object';
 
     if (!validRecipes || !validPlan) {
@@ -9923,7 +10066,10 @@ function generateWeeklyPlan(intent) {
       var detail = '';
       if (err) detail = err.message || String(err);
       else if (!raw) detail = 'No response body from the planning service.';
-      else if (!parsed) detail = 'Arc could not read that response. Try generating again.';
+      else if (!parsed) {
+        detail = 'Arc could not read that response. Try generating again.';
+        console.log('[ARC PIPELINE] Parser failure point', { reason: 'parseJSON_returned_null' });
+      }
       else detail = 'That response was missing recipes or your plan.';
       nutriDebug('Week-direct generation failed', { detail: detail, rawPreview: raw ? String(raw).slice(0, 600) : null });
       tab('plan');
