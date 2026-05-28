@@ -686,14 +686,20 @@
                     profile: { goal: profile.goal, budgetTier: profile.budgetTier }
                   })).then(function (enhancement) {
                     try {
-                      if (enhancement && enhancement.status === 'ok' && enhancement.data) {
+                      if (enhancement && enhancement.status === 'ok' && enhancement.data && enhancement.data.applied !== false) {
                         var enhancedRecipe = cloneRecipeForContract(selectedRecipe);
-                        enhancedRecipe.title = enhancement.data.enhancedTitle || enhancedRecipe.title;
-                        enhancedRecipe.summary = enhancement.data.enhancedSummary || enhancedRecipe.summary || '';
-                        enhancedRecipe.labels = Array.isArray(enhancement.data.enhancedLabels)
-                          ? enhancement.data.enhancedLabels.slice()
-                          : (enhancedRecipe.labels || []);
-                        enhancedRecipe.instructions = enhancement.data.enhancedInstructions || enhancedRecipe.instructions;
+                        if (enhancement.data.enhancedTitle) {
+                          enhancedRecipe.title = enhancement.data.enhancedTitle;
+                        }
+                        if (enhancement.data.enhancedSummary) {
+                          enhancedRecipe.summary = enhancement.data.enhancedSummary;
+                        }
+                        if (Array.isArray(enhancement.data.enhancedLabels) && enhancement.data.enhancedLabels.length) {
+                          enhancedRecipe.labels = enhancement.data.enhancedLabels.slice();
+                        }
+                        if (Array.isArray(enhancement.data.enhancedInstructions) && enhancement.data.enhancedInstructions.length) {
+                          enhancedRecipe.instructions = enhancement.data.enhancedInstructions.slice();
+                        }
                         var enhancedCanonicalMeal = buildCanonicalMealSchema({
                           recipe: enhancedRecipe,
                           scenario: scenario,
