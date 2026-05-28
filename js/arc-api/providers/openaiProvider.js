@@ -34,7 +34,10 @@
 
     return b.postJson('/api/ai', {
       messages: messages,
-      userMsg: input.userMsg
+      userMsg: input.userMsg,
+      taskType: input.taskType || 'optimization',
+      max_tokens: input.max_tokens || 220,
+      timeout_ms: 8000
     }).then(function (res) {
       if (!res.ok) {
         var err = (res.json && res.json.error) ? res.json.error : 'OpenAI proxy request failed';
@@ -61,7 +64,9 @@
         { role: 'system', content: 'You assist Arc nutrition OS. Provide concise optimization ideas; Arc engine owns final targets.' },
         { role: 'user', content: input.prompt }
       ],
-      userMsg: input.prompt
+      userMsg: input.prompt,
+      taskType: 'optimization',
+      max_tokens: 220
     }).then(function (r) {
       if (r.status !== 'ok') return r;
       return Base().ok(ID, 'optimization', { suggestion: r.data.content, arcContext: input.arcContext || null });
