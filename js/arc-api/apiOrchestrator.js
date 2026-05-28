@@ -8,6 +8,9 @@
  */
 (function (global) {
   'use strict';
+  var PIPELINE_DEBOUNCE_MS = 1200;
+  var pipelineInFlight = new Map();
+  var pipelineDebounce = new Map();
 
   function providers() {
     var p = global.ArcApi && global.ArcApi.Providers;
@@ -120,6 +123,37 @@
 
   function trace() {
     return global.ArcApi && global.ArcApi.Trace;
+  }
+
+  function stableStringify(value) {
+    if (value == null) return 'null';
+    if (typeof value !== 'object') return JSON.stringify(value);
+    if (Array.isArray(value)) {
+      return '[' + value.slice(0, 8).map(stableStringify).join(',') + ']';
+    }
+    var keys = Object.keys(value).sort();
+    var out = [];
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      if (k === 'recipes' || k === 'plan' || k === 'history' || k === 'raw') continue;
+      out.push(JSON.stringify(k) + ':' + stableStringify(value[k]));
+    }
+    return '{' + out.join(',') + '}';
+  }
+
+  function pipelineKey(profile) {
+    profile = profile || {};
+    return stableStringify({
+      goal: profile.goal || null,
+      goalPace: profile.goalPace || null,
+      weight: profile.weight || null,
+      activityLevel: profile.activityLevel || null,
+      scenario: profile.scenario || null,
+      foodLogText: profile.foodLogText || null,
+      mealQuery: profile.mealQuery || null,
+      budgetTier: profile.budgetTier || null,
+      recipeCount: profile.recipeCount || null
+    });
   }
 
   function dispatch(operationName, input) {
@@ -247,6 +281,13 @@
   function runAdaptiveMealPipeline(profile) {
     profile = profile || {};
     var T = trace();
+    var key = pipelineKey(profile);
+    var now = Date.now();
+    var debounceUntil = pipelineDebounce.get(key) || 0;
+    if (pipelineInFlight.has(key)) return pipelineInFlight.get(key);
+    if (debounceUntil > now && pipelineInFlight.has('__last:' + key)) {
+      return pipelineInFlight.get('__last:' + key);
+    }
     if (T) T.logOrchestrator('meal pipeline started');
 
     var arcResult = null;
@@ -269,7 +310,7 @@
       number: profile.recipeCount || 3
     };
 
-    return (S.spoonacular ? S.spoonacular.searchRecipes(searchFilters) : dispatch('discoverMeals', searchFilters))
+    var flow = (S.spoonacular ? S.spoonacular.searchRecipes(searchFilters) : dispatch('discoverMeals', searchFilters))
       .then(function (recipeSearch) {
         var recipes = (recipeSearch.data && recipeSearch.data.recipes) || [];
         var recipe = recipes[0] || profile.recipe || null;
@@ -455,7 +496,14 @@
       }).catch(function (err) {
         if (T) T.logOrchestrator('meal pipeline failed');
         throw err;
+      }).finally(function () {
+        pipelineInFlight.delete(key);
+        pipelineDebounce.set(key, Date.now() + PIPELINE_DEBOUNCE_MS);
       });
+    pipelineInFlight.set(key, flow);
+    pipelineInFlight.set('__last:' + key, flow);
+    return flow;
+      
   }
 
   function inferScenario(profile) {
