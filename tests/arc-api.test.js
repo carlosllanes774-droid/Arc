@@ -716,3 +716,44 @@ describe('Arc API pipeline tracing', () => {
     assert.ok(line.includes('validation failed') || line.includes('success'), line);
   });
 });
+
+describe('Arc enhancement parser', () => {
+  test('parses markdown-formatted gpt-4o-mini enhancement text', () => {
+    const sandbox = loadArcApi();
+    const sample = '**TITLE: Flavorful Grilled Chicken with Herb Marinade**\n\n' +
+      '**SUMMARY: A delicious and high-protein dinner option.**\n\n' +
+      '**LABELS: protein, dinner, healthy**\n\n' +
+      '**INSTRUCTIONS:**\n' +
+      '1. **Prepare the Marinade:** Combine olive oil, garlic, and herbs.\n' +
+      '2. **Season the Chicken:** Coat chicken evenly and refrigerate 30 minutes.\n' +
+      '3. **Preheat the Grill:** Heat grill to medium-high.\n' +
+      '4. **Grill the Chicken:** Place the chicken on the grill';
+    const parsed = sandbox.ArcApi.Services.openai.parseEnhancementText(sample);
+
+    assert.equal(parsed.title, 'Flavorful Grilled Chicken with Herb Marinade');
+    assert.equal(parsed.summary, 'A delicious and high-protein dinner option.');
+    assert.equal(parsed.labels.length, 3);
+    assert.ok(parsed.labels.includes('protein'));
+    assert.ok(parsed.labels.includes('dinner'));
+    assert.equal(parsed.instructions.length, 3);
+    assert.equal(parsed._meta.markdownDetected, true);
+    assert.equal(parsed._meta.droppedPartialTail, true);
+  });
+
+  test('parses plain TITLE/INSTRUCTIONS format', () => {
+    const sandbox = loadArcApi();
+    const parsed = sandbox.ArcApi.Services.openai.parseEnhancementText(
+      'TITLE: Enhanced Bowl\nSUMMARY: Fast post-workout bowl.\nLABELS: high protein, quick prep\nINSTRUCTIONS:\n1) Sear chicken quickly.\n2) Plate with warm rice.'
+    );
+    assert.equal(parsed.title, 'Enhanced Bowl');
+    assert.equal(parsed.instructions.length, 2);
+    assert.equal(parsed._meta.droppedPartialTail, false);
+  });
+
+  test('returns empty parse for unrecognizable enhancement text', () => {
+    const sandbox = loadArcApi();
+    const parsed = sandbox.ArcApi.Services.openai.parseEnhancementText('Just some free-form coaching notes.');
+    assert.equal(parsed.title, '');
+    assert.equal(parsed.instructions.length, 0);
+  });
+});
