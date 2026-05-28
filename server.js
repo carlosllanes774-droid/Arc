@@ -122,6 +122,35 @@ function arcPipelineLog(message, extra) {
   console.log(`[ARC PIPELINE] ${message}`);
 }
 
+const OPENAI_TIMEOUT_MS = 8000;
+const OPENAI_CACHE_TTL_MS = 20 * 60 * 1000;
+const openAiResponseCache = new Map();
+const openAiInFlight = new Map();
+
+function stableStringify(value) {
+  if (value == null) return "null";
+  if (typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  const keys = Object.keys(value).sort();
+  const out = [];
+  for (const key of keys) out.push(`${JSON.stringify(key)}:${stableStringify(value[key])}`);
+  return `{${out.join(",")}}`;
+}
+
+function getCachedOpenAiResponse(key) {
+  const cached = openAiResponseCache.get(key);
+  if (!cached) return null;
+  if (cached.expiresAt <= Date.now()) {
+    openAiResponseCache.delete(key);
+    return null;
+  }
+  return cached.value;
+}
+
+function setCachedOpenAiResponse(key, value, ttlMs) {
+  openAiResponseCache.set(key, { value, expiresAt: Date.now() + ttlMs });
+}
+
 function krogerCredentials() {
   const id = process.env.KROGER_CLIENT_ID;
   const secret =
@@ -760,13 +789,13 @@ app.get("/api/usda/food/:fdcId", async (req, res) => {
 function buildOpenAiMessages(body) {
   const out = [];
   if (body && typeof body.system === "string" && body.system.trim()) {
-    out.push({ role: "system", content: body.system.trim() });
+    out.push({ role: "system", content: body.system.trim().slice(0, 700) });
   }
   if (Array.isArray(body?.messages) && body.messages.length) {
-    for (const m of body.messages) {
+    for (const m of body.messages.slice(-4)) {
       if (!m || !m.role) continue;
       const role = m.role === "assistant" ? "assistant" : m.role === "system" ? "system" : "user";
-      const content = m.content != null ? String(m.content) : "";
+      const content = m.content != null ? String(m.content).slice(0, 2500) : "";
       if (!content.trim()) continue;
       out.push({ role, content });
     }
@@ -780,6 +809,13 @@ function buildOpenAiMessages(body) {
   return out;
 }
 
+function openAiTaskTokenLimit(taskType) {
+  const task = String(taskType || "optimization").toLowerCase();
+  if (task === "instruction_enhancement") return 420;
+  if (task === "tagging" || task === "classification" || task === "optimization_classification") return 90;
+  return 220;
+}
+
 /** OpenAI — adaptation / reasoning only; never authoritative for displayed macros. */
 app.post("/api/ai", async (req, res) => {
   try {
@@ -787,31 +823,73 @@ app.post("/api/ai", async (req, res) => {
       return res.status(503).json({ error: "OpenAI not configured" });
     }
 
-    const messages = buildOpenAiMessages(req.body || {});
-    const maxTokens = Math.min(
-      16000,
-      Math.max(64, parseInt(req.body?.max_tokens, 10) || 1200)
-    );
+    const body = req.body || {};
+    const messages = buildOpenAiMessages(body);
+    const taskType = body.taskType || "optimization";
+    const taskCap = openAiTaskTokenLimit(taskType);
+    const requested = parseInt(body?.max_tokens, 10);
+    const maxTokens = Math.max(64, Math.min(taskCap, Number.isFinite(requested) ? requested : taskCap));
+    const timeoutMs = Math.min(OPENAI_TIMEOUT_MS, Math.max(1000, parseInt(body?.timeout_ms, 10) || OPENAI_TIMEOUT_MS));
+    const cacheKey = stableStringify({ taskType, maxTokens, messages });
 
-    const completion = await traceUpstream("openai", "chat", async () => {
-      const out = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages,
-        max_tokens: maxTokens,
-        temperature: 0.4,
-      });
-      return { ok: true, status: 200, completion: out };
-    }).then((r) => r.completion);
+    const cached = getCachedOpenAiResponse(cacheKey);
+    if (cached) {
+      arcPipelineLog("OpenAI cached response used", { durationMs: 0, taskType });
+      return res.json(cached);
+    }
 
-    res.json({
-      content: [
-        {
-          type: "text",
-          text: completion.choices[0].message.content,
-        },
-      ],
-    });
+    if (openAiInFlight.has(cacheKey)) {
+      const shared = await openAiInFlight.get(cacheKey);
+      arcPipelineLog("OpenAI cached response used", { durationMs: 0, taskType, deduped: true });
+      return res.json(shared);
+    }
+
+    const run = (async () => {
+      const started = Date.now();
+      arcPipelineLog("OpenAI request started", { taskType, maxTokens });
+      const abortController = new AbortController();
+      const timeout = setTimeout(() => abortController.abort(), timeoutMs);
+      try {
+        const completion = await traceUpstream("openai", "chat", async () => {
+          const out = await openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages,
+            max_tokens: maxTokens,
+            temperature: 0.2,
+          }, { signal: abortController.signal });
+          return { ok: true, status: 200, completion: out };
+        }).then((r) => r.completion);
+        const payload = {
+          content: [
+            {
+              type: "text",
+              text: String(completion.choices?.[0]?.message?.content || "").slice(0, 4000),
+            },
+          ],
+        };
+        setCachedOpenAiResponse(cacheKey, payload, OPENAI_CACHE_TTL_MS);
+        arcPipelineLog("OpenAI response received", { durationMs: Date.now() - started, taskType });
+        return payload;
+      } finally {
+        clearTimeout(timeout);
+      }
+    })();
+
+    openAiInFlight.set(cacheKey, run);
+    try {
+      const payload = await run;
+      return res.json(payload);
+    } finally {
+      openAiInFlight.delete(cacheKey);
+    }
   } catch (err) {
+    if (err && (err.name === "AbortError" || err.code === "ABORT_ERR")) {
+      arcPipelineLog("OpenAI timeout fallback triggered", { timeoutMs: OPENAI_TIMEOUT_MS });
+      return res.json({
+        content: [{ type: "text", text: "fallback: timeout; continue pipeline" }],
+        timeoutFallback: true,
+      });
+    }
     console.error(err);
     res.status(500).json({ error: "Server error" });
   }
