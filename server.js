@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import OpenAI from "openai";
-import { readFileSync } from "fs";
+import { readFileSync, writeFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import vm from "node:vm";
@@ -149,6 +149,67 @@ function getCachedOpenAiResponse(key) {
 
 function setCachedOpenAiResponse(key, value, ttlMs) {
   openAiResponseCache.set(key, { value, expiresAt: Date.now() + ttlMs });
+}
+
+function hasLikelyConcatenatedPayloads(raw) {
+  if (typeof raw !== "string") return false;
+  return /}\s*{/.test(raw) || /]\s*\[/.test(raw);
+}
+
+function hasLikelyIncompleteJson(raw) {
+  if (typeof raw !== "string" || !raw.trim()) return true;
+  try {
+    JSON.parse(raw);
+    return false;
+  } catch (_err) {
+    return true;
+  }
+}
+
+function hasLikelyMergedPayloadFragments(raw) {
+  if (typeof raw !== "string") return false;
+  return /"content"\s*:\s*\[[\s\S]*"content"\s*:\s*\[/.test(raw);
+}
+
+function hasLikelyDuplicatedObjects(raw) {
+  if (typeof raw !== "string") return false;
+  return /}\s*,\s*{/.test(raw) && /"type"\s*:\s*"text"[\s\S]*"type"\s*:\s*"text"/.test(raw);
+}
+
+function debugSendAiJson(res, payload, sourceLabel) {
+  const raw = JSON.stringify(payload);
+  const rawLength = raw.length;
+  const trimmed = raw.trim();
+  const endsCorrectly = trimmed.endsWith("}") || trimmed.endsWith("]");
+  const multipleConcatenatedPayloads = hasLikelyConcatenatedPayloads(raw);
+  const incompleteJson = hasLikelyIncompleteJson(raw);
+  const mergedPayloadFragments = hasLikelyMergedPayloadFragments(raw);
+  const duplicatedObjects = hasLikelyDuplicatedObjects(raw);
+  const hasPartialArrays = incompleteJson && /\[[^\]]*$/.test(raw);
+  const enhancementPayloadMergedIncorrectly = !!(
+    payload &&
+    typeof payload === "object" &&
+    (payload.enhancementFallback || sourceLabel === "enhancement_fallback") &&
+    (multipleConcatenatedPayloads || mergedPayloadFragments || duplicatedObjects)
+  );
+
+  writeFileSync(path.join(__dirname, "arc-debug-response.json"), raw, "utf8");
+
+  console.log("[ARC DEBUG] exact response source:", sourceLabel);
+  console.log("[ARC DEBUG] exact response length:", rawLength);
+  console.log("[ARC DEBUG] exact response raw:", raw);
+  console.log("[ARC DEBUG] validation:", {
+    validJsonStringifyOutput: typeof raw === "string",
+    payloadEndsCorrectly: endsCorrectly,
+    containsMultipleConcatenatedPayloads: multipleConcatenatedPayloads,
+    containsIncompleteJson: incompleteJson,
+    hasPartialArrays,
+    hasMergedPayloadFragments: mergedPayloadFragments,
+    hasDuplicatedObjects: duplicatedObjects,
+    enhancementPayloadMergedIncorrectly,
+  });
+
+  return res.type("application/json").send(raw);
 }
 
 function krogerCredentials() {
@@ -835,13 +896,13 @@ app.post("/api/ai", async (req, res) => {
     const cached = getCachedOpenAiResponse(cacheKey);
     if (cached) {
       arcPipelineLog("OpenAI cached response used", { durationMs: 0, taskType });
-      return res.json(cached);
+      return debugSendAiJson(res, cached, "cache_hit");
     }
 
     if (openAiInFlight.has(cacheKey)) {
       const shared = await openAiInFlight.get(cacheKey);
       arcPipelineLog("OpenAI cached response used", { durationMs: 0, taskType, deduped: true });
-      return res.json(shared);
+      return debugSendAiJson(res, shared, "inflight_shared");
     }
 
     const run = (async () => {
@@ -905,7 +966,7 @@ app.post("/api/ai", async (req, res) => {
     openAiInFlight.set(cacheKey, run);
     try {
       const payload = await run;
-      return res.json(payload);
+      return debugSendAiJson(res, payload, "live_openai");
     } finally {
       openAiInFlight.delete(cacheKey);
     }
@@ -913,17 +974,17 @@ app.post("/api/ai", async (req, res) => {
     const failedTask = String((req.body && req.body.taskType) || "optimization").toLowerCase();
     if (err && (err.name === "AbortError" || err.code === "ABORT_ERR" || err.name === "APIUserAbortError")) {
       arcPipelineLog("OpenAI timeout fallback triggered", { timeoutMs: OPENAI_TIMEOUT_MS });
-      return res.json({
+      return debugSendAiJson(res, {
         content: [{ type: "text", text: "fallback: timeout; continue pipeline" }],
         timeoutFallback: true,
-      });
+      }, "timeout_fallback");
     }
     if (failedTask === "instruction_enhancement") {
       arcPipelineLog("OpenAI enhancement fallback triggered", { reason: err && err.name ? err.name : "request_failed" });
-      return res.json({
+      return debugSendAiJson(res, {
         content: [{ type: "text", text: "fallback: enhancement unavailable; preserve base instructions" }],
         enhancementFallback: true,
-      });
+      }, "enhancement_fallback");
     }
     if (process.env.ARC_DEBUG_OPENAI === "1") {
       console.error(err);
