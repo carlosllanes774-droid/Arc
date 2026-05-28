@@ -19,8 +19,10 @@ const LOAD_ORDER = [
   'arcCache.js',
   'arcRateLimit.js',
   'arcTrace.js',
+  'edamamHelpers.js',
   'providers/providerBase.js',
   'spoonacularService.js',
+  'edamamHelpers.js',
   'edamamService.js',
   'usdaService.js',
   'krogerService.js',
@@ -187,6 +189,38 @@ describe('Arc API validation layer', () => {
   });
 });
 
+describe('Arc API Edamam helpers', () => {
+  test('normalizeIngredientLines dedupes and trims', () => {
+    const { ArcApi } = loadArcApi();
+    const lines = ArcApi.Edamam.normalizeIngredientLines([
+      '  2 eggs  ',
+      '2 eggs',
+      '- 1 cup rice'
+    ]);
+    assert.equal(lines.length, 2);
+    assert.equal(lines[0], '2 eggs');
+    assert.equal(lines[1], '1 cup rice');
+  });
+
+  test('classifyEdamamFailure detects auth errors', () => {
+    const { ArcApi } = loadArcApi();
+    assert.equal(ArcApi.Edamam.classifyEdamamFailure(401, ''), 'auth');
+    assert.equal(ArcApi.Edamam.classifyEdamamFailure(403, 'Invalid app_id'), 'auth');
+    assert.equal(ArcApi.Edamam.classifyEdamamFailure(400, 'ingr is required'), 'payload');
+    assert.equal(ArcApi.Edamam.classifyEdamamFailure(429, 'rate limit'), 'endpoint');
+  });
+
+  test('logEdamamFailure emits ARC PIPELINE auth line', () => {
+    const logs = [];
+    const { ArcApi } = loadArcApi({
+      console: { log: (...args) => logs.push(args.join(' ')), error: () => {} }
+    });
+    ArcApi.Edamam.logEdamamFailure(ArcApi.Trace, 'auth', { httpStatus: 401 });
+    const line = logs.find((l) => l.includes('[ARC PIPELINE] Edamam auth failed'));
+    assert.ok(line, 'expected auth failure log');
+  });
+});
+
 describe('Arc API Edamam nutrition proxy', () => {
   test('analyzeRecipeNutrition uses /api/nutrition', async () => {
     var called = null;
@@ -262,6 +296,17 @@ describe('Arc Phase 2 adaptive pipeline (mocked APIs)', () => {
                     ]
                   }
                 ]
+              })
+          };
+        }
+        if (url.indexOf('/api/edamam/parse') !== -1) {
+          return {
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                foods: [{ label: 'tacos', text: 'tacos' }],
+                ingr: ['tacos']
               })
           };
         }
