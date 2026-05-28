@@ -48,6 +48,70 @@
     return String(value || '').trim().toLowerCase().replace(/[^a-z0-9_\- ]/g, '').replace(/\s+/g, '_').slice(0, 32);
   }
 
+  function enhancementLog(message, extra) {
+    if (extra && typeof extra === 'object') {
+      console.log('[ARC ENHANCEMENT] ' + message, extra);
+      return;
+    }
+    console.log('[ARC ENHANCEMENT] ' + message);
+  }
+
+  function stripMarkdownDecorators(line) {
+    return String(line || '')
+      .replace(/^\s{0,3}#{1,6}\s+/, '')
+      .replace(/^\s*>\s+/, '')
+      .replace(/^\s*[-*+]\s+/, '')
+      .replace(/\*\*/g, '')
+      .replace(/__/g, '')
+      .replace(/`/g, '')
+      .trim();
+  }
+
+  function extractEnhancementField(line) {
+    var normalized = stripMarkdownDecorators(line);
+    if (!normalized) return null;
+    var match = normalized.match(/^(title|summary|labels|instructions)\s*:\s*(.*)$/i);
+    if (!match) return null;
+    return { key: match[1].toLowerCase(), value: String(match[2] || '').trim() };
+  }
+
+  function cleanInstructionStep(line) {
+    var step = stripMarkdownDecorators(line);
+    step = step.replace(/^\s*\d+[\).\]]\s*/, '');
+    step = step.replace(/^\s*[-*+]\s+/, '');
+    step = step.replace(/^(prep|cook|serve)\s*:\s*/i, '');
+    return step.trim();
+  }
+
+  function looksLikeInstructionLine(line) {
+    var normalized = stripMarkdownDecorators(line);
+    if (!normalized) return false;
+    if (extractEnhancementField(normalized)) return false;
+    return /^\d+[\).\]]\s+/.test(normalized) ||
+      /^[-*+]\s+/.test(String(line || '').trim()) ||
+      /:\s*.+/.test(normalized);
+  }
+
+  function isLikelyCompleteInstruction(step) {
+    var text = String(step || '').trim();
+    if (!text) return false;
+    if (text.length < 8) return false;
+    if (/[.!?)"'\]]$/.test(text)) return true;
+    if (text.length >= 60) return true;
+    return false;
+  }
+
+  function dropIncompleteTailInstructions(instructions) {
+    instructions = Array.isArray(instructions) ? instructions.slice() : [];
+    if (!instructions.length) return { instructions: instructions, droppedPartial: false };
+    var last = instructions[instructions.length - 1];
+    if (isLikelyCompleteInstruction(last)) {
+      return { instructions: instructions, droppedPartial: false };
+    }
+    instructions.pop();
+    return { instructions: instructions, droppedPartial: true };
+  }
+
   function parseEnhancementText(rawText) {
     var text = String(rawText || '').replace(/\r/g, '');
     var lines = text.split('\n');
@@ -58,37 +122,88 @@
       instructions: []
     };
     var inInstructions = false;
+    var markdownDetected = /\*\*|__|```|^\s{0,3}#{1,6}\s+/m.test(text);
     var i;
+
     for (i = 0; i < lines.length; i++) {
-      var line = String(lines[i] || '').trim();
+      var rawLine = String(lines[i] || '');
+      var line = rawLine.trim();
       if (!line) continue;
-      var upper = line.toUpperCase();
-      if (upper.indexOf('TITLE:') === 0) {
-        out.title = line.slice(6).trim();
-        inInstructions = false;
-        continue;
+
+      var field = extractEnhancementField(line);
+      if (field) {
+        if (field.key === 'title') {
+          out.title = field.value;
+          inInstructions = false;
+          continue;
+        }
+        if (field.key === 'summary') {
+          out.summary = field.value;
+          inInstructions = false;
+          continue;
+        }
+        if (field.key === 'labels') {
+          out.labels = field.value.split(',').map(sanitizeLabel).filter(Boolean).slice(0, 8);
+          inInstructions = false;
+          continue;
+        }
+        if (field.key === 'instructions') {
+          inInstructions = true;
+          if (field.value) {
+            var inlineStep = cleanInstructionStep(field.value);
+            if (inlineStep) out.instructions.push(inlineStep);
+          }
+          continue;
+        }
       }
-      if (upper.indexOf('SUMMARY:') === 0) {
-        out.summary = line.slice(8).trim();
-        inInstructions = false;
-        continue;
-      }
-      if (upper.indexOf('LABELS:') === 0) {
-        var labelsRaw = line.slice(7).split(',');
-        out.labels = labelsRaw.map(sanitizeLabel).filter(Boolean).slice(0, 8);
-        inInstructions = false;
-        continue;
-      }
-      if (upper.indexOf('INSTRUCTIONS:') === 0) {
+
+      if (!inInstructions && looksLikeInstructionLine(line)) {
         inInstructions = true;
-        continue;
       }
+
       if (inInstructions) {
-        out.instructions.push(line.replace(/^[\-*\d.)\s]+/, '').trim());
+        var step = cleanInstructionStep(line);
+        if (step) out.instructions.push(step);
       }
     }
-    out.instructions = out.instructions.map(function (s) { return String(s || '').trim(); }).filter(Boolean).slice(0, 10);
+
+    out.title = stripMarkdownDecorators(out.title);
+    out.summary = stripMarkdownDecorators(out.summary);
+    out.instructions = out.instructions.map(function (s) {
+      return String(s || '').trim();
+    }).filter(Boolean).slice(0, 10);
+
+    var tail = dropIncompleteTailInstructions(out.instructions);
+    out.instructions = tail.instructions;
+    out._meta = {
+      markdownDetected: markdownDetected,
+      droppedPartialTail: tail.droppedPartial
+    };
     return out;
+  }
+
+  function isValidEnhancementParsed(parsed) {
+    if (!parsed || typeof parsed !== 'object') return false;
+    var hasTitle = !!String(parsed.title || '').trim();
+    var hasInstructions = Array.isArray(parsed.instructions) && parsed.instructions.length > 0;
+    return hasTitle || hasInstructions;
+  }
+
+  function buildEnhancementResult(parsed, options) {
+    options = options || {};
+    var b = Base();
+    var title = parsed && parsed.title ? String(parsed.title).trim() : '';
+    var instructions = parsed && Array.isArray(parsed.instructions)
+      ? parsed.instructions.map(function (s) { return String(s); }).filter(Boolean)
+      : [];
+    return b.ok(ID, 'adaptation', {
+      enhancedTitle: title || null,
+      enhancedSummary: parsed && parsed.summary ? String(parsed.summary).trim() : null,
+      enhancedLabels: parsed && Array.isArray(parsed.labels) ? parsed.labels : [],
+      enhancedInstructions: instructions,
+      applied: !!(title || instructions.length),
+      fallback: !!options.fallback
+    });
   }
 
   function stableStringify(value) {
@@ -272,24 +387,34 @@
       timeout_ms: OPENAI_ENHANCEMENT_TIMEOUT_MS
     }).then(function (res) {
       if (!res.ok) {
+        enhancementLog('Enhancement fallback applied', { reason: (res.json && res.json.error) || 'OpenAI enhancement failed' });
         if (res.status === 503) return b.notConfigured(ID, 'adaptation');
-        return b.fail(ID, 'adaptation', (res.json && res.json.error) || 'OpenAI enhancement failed');
+        return buildEnhancementResult(null, { fallback: true });
       }
       var text = extractAiText(res.json);
       var parsed = parseEnhancementText(text);
-      if (!parsed || (!parsed.title && !parsed.instructions.length && !parsed.summary)) {
-        return b.fail(ID, 'adaptation', 'Invalid enhancement format');
+      if (parsed && parsed._meta && parsed._meta.markdownDetected) {
+        enhancementLog('Markdown formatting detected');
       }
-      var out = b.ok(ID, 'adaptation', {
-        enhancedTitle: parsed.title ? String(parsed.title) : null,
-        enhancedSummary: parsed.summary ? String(parsed.summary) : null,
-        enhancedLabels: parsed.labels || [],
-        enhancedInstructions: parsed.instructions.map(function (s) { return String(s); }).filter(Boolean)
+      if (parsed && parsed._meta && parsed._meta.droppedPartialTail) {
+        enhancementLog('Partial enhancement safely ignored', { reason: 'incomplete_tail_instruction' });
+      }
+      if (!isValidEnhancementParsed(parsed)) {
+        enhancementLog('Enhancement fallback applied', { reason: 'invalid_enhancement_format' });
+        return buildEnhancementResult(null, { fallback: true });
+      }
+      enhancementLog('Parsed enhancement successfully', {
+        hasTitle: !!String(parsed.title || '').trim(),
+        instructionCount: parsed.instructions.length
       });
+      var out = buildEnhancementResult(parsed, { fallback: false });
       if (c) c.set('openai', enhancementKey, out, OPENAI_ENHANCEMENT_CACHE_TTL_MS);
       return out;
     }).catch(function (err) {
-      return b.fail(ID, 'adaptation', err && err.message ? err.message : 'Network error');
+      enhancementLog('Enhancement fallback applied', {
+        reason: err && err.message ? err.message : 'Network error'
+      });
+      return buildEnhancementResult(null, { fallback: true });
     }).finally(function () {
       inFlight.delete(enhancementKey);
     });
@@ -306,7 +431,8 @@
     adaptForTravel: adaptForTravel,
     adaptForOffPlanEating: adaptForOffPlanEating,
     adaptForPerformance: adaptForPerformance,
-    enhanceRecipePresentation: enhanceRecipePresentation
+    enhanceRecipePresentation: enhanceRecipePresentation,
+    parseEnhancementText: parseEnhancementText
   };
 
   global.ArcApi = global.ArcApi || {};
