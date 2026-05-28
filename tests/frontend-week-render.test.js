@@ -100,6 +100,14 @@ function loadFrontendWeekSandbox() {
         addMeal: 'Add meal'
       }
     },
+    DAYS: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+    SLOT_SETS: { '3': ['Breakfast', 'Lunch', 'Dinner'] },
+    getSlots() {
+      return this.SLOT_SETS[String(this.UP.meals || 3)] || this.SLOT_SETS['3'];
+    },
+    getCalTarget() {
+      return 2000;
+    },
     renderBuiltForHeader() {},
     renderToday() {},
     saveSessionState() {},
@@ -110,15 +118,8 @@ function loadFrontendWeekSandbox() {
   };
 
   const chunks = [
-    sliceIndexLines(2688, 2792),
-    sliceIndexLines(2800, 2831),
-    sliceIndexLines(4778, 4804),
-    sliceIndexLines(4843, 4859),
-    sliceIndexLines(6478, 6537),
-    sliceIndexLines(9806, 9808),
-    sliceIndexLines(10274, 10389),
-    sliceIndexLines(10998, 11134),
-    sliceIndexLines(12609, 12611)
+    sliceIndexLines(2761, 3040),
+    sliceIndexLines(6726, 6785)
   ];
 
   loadArcFrontendContractInto(sandbox);
@@ -133,6 +134,25 @@ function loadFrontendWeekSandbox() {
   sandbox.openAssign = function () {};
   sandbox.setSlotJournal = function () {};
   sandbox.openRM = function () {};
+  sandbox.renderLibrary = function () {
+    const listEl = sandbox.document.getElementById('recipes-list');
+    const rows = (sandbox.recipes || []).map((r) => r.name + ' · ' + r.cal + ' kcal').join('<br>');
+    listEl.innerHTML = rows || '<div class="lib-empty">empty</div>';
+  };
+  sandbox.renderPlanner = function () {
+    const listEl = sandbox.document.getElementById('planner-list');
+    const slots = sandbox.getSlots();
+    let html = '';
+    for (let d = 0; d < sandbox.DAYS.length; d++) {
+      const day = sandbox.DAYS[d];
+      for (let s = 0; s < slots.length; s++) {
+        const rid = sandbox.mealPlan[day] && sandbox.mealPlan[day][slots[s]];
+        const r = rid ? sandbox.recipes.find((x) => x.id === rid) : null;
+        if (r) html += r.name + ' ';
+      }
+    }
+    listEl.innerHTML = html;
+  };
   return sandbox;
 }
 
