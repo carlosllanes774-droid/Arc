@@ -35,6 +35,15 @@ function loadArcTrace() {
 
 const ArcTrace = loadArcTrace();
 
+function loadEdamamHelpers() {
+  const src = readFileSync(path.join(__dirname, "js/arc-api/edamamHelpers.js"), "utf8");
+  const sandbox = { console, ArcApi: {}, process, ARC_PIPELINE_TRACE_VERBOSE: process.env.ARC_PIPELINE_TRACE_VERBOSE };
+  vm.runInContext(src, vm.createContext(sandbox));
+  return sandbox.ArcApi.Edamam;
+}
+
+const EdamamHelpers = loadEdamamHelpers();
+
 /**
  * Time and log an upstream provider HTTP call from Express.
  * @param {string} providerId spoonacular|edamam|usda|openai|kroger
@@ -162,6 +171,184 @@ function edamamNutrientQuantity(totalNutrients, code) {
   return n && typeof n.quantity === "number" ? n.quantity : null;
 }
 
+function macrosFromEdamamData(data) {
+  const tn = (data && data.totalNutrients) || {};
+  const kcal = edamamNutrientQuantity(tn, "ENERC_KCAL");
+  const protein = edamamNutrientQuantity(tn, "PROCNT");
+  const fat = edamamNutrientQuantity(tn, "FAT");
+  const carbs =
+    edamamNutrientQuantity(tn, "CHOCDF") ?? edamamNutrientQuantity(tn, "CHOCDF.net");
+  return {
+    calories: kcal != null ? Math.round(kcal) : null,
+    protein: protein != null ? Math.round(protein * 10) / 10 : null,
+    fat: fat != null ? Math.round(fat * 10) / 10 : null,
+    carbs: carbs != null ? Math.round(carbs * 10) / 10 : null,
+  };
+}
+
+function edamamNutritionUrl(creds) {
+  const url = new URL(EdamamHelpers.EDAMAM_NUTRITION_ENDPOINT);
+  url.searchParams.set("app_id", creds.appId);
+  url.searchParams.set("app_key", creds.appKey);
+  return url;
+}
+
+/**
+ * POST Edamam nutrition-details with normalized { title, ingr }.
+ * @returns {Promise<{ ok: boolean, status: number, data?: object, rawText?: string, failureKind?: string }>}
+ */
+async function callEdamamNutritionDetails(creds, title, cleanIngr, operation) {
+  const payloadCheck = EdamamHelpers.validateEdamamPayload({ title, ingr: cleanIngr });
+  if (!payloadCheck.valid) {
+    EdamamHelpers.logEdamamFailure(ArcTrace, "payload", {
+      httpStatus: 400,
+      endpoint: EdamamHelpers.EDAMAM_NUTRITION_ENDPOINT,
+      operation,
+      payloadValid: false,
+      payloadReason: payloadCheck.reason,
+      ingredientCount: cleanIngr.length,
+    });
+    return { ok: false, status: 400, failureKind: "payload", payloadError: payloadCheck.reason };
+  }
+
+  const url = edamamNutritionUrl(creds);
+  const edResp = await traceUpstream("edamam", operation, async () => {
+    const resp = await fetch(url.toString(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, ingr: cleanIngr }),
+    });
+    return { ok: resp.ok, status: resp.status, resp };
+  }).then((r) => r.resp);
+
+  if (edResp.status === 304) {
+    return { ok: true, status: 304, notModified: true };
+  }
+
+  const rawText = await edResp.text();
+  if (!edResp.ok) {
+    const failureKind = EdamamHelpers.classifyEdamamFailure(edResp.status, rawText);
+    EdamamHelpers.logEdamamFailure(ArcTrace, failureKind, {
+      httpStatus: edResp.status,
+      endpoint: EdamamHelpers.EDAMAM_NUTRITION_ENDPOINT,
+      operation,
+      payloadValid: true,
+      ingredientCount: cleanIngr.length,
+      bodyPreview: EdamamHelpers.sanitizeEdamamBody(rawText, 300),
+    });
+    return { ok: false, status: edResp.status, failureKind, rawText };
+  }
+
+  try {
+    return { ok: true, status: edResp.status, data: JSON.parse(rawText) };
+  } catch {
+    return { ok: false, status: 502, failureKind: "other", rawText };
+  }
+}
+
+function spoonacularNutrientsFromRecipe(recipe) {
+  const nutrients = recipe && recipe.nutrition && recipe.nutrition.nutrients;
+  if (!Array.isArray(nutrients) || !nutrients.length) return null;
+  const find = (name) => nutrients.find((n) => n && n.name === name);
+  const cal = find("Calories");
+  const protein = find("Protein");
+  const fat = find("Fat");
+  const carbs = find("Carbohydrates");
+  const calories = cal && typeof cal.amount === "number" ? Math.round(cal.amount) : null;
+  if (!calories || calories <= 0) return null;
+  return {
+    calories,
+    protein: protein && typeof protein.amount === "number" ? Math.round(protein.amount * 10) / 10 : 0,
+    fat: fat && typeof fat.amount === "number" ? Math.round(fat.amount * 10) / 10 : 0,
+    carbs: carbs && typeof carbs.amount === "number" ? Math.round(carbs.amount * 10) / 10 : 0,
+  };
+}
+
+async function fetchSpoonacularNutrition(recipeId) {
+  const key = spoonacularKey();
+  if (!key || !recipeId) return null;
+  const params = new URLSearchParams({
+    apiKey: key,
+    ids: String(recipeId),
+    includeNutrition: "true",
+  });
+  const url = `https://api.spoonacular.com/recipes/informationBulk?${params}`;
+  try {
+    const { resp, data } = await traceUpstream("spoonacular", "nutrition-fallback", async () => {
+      const r = await fetch(url);
+      const d = await r.json();
+      return { ok: r.ok, status: r.status, resp: r, data: d, fallback: true };
+    });
+    if (!resp.ok) return null;
+    const list = Array.isArray(data) ? data : [];
+    return spoonacularNutrientsFromRecipe(list[0]);
+  } catch {
+    return null;
+  }
+}
+
+async function aggregateUsdaNutritionFromIngredients(ingr) {
+  const usdaKey = process.env.USDA_API_KEY;
+  if (!usdaKey || !ingr.length) return null;
+
+  const totals = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+  let counted = 0;
+  const lines = ingr.slice(0, 8);
+
+  for (const line of lines) {
+    try {
+      const searchUrl = new URL("https://api.nal.usda.gov/fdc/v1/foods/search");
+      searchUrl.searchParams.set("api_key", usdaKey);
+      searchUrl.searchParams.set("query", line.slice(0, 80));
+      searchUrl.searchParams.set("pageSize", "1");
+      const usdaResult = await traceUpstream("usda", "nutrition-fallback", async () => {
+        const usdaResp = await fetch(searchUrl);
+        if (!usdaResp.ok) return { ok: false, status: usdaResp.status, data: null, fallback: true };
+        const usdaData = await usdaResp.json();
+        return { ok: true, status: usdaResp.status, data: usdaData, fallback: true };
+      });
+      const food = usdaResult.ok && usdaResult.data && (usdaResult.data.foods || [])[0];
+      const norm = food ? normalizeUsdaFood(food) : null;
+      if (norm && norm.calories > 0) {
+        totals.calories += norm.calories;
+        totals.protein += norm.protein || 0;
+        totals.carbs += norm.carbs || 0;
+        totals.fat += norm.fat || 0;
+        counted += 1;
+      }
+    } catch {
+      /* continue other ingredients */
+    }
+  }
+
+  if (!counted) return null;
+  return {
+    calories: Math.round(totals.calories),
+    protein: Math.round(totals.protein * 10) / 10,
+    carbs: Math.round(totals.carbs * 10) / 10,
+    fat: Math.round(totals.fat * 10) / 10,
+  };
+}
+
+/**
+ * Spoonacular (recipe id) → USDA (ingredient lines). Never throws.
+ */
+async function nutritionFallbackAfterEdamam({ ingr, spoonacularRecipeId }) {
+  const spoonMacros = await fetchSpoonacularNutrition(spoonacularRecipeId);
+  if (spoonMacros && spoonMacros.calories > 0) {
+    ArcTrace.logFallback("spoonacular", "edamam_failed");
+    return { macros: spoonMacros, source: "spoonacular", provider: "spoonacular" };
+  }
+
+  const usdaMacros = await aggregateUsdaNutritionFromIngredients(ingr);
+  if (usdaMacros && usdaMacros.calories > 0) {
+    ArcTrace.logFallback("usda", "edamam_failed");
+    return { macros: usdaMacros, source: "usda", provider: "usda" };
+  }
+
+  return null;
+}
+
 /** Proxy to Edamam Nutrition Analysis — keeps app_id / app_key on the server only. */
 app.post("/api/nutrition", async (req, res) => {
   try {
@@ -169,33 +356,31 @@ app.post("/api/nutrition", async (req, res) => {
     if (!creds) {
       return res.status(503).json({ error: "Edamam credentials not configured" });
     }
-    const { appId, appKey } = creds;
 
     const title =
       (req.body && typeof req.body.title === "string" && req.body.title.trim()) ||
       "Recipe";
-    const ingr = Array.isArray(req.body && req.body.ingr) ? req.body.ingr : [];
-    const cleanIngr = ingr
-      .map((s) => String(s || "").trim())
-      .filter(Boolean);
+    const rawIngr = Array.isArray(req.body && req.body.ingr) ? req.body.ingr : [];
+    const cleanIngr = EdamamHelpers.normalizeIngredientLines(rawIngr);
     if (!cleanIngr.length) {
+      EdamamHelpers.logEdamamFailure(ArcTrace, "payload", {
+        httpStatus: 400,
+        endpoint: EdamamHelpers.EDAMAM_NUTRITION_ENDPOINT,
+        operation: "nutrition-details",
+        payloadValid: false,
+        payloadReason: "ingr must be a non-empty array of strings",
+        ingredientCount: 0,
+      });
       return res.status(400).json({ error: "ingr must be a non-empty array of strings" });
     }
 
-    const url = new URL("https://api.edamam.com/api/nutrition-details");
-    url.searchParams.set("app_id", appId);
-    url.searchParams.set("app_key", appKey);
+    const result = await callEdamamNutritionDetails(creds, title, cleanIngr, "nutrition-details");
 
-    const edResp = await traceUpstream("edamam", "nutrition-details", async () => {
-      const resp = await fetch(url.toString(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, ingr: cleanIngr }),
-      });
-      return { ok: resp.ok, status: resp.status, resp };
-    }).then((r) => r.resp);
+    if (result.payloadError) {
+      return res.status(400).json({ error: result.payloadError });
+    }
 
-    if (edResp.status === 304) {
+    if (result.notModified) {
       return res.status(200).json({
         totalNutrients: null,
         notModified: true,
@@ -203,38 +388,35 @@ app.post("/api/nutrition", async (req, res) => {
       });
     }
 
-    const rawText = await edResp.text();
-    if (!edResp.ok) {
-      console.error("Edamam nutrition-details", edResp.status, rawText.slice(0, 400));
-      return res.status(edResp.status >= 400 && edResp.status < 600 ? edResp.status : 502).json({
+    if (!result.ok) {
+      const fallback = await nutritionFallbackAfterEdamam({
+        ingr: cleanIngr,
+        spoonacularRecipeId: req.body && req.body.spoonacularRecipeId,
+      });
+      if (fallback) {
+        return res.json({
+          totalNutrients: fallback.macros,
+          source: fallback.source,
+          fallback: true,
+          nutritionConfidence: "low",
+          dietLabels: [],
+          healthLabels: [],
+        });
+      }
+      return res.status(result.status >= 400 && result.status < 600 ? result.status : 502).json({
         error: "Edamam request failed",
-        detail: rawText.slice(0, 300),
+        detail: EdamamHelpers.sanitizeEdamamBody(result.rawText, 300),
+        failureKind: result.failureKind,
       });
     }
 
-    let data;
-    try {
-      data = JSON.parse(rawText);
-    } catch {
-      return res.status(502).json({ error: "Invalid JSON from Edamam" });
-    }
-
-    const tn = data.totalNutrients || {};
-    const kcal = edamamNutrientQuantity(tn, "ENERC_KCAL");
-    const protein = edamamNutrientQuantity(tn, "PROCNT");
-    const fat = edamamNutrientQuantity(tn, "FAT");
-    const carbs =
-      edamamNutrientQuantity(tn, "CHOCDF") ?? edamamNutrientQuantity(tn, "CHOCDF.net");
-
+    const macros = macrosFromEdamamData(result.data);
     res.json({
-      totalNutrients: {
-        calories: kcal != null ? Math.round(kcal) : null,
-        protein: protein != null ? Math.round(protein * 10) / 10 : null,
-        fat: fat != null ? Math.round(fat * 10) / 10 : null,
-        carbs: carbs != null ? Math.round(carbs * 10) / 10 : null,
-      },
-      dietLabels: data.dietLabels || [],
-      healthLabels: data.healthLabels || [],
+      totalNutrients: macros,
+      dietLabels: result.data.dietLabels || [],
+      healthLabels: result.data.healthLabels || [],
+      source: "edamam",
+      nutritionConfidence: "high",
     });
   } catch (err) {
     console.error("/api/nutrition", err);
@@ -252,32 +434,22 @@ app.post("/api/edamam/parse", async (req, res) => {
     const text = String((req.body && req.body.text) || "").trim();
     if (!text) return res.status(400).json({ error: "text required" });
 
-    const url = new URL("https://api.edamam.com/api/nutrition-details");
-    url.searchParams.set("app_id", creds.appId);
-    url.searchParams.set("app_key", creds.appKey);
+    const lines = text.split(/\n+/).map((s) => EdamamHelpers.normalizeIngredientLine(s)).filter(Boolean);
+    const ingr = EdamamHelpers.normalizeIngredientLines(lines.length ? lines : [text]);
 
-    const lines = text.split(/\n+/).map((s) => s.trim()).filter(Boolean);
-    const ingr = lines.length ? lines : [text];
-
-    const edResp = await traceUpstream("edamam", "parse", async () => {
-      const resp = await fetch(url.toString(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "Parsed input", ingr }),
-      });
-      return { ok: resp.ok, status: resp.status, resp };
-    }).then((r) => r.resp);
-
-    const rawText = await edResp.text();
-    if (!edResp.ok) {
-      return res.status(edResp.status >= 400 ? edResp.status : 502).json({
+    const result = await callEdamamNutritionDetails(creds, "Parsed input", ingr, "parse");
+    if (result.payloadError) {
+      return res.status(400).json({ error: result.payloadError });
+    }
+    if (!result.ok) {
+      return res.status(result.status >= 400 ? result.status : 502).json({
         error: "Edamam parse failed",
-        detail: rawText.slice(0, 300),
+        detail: EdamamHelpers.sanitizeEdamamBody(result.rawText, 300),
+        failureKind: result.failureKind,
       });
     }
 
-    const data = JSON.parse(rawText);
-    const tn = data.totalNutrients || {};
+    const tn = result.data.totalNutrients || {};
     const foods = ingr.map((line) => ({
       label: line,
       text: line,
@@ -368,26 +540,34 @@ app.post("/api/spoonacular/bulk", async (req, res) => {
     }
 
     const list = Array.isArray(data) ? data : [];
-    const recipes = list.map((r) => ({
-      id: r.id,
-      recipeId: r.id,
-      title: r.title,
-      image: r.image,
-      servings: r.servings,
-      readyInMinutes: r.readyInMinutes,
-      prepTime: r.readyInMinutes,
-      extendedIngredients: r.extendedIngredients || [],
-      ingredients: (r.extendedIngredients || []).map((x) => ({
-        name: x.name,
-        original: x.original,
-        amount: x.amount,
-        unit: x.unit,
-      })),
-      tags: [].concat(r.diets || [], r.cuisines || [], r.dishTypes || []),
-      instructions: (r.analyzedInstructions && r.analyzedInstructions[0] && r.analyzedInstructions[0].steps)
-        ? r.analyzedInstructions[0].steps.map((s) => s.step)
-        : [],
-    }));
+    const recipes = list.map((r) => {
+      const nutrition = spoonacularNutrientsFromRecipe(r);
+      return {
+        id: r.id,
+        recipeId: r.id,
+        title: r.title,
+        image: r.image,
+        servings: r.servings,
+        readyInMinutes: r.readyInMinutes,
+        prepTime: r.readyInMinutes,
+        extendedIngredients: r.extendedIngredients || [],
+        ingredients: (r.extendedIngredients || []).map((x) => ({
+          name: x.name,
+          original: x.original,
+          amount: x.amount,
+          unit: x.unit,
+        })),
+        tags: [].concat(r.diets || [], r.cuisines || [], r.dishTypes || []),
+        instructions: (r.analyzedInstructions && r.analyzedInstructions[0] && r.analyzedInstructions[0].steps)
+          ? r.analyzedInstructions[0].steps.map((s) => s.step)
+          : [],
+        nutrition: nutrition || undefined,
+        calories: nutrition && nutrition.calories,
+        protein: nutrition && nutrition.protein,
+        carbs: nutrition && nutrition.carbs,
+        fat: nutrition && nutrition.fat,
+      };
+    });
 
     const instructions = {};
     recipes.forEach((r) => {
@@ -550,65 +730,75 @@ app.post("/api/nutrition/pipeline", async (req, res) => {
   try {
     ArcTrace.logOrchestrator("nutrition pipeline started");
     const creds = edamamCredentials();
-    if (!creds) {
-      ArcTrace.logMessage("Edamam unavailable");
-      return res.status(503).json({ verified: false, reason: "edamam_not_configured" });
-    }
-
     const title =
       (req.body && typeof req.body.title === "string" && req.body.title.trim()) || "Recipe";
-    const ingr = Array.isArray(req.body?.ingr) ? req.body.ingr : [];
-    const cleanIngr = ingr.map((s) => String(s || "").trim()).filter(Boolean);
+    const rawIngr = Array.isArray(req.body?.ingr) ? req.body.ingr : [];
+    const cleanIngr = EdamamHelpers.normalizeIngredientLines(rawIngr);
     if (!cleanIngr.length) {
+      EdamamHelpers.logEdamamFailure(ArcTrace, "payload", {
+        httpStatus: 400,
+        endpoint: EdamamHelpers.EDAMAM_NUTRITION_ENDPOINT,
+        operation: "pipeline-analysis",
+        payloadValid: false,
+        payloadReason: "ingr_required",
+        ingredientCount: 0,
+      });
       return res.status(400).json({ verified: false, reason: "ingr_required" });
     }
 
     const reported = req.body?.reported || {};
-    const url = new URL("https://api.edamam.com/api/nutrition-details");
-    url.searchParams.set("app_id", creds.appId);
-    url.searchParams.set("app_key", creds.appKey);
+    const spoonacularRecipeId = req.body?.spoonacularRecipeId || req.body?.recipeId || null;
 
-    const edResp = await traceUpstream("edamam", "pipeline-analysis", async () => {
-      const resp = await fetch(url.toString(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, ingr: cleanIngr }),
-      });
-      return { ok: resp.ok, status: resp.status, resp };
-    }).then((r) => r.resp);
+    let macros = null;
+    let nutritionSource = "edamam";
+    let nutritionConfidence = "high";
+    let usedFallback = false;
 
-    const rawText = await edResp.text();
-    if (!edResp.ok) {
-      ArcTrace.logMessage("Edamam nutrition analysis failed");
-      return res.status(edResp.status >= 400 ? edResp.status : 502).json({
-        verified: false,
-        reason: "edamam_failed",
-        detail: rawText.slice(0, 200),
-      });
+    if (!creds) {
+      ArcTrace.logMessage("Edamam unavailable");
+      const fb = await nutritionFallbackAfterEdamam({ ingr: cleanIngr, spoonacularRecipeId });
+      if (!fb) {
+        return res.status(503).json({ verified: false, reason: "edamam_not_configured" });
+      }
+      macros = fb.macros;
+      nutritionSource = fb.source;
+      nutritionConfidence = "low";
+      usedFallback = true;
+    } else {
+      const result = await callEdamamNutritionDetails(creds, title, cleanIngr, "pipeline-analysis");
+      if (result.payloadError) {
+        return res.status(400).json({ verified: false, reason: "ingr_invalid", detail: result.payloadError });
+      }
+      if (!result.ok) {
+        const fb = await nutritionFallbackAfterEdamam({ ingr: cleanIngr, spoonacularRecipeId });
+        if (fb) {
+          macros = fb.macros;
+          nutritionSource = fb.source;
+          nutritionConfidence = "low";
+          usedFallback = true;
+        } else {
+          return res.status(result.status >= 400 ? result.status : 502).json({
+            verified: false,
+            reason: "edamam_failed",
+            detail: EdamamHelpers.sanitizeEdamamBody(result.rawText, 200),
+            failureKind: result.failureKind,
+          });
+        }
+      } else {
+        macros = macrosFromEdamamData(result.data);
+      }
     }
 
-    let data;
-    try {
-      data = JSON.parse(rawText);
-    } catch {
-      return res.status(502).json({ verified: false, reason: "edamam_invalid_json" });
-    }
-
-    const tn = data.totalNutrients || {};
-    const macros = {
-      calories: Math.round(edamamNutrientQuantity(tn, "ENERC_KCAL") || 0),
-      protein: Math.round((edamamNutrientQuantity(tn, "PROCNT") || 0) * 10) / 10,
-      fat: Math.round((edamamNutrientQuantity(tn, "FAT") || 0) * 10) / 10,
-      carbs:
-        Math.round(
-          (edamamNutrientQuantity(tn, "CHOCDF") ??
-            edamamNutrientQuantity(tn, "CHOCDF.net") ??
-            0) * 10
-        ) / 10,
-    };
-
-    if (!macros.calories || macros.calories <= 0) {
-      return res.json({ verified: false, reason: "missing_calories", macros: null });
+    if (!macros || !macros.calories || macros.calories <= 0) {
+      const fb = await nutritionFallbackAfterEdamam({ ingr: cleanIngr, spoonacularRecipeId });
+      if (fb && fb.macros.calories > 0) {
+        macros = fb.macros;
+        nutritionSource = fb.source;
+        nutritionConfidence = "low";
+        usedFallback = true;
+      } else {
+        return res.json({ verified: false, reason: "missing_calories", macros: null });
+      }
     }
 
     const p = Number(macros.protein) || 0;
@@ -668,6 +858,17 @@ app.post("/api/nutrition/pipeline", async (req, res) => {
 
     if (!validation.safe) {
       ArcTrace.logMessage("USDA validation failed");
+      if (usedFallback) {
+        return res.json({
+          verified: false,
+          reason: "validation_failed",
+          macros,
+          validation,
+          source: nutritionSource,
+          fallback: true,
+          nutritionConfidence: "low",
+        });
+      }
       return res.json({
         verified: false,
         reason: "validation_failed",
@@ -682,8 +883,12 @@ app.post("/api/nutrition/pipeline", async (req, res) => {
       verified: true,
       macros,
       validation,
-      source: "edamam+usda",
-      note: "Displayed macros from Edamam analysis with USDA consistency checks",
+      source: usedFallback ? nutritionSource : "edamam+usda",
+      fallback: usedFallback,
+      nutritionConfidence,
+      note: usedFallback
+        ? "Macros from fallback provider after Edamam failure — lower confidence"
+        : "Displayed macros from Edamam analysis with USDA consistency checks",
     });
   } catch (err) {
     console.error("/api/nutrition/pipeline", err);
