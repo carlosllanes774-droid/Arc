@@ -123,6 +123,7 @@ function arcPipelineLog(message, extra) {
 }
 
 const OPENAI_TIMEOUT_MS = 8000;
+const OPENAI_WEEK_GENERATION_TIMEOUT_MS = 120000;
 const OPENAI_CACHE_TTL_MS = 20 * 60 * 1000;
 const openAiResponseCache = new Map();
 const openAiInFlight = new Map();
@@ -878,6 +879,12 @@ function openAiTaskTokenLimit(taskType) {
   return 220;
 }
 
+function openAiTaskTimeoutMs(taskType) {
+  const task = String(taskType || "optimization").toLowerCase();
+  if (task === "week_generation") return OPENAI_WEEK_GENERATION_TIMEOUT_MS;
+  return OPENAI_TIMEOUT_MS;
+}
+
 /** OpenAI — adaptation / reasoning only; never authoritative for displayed macros. */
 app.post("/api/ai", async (req, res) => {
   try {
@@ -891,7 +898,8 @@ app.post("/api/ai", async (req, res) => {
     const taskCap = openAiTaskTokenLimit(taskType);
     const requested = parseInt(body?.max_tokens, 10);
     const maxTokens = Math.max(64, Math.min(taskCap, Number.isFinite(requested) ? requested : taskCap));
-    const timeoutMs = Math.min(OPENAI_TIMEOUT_MS, Math.max(1000, parseInt(body?.timeout_ms, 10) || OPENAI_TIMEOUT_MS));
+    const timeoutMs = openAiTaskTimeoutMs(taskType);
+    arcPipelineLog("timeout policy applied", { taskType, timeoutMs });
     const cacheKey = stableStringify({ taskType, maxTokens, messages });
 
     const cached = getCachedOpenAiResponse(cacheKey);
@@ -1003,7 +1011,10 @@ app.post("/api/ai", async (req, res) => {
   } catch (err) {
     const failedTask = String((req.body && req.body.taskType) || "optimization").toLowerCase();
     if (err && (err.name === "AbortError" || err.code === "ABORT_ERR" || err.name === "APIUserAbortError")) {
-      arcPipelineLog("OpenAI timeout fallback triggered", { timeoutMs: OPENAI_TIMEOUT_MS });
+      arcPipelineLog("OpenAI timeout fallback triggered", {
+        taskType: failedTask,
+        timeoutMs: openAiTaskTimeoutMs(failedTask),
+      });
       return debugSendAiJson(res, {
         content: [{ type: "text", text: "fallback: timeout; continue pipeline" }],
         timeoutFallback: true,
