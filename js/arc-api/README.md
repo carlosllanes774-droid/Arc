@@ -9,6 +9,7 @@ External **information** providers. Arc Engine (`js/arc-engine/`) owns intellige
 <script src="js/arc-api/arcCache.js"></script>
 <script src="js/arc-api/arcRateLimit.js"></script>
 <script src="js/arc-api/arcTrace.js"></script>
+<script src="js/arc-api/edamamHelpers.js"></script>
 <script src="js/arc-api/providers/providerBase.js"></script>
 <script src="js/arc-api/spoonacularService.js"></script>
 <script src="js/arc-api/edamamService.js"></script>
