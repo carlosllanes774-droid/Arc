@@ -165,6 +165,29 @@
     return value.map(function (line) { return String(line || '').trim(); }).filter(Boolean);
   }
 
+  function deriveDeterministicMealId(recipe, scenario) {
+    recipe = recipe || {};
+    var rawId = recipe.recipeId || recipe.id;
+    if (rawId != null && String(rawId).trim()) return String(rawId).trim();
+    var title = String(recipe.title || recipe.name || 'meal').trim().toLowerCase();
+    var safeTitle = title.replace(/[^a-z0-9]+/g, '-').replace(/(^-+|-+$)/g, '') || 'meal';
+    return 'arc-' + String(scenario || 'performance') + '-' + safeTitle.slice(0, 48);
+  }
+
+  function cloneRecipeForContract(recipe) {
+    recipe = recipe || {};
+    var out = Object.assign({}, recipe);
+    out.ingredients = Array.isArray(recipe.ingredients) ? recipe.ingredients.map(function (ing) {
+      return Object.assign({}, ing || {});
+    }) : [];
+    out.instructions = normalizeInstructionLines(recipe.instructions);
+    out.labels = Array.isArray(recipe.labels) ? recipe.labels.slice(0, 8) : [];
+    out.nutrition = recipe.nutrition && typeof recipe.nutrition === 'object'
+      ? Object.assign({}, recipe.nutrition)
+      : {};
+    return out;
+  }
+
   function deriveMealCategory(recipe, scenario) {
     var text = String((recipe && recipe.title) || '').toLowerCase();
     if (text.indexOf('breakfast') !== -1) return 'breakfast';
@@ -176,9 +199,9 @@
 
   function buildCanonicalMealSchema(payload) {
     payload = payload || {};
-    var recipe = payload.recipe || {};
+    var recipe = cloneRecipeForContract(payload.recipe);
     var nutrition = recipe.nutrition || {};
-    var instructions = normalizeInstructionLines(recipe.instructions);
+    var instructions = recipe.instructions;
     var ingredients = Array.isArray(recipe.ingredients) ? recipe.ingredients.map(function (ing) {
       return {
         name: String((ing && (ing.name || ing.original)) || '').trim(),
@@ -189,7 +212,7 @@
     }).filter(function (ing) { return !!ing.name; }) : [];
 
     return {
-      mealId: recipe.recipeId || recipe.id || null,
+      mealId: deriveDeterministicMealId(recipe, payload.scenario),
       title: String(recipe.title || recipe.name || 'Meal'),
       description: String(recipe.description || ''),
       summary: String(recipe.summary || ''),
@@ -198,14 +221,57 @@
       servings: Number(recipe.servings || 1),
       nutritionConfidence: String(payload.nutritionConfidence || recipe.nutritionConfidence || 'medium'),
       macros: {
-        calories: Number(nutrition.calories || recipe.calories || 0),
-        protein: Number(nutrition.protein || recipe.protein || 0),
-        carbs: Number(nutrition.carbs || recipe.carbs || 0),
-        fat: Number(nutrition.fat || recipe.fat || 0)
+        calories: isFinite(Number(nutrition.calories || recipe.calories || 0)) ? Number(nutrition.calories || recipe.calories || 0) : 0,
+        protein: isFinite(Number(nutrition.protein || recipe.protein || 0)) ? Number(nutrition.protein || recipe.protein || 0) : 0,
+        carbs: isFinite(Number(nutrition.carbs || recipe.carbs || 0)) ? Number(nutrition.carbs || recipe.carbs || 0) : 0,
+        fat: isFinite(Number(nutrition.fat || recipe.fat || 0)) ? Number(nutrition.fat || recipe.fat || 0) : 0
       },
       ingredients: ingredients,
       instructions: instructions
     };
+  }
+
+  function ensureStableResponseContract(result) {
+    result = result && typeof result === 'object' ? result : {};
+    if (!result.schema || typeof result.schema !== 'object') {
+      result.schema = { owner: 'arc_backend', version: '1.0.0', stable: true };
+    } else {
+      result.schema.owner = 'arc_backend';
+      result.schema.version = result.schema.version || '1.0.0';
+      result.schema.stable = true;
+    }
+
+    if (!result.recipe || typeof result.recipe !== 'object') {
+      result.recipe = null;
+    } else {
+      result.recipe = cloneRecipeForContract(result.recipe);
+    }
+
+    if (!result.canonicalMeal || typeof result.canonicalMeal !== 'object') {
+      result.canonicalMeal = result.recipe
+        ? buildCanonicalMealSchema({
+            recipe: result.recipe,
+            scenario: result.scenario,
+            nutritionConfidence: result.nutritionConfidence
+          })
+        : null;
+    }
+
+    if (!Array.isArray(result.meals)) {
+      result.meals = result.canonicalMeal ? [result.canonicalMeal] : [];
+    } else if (result.canonicalMeal) {
+      result.meals = [result.canonicalMeal];
+    } else {
+      result.meals = [];
+    }
+
+    var schemaValidation = validateStableResponseShape(result);
+    result.schemaValidation = schemaValidation;
+    if (!schemaValidation.valid) {
+      result.degraded = true;
+      result.error = result.error || 'schema_validation_failed';
+    }
+    return result;
   }
 
   function validateStableResponseShape(result) {
@@ -519,13 +585,9 @@
               qualityCategoryScores: entry.categoryScores,
               varietyPenalty: entry.varietyPenalty || 0
             });
-            console.log('[ARC CURATION] Recipe scored ' + entry.recipeQualityScore);
             return merged;
           });
-          curatedResult.rejected.forEach(function () {
-            console.log('[ARC CURATION] Low quality recipe rejected');
-          });
-          if (scoredRecipes.length) console.log('[ARC CURATION] Variety balancing applied');
+          if (T && scoredRecipes.length) T.logMessage('Recipe curation complete');
 
           var selectedRecipe = scoredRecipes[0] || null;
           if (!selectedRecipe) {
@@ -583,13 +645,7 @@
                 }
               }
 
-              selectedRecipe.instructions = Array.isArray(selectedRecipe.instructions) ? selectedRecipe.instructions.slice() : [];
-              var canonicalMeal = buildCanonicalMealSchema({
-                recipe: selectedRecipe,
-                scenario: scenario,
-                nutritionConfidence: selectedRecipe.nutritionConfidence
-              });
-              if (T) T.logMessage('Canonical backend schema created');
+              selectedRecipe = cloneRecipeForContract(selectedRecipe);
               var finalResult = buildPipelineResult({
                 arcResult: arcResult,
                 scenario: scenario,
@@ -605,13 +661,6 @@
                 curatedRecipes: scoredRecipes,
                 rejectedRecipes: curatedResult.rejected
               });
-              finalResult.canonicalMeal = canonicalMeal;
-              finalResult.meals = [canonicalMeal];
-              finalResult.schema = {
-                owner: 'arc_backend',
-                version: '1.0.0',
-                stable: true
-              };
               finalResult.enhancement = {
                 status: 'skipped',
                 async: false,
@@ -633,30 +682,27 @@
                   })).then(function (enhancement) {
                     try {
                       if (enhancement && enhancement.status === 'ok' && enhancement.data) {
-                        selectedRecipe.title = enhancement.data.enhancedTitle || selectedRecipe.title;
-                        selectedRecipe.summary = enhancement.data.enhancedSummary || selectedRecipe.summary || '';
-                        selectedRecipe.labels = Array.isArray(enhancement.data.enhancedLabels)
+                        var enhancedRecipe = cloneRecipeForContract(selectedRecipe);
+                        enhancedRecipe.title = enhancement.data.enhancedTitle || enhancedRecipe.title;
+                        enhancedRecipe.summary = enhancement.data.enhancedSummary || enhancedRecipe.summary || '';
+                        enhancedRecipe.labels = Array.isArray(enhancement.data.enhancedLabels)
                           ? enhancement.data.enhancedLabels.slice()
-                          : (selectedRecipe.labels || []);
-                        selectedRecipe.instructions = enhancement.data.enhancedInstructions || selectedRecipe.instructions;
-                        finalResult.canonicalMeal = buildCanonicalMealSchema({
-                          recipe: selectedRecipe,
+                          : (enhancedRecipe.labels || []);
+                        enhancedRecipe.instructions = enhancement.data.enhancedInstructions || enhancedRecipe.instructions;
+                        var enhancedCanonicalMeal = buildCanonicalMealSchema({
+                          recipe: enhancedRecipe,
                           scenario: scenario,
-                          nutritionConfidence: selectedRecipe.nutritionConfidence
+                          nutritionConfidence: enhancedRecipe.nutritionConfidence
                         });
-                        finalResult.meals = [finalResult.canonicalMeal];
-                        if (scaledRecipe && Array.isArray(scaledRecipe.instructions)) {
-                          scaledRecipe.instructions = selectedRecipe.instructions.slice();
-                        }
                         if (T) T.logMessage('OpenAI enhancement merged safely');
                         notifyEnhancement(profile, {
-                          recipeId: selectedRecipe.recipeId || selectedRecipe.id || null,
-                          title: selectedRecipe.title,
-                          instructions: selectedRecipe.instructions,
+                          recipeId: enhancedRecipe.recipeId || enhancedRecipe.id || null,
+                          title: enhancedRecipe.title,
+                          instructions: enhancedRecipe.instructions,
+                          canonicalMeal: enhancedCanonicalMeal,
                           enhanced: true,
                           scenario: scenario
                         });
-                        console.log('[ARC CURATION] Premium instruction enhancement complete');
                         return;
                       }
                       if (T) T.logMessage('Enhancement safely skipped');
@@ -676,12 +722,9 @@
                 if (T) T.logMessage('Enhancement skipped safely');
               }
 
-              var schemaValidation = validateStableResponseShape(finalResult);
-              finalResult.schemaValidation = schemaValidation;
-              if (!schemaValidation.valid) {
-                finalResult.degraded = true;
-                finalResult.error = finalResult.error || 'schema_validation_failed';
-              } else if (T) {
+              finalResult = ensureStableResponseContract(finalResult);
+              if (finalResult.schemaValidation.valid && T) {
+                T.logMessage('Canonical backend schema created');
                 T.logMessage('Frontend render contract validated');
                 T.logMessage('Stable deterministic response sent');
               }
@@ -746,7 +789,7 @@
 
   function buildPipelineResult(parts) {
     parts = parts || {};
-    return {
+    return ensureStableResponseContract({
       version: '2.0.0',
       generatedAt: new Date().toISOString(),
       arcOwned: true,
@@ -768,7 +811,7 @@
       curatedRecipes: parts.curatedRecipes || [],
       rejectedRecipes: parts.rejectedRecipes || [],
       note: 'Arc Engine owns intelligence; external APIs provide information'
-    };
+    });
   }
 
   function getProviderRegistry() {
