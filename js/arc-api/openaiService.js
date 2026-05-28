@@ -264,7 +264,7 @@
 
     var req = b.postJson('/api/ai', {
       messages: [
-        { role: 'system', content: 'You are a culinary performance coach. Rewrite recipe title and steps in premium meal-kit style. Return valid JSON only.' },
+        { role: 'system', content: 'You are a culinary performance coach. Rewrite recipe title and steps in premium meal-kit style. Return plain text only in the requested TITLE/SUMMARY/LABELS/INSTRUCTIONS format.' },
         { role: 'user', content: prompt }
       ],
       taskType: 'optimization',
