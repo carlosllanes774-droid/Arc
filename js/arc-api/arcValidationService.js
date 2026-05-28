@@ -7,6 +7,7 @@
   var PROTEIN_G_PER_LB_MAX = 2.5;
   var CALORIES_PER_DAY_MAX = 10000;
   var CALORIES_PER_DAY_MIN = 800;
+  var OIL_KEYWORDS = ['oil', 'butter', 'ghee', 'lard', 'shortening'];
 
   /**
    * @param {{ calories?: number, protein?: number, carbs?: number, fat?: number }} macros
@@ -91,9 +92,10 @@
     var f = Number(data.fat) || 0;
     var context = data.context || 'meal';
 
-    if (isFinite(cals) && cals < 50 && (p > 30 || c > 40)) impossible.push('macros_exceed_calories');
+    if (isFinite(cals) && cals < 50 && (p > 30 || c > 40 || f > 20)) impossible.push('macros_exceed_calories');
     if (p > 200) impossible.push('protein_impossible_single_meal');
     if (cals > 0 && p * 4 > cals * 1.1) impossible.push('protein_exceeds_calories');
+    if (cals > 0 && f * 9 > cals * 1.15) impossible.push('fat_exceeds_calories');
     if (context === 'meal' && p + c + f > 350) impossible.push('gram_totals_impossible');
     if (context === 'daily' && p + c + f > 500) impossible.push('gram_totals_impossible');
 
@@ -108,11 +110,125 @@
     };
   }
 
+  /**
+   * @param {{ calories?: number, protein?: number, carbs?: number, fat?: number, fiber?: number }} macros
+   * @returns {{ tags: string[], rules: object, balanced: boolean }}
+   */
+  function deriveNutritionTags(macros) {
+    macros = macros || {};
+    var calories = Math.max(0, Number(macros.calories) || 0);
+    var protein = Math.max(0, Number(macros.protein) || 0);
+    var carbs = Math.max(0, Number(macros.carbs) || 0);
+    var fat = Math.max(0, Number(macros.fat) || 0);
+    var fiber = Math.max(0, Number(macros.fiber) || 0);
+    var calsFromMacros = protein * 4 + carbs * 4 + fat * 9;
+    var denom = calories > 0 ? calories : (calsFromMacros > 0 ? calsFromMacros : 1);
+    var carbPct = (carbs * 4) / denom;
+    var protPct = (protein * 4) / denom;
+    var fatPct = (fat * 9) / denom;
+
+    var highProtein = protein >= 25;
+    var lowCarb = carbPct <= 0.25;
+    var highFiber = fiber >= 8;
+    var balanced = protPct >= 0.18 && protPct <= 0.4 && carbPct >= 0.25 && carbPct <= 0.5 && fatPct >= 0.2 && fatPct <= 0.4;
+
+    var tags = [];
+    if (highProtein) tags.push('high_protein');
+    if (lowCarb) tags.push('low_carb');
+    if (highFiber) tags.push('high_fiber');
+    if (balanced) tags.push('balanced');
+
+    return {
+      tags: tags,
+      balanced: balanced,
+      rules: {
+        high_protein: highProtein,
+        low_carb: lowCarb,
+        high_fiber: highFiber,
+        balanced: balanced
+      }
+    };
+  }
+
+  /**
+   * Keep only tags that pass hard nutrition rules.
+   * @param {string[]} tags
+   * @param {{ calories?: number, protein?: number, carbs?: number, fat?: number, fiber?: number }} macros
+   * @returns {{ validTags: string[], rejectedTags: string[] }}
+   */
+  function validateRecipeTags(tags, macros) {
+    var requested = Array.isArray(tags) ? tags.map(function (t) { return String(t || '').trim().toLowerCase(); }).filter(Boolean) : [];
+    var normalized = deriveNutritionTags(macros);
+    var allowed = {};
+    normalized.tags.forEach(function (t) { allowed[t] = true; });
+
+    var validTags = [];
+    var rejectedTags = [];
+    requested.forEach(function (tag) {
+      var canonical = tag.replace(/\s+/g, '_').replace(/-/g, '_');
+      if (allowed[canonical]) validTags.push(canonical);
+      else rejectedTags.push(canonical);
+    });
+    return { validTags: validTags, rejectedTags: rejectedTags };
+  }
+
+  /**
+   * Basic serving-scale sanity checks.
+   * @param {{ ingredients?: Array<object>, scaled?: object, scaleFactor?: number }} scaledRecipe
+   * @returns {{ valid: boolean, issues: string[] }}
+   */
+  function validateServingScaling(scaledRecipe) {
+    var issues = [];
+    var ingredients = (scaledRecipe && Array.isArray(scaledRecipe.ingredients)) ? scaledRecipe.ingredients : [];
+    var sf = Number(scaledRecipe && scaledRecipe.scaleFactor);
+    if (!isFinite(sf) || sf <= 0) issues.push('invalid_scale_factor');
+    ingredients.forEach(function (ing) {
+      var qty = Number(ing && (ing.quantity != null ? ing.quantity : ing.amount));
+      if (isFinite(qty) && qty < 0) issues.push('negative_scaled_quantity');
+      var name = String((ing && (ing.name || ing.original)) || '').toLowerCase();
+      if (isFinite(qty) && qty > 6) {
+        var i;
+        for (i = 0; i < OIL_KEYWORDS.length; i++) {
+          if (name.indexOf(OIL_KEYWORDS[i]) !== -1) {
+            issues.push('oil_scaling_explosion');
+            break;
+          }
+        }
+      }
+    });
+    return { valid: issues.length === 0, issues: issues };
+  }
+
+  /**
+   * Pipeline-level nutrition guardrail checks.
+   * @param {{ calories?: number, protein?: number, carbs?: number, fat?: number }} macros
+   * @returns {{ valid: boolean, issues: string[] }}
+   */
+  function runNutritionSanityChecks(macros) {
+    macros = macros || {};
+    var issues = [];
+    var calories = Number(macros.calories) || 0;
+    var protein = Number(macros.protein) || 0;
+    var carbs = Number(macros.carbs) || 0;
+    var fat = Number(macros.fat) || 0;
+    var computed = protein * 4 + carbs * 4 + fat * 9;
+    if (!(calories > 0)) issues.push('missing_calories');
+    if (fat > 0 && calories > 0 && fat * 9 > calories * 1.15) issues.push('fat_exceeds_calorie_math');
+    if (protein < 8) issues.push('extremely_low_protein');
+    if (calories > 0 && Math.abs(computed - calories) / calories > 0.2) issues.push('impossible_calorie_calculation');
+    if (calories > 1800) issues.push('meal_calories_too_high');
+    return { valid: issues.length === 0, issues: issues, computedCalories: Math.round(computed) };
+  }
+
   var api = {
     validateNutritionConsistency: validateNutritionConsistency,
     detectMacroOutliers: detectMacroOutliers,
     verifyRecipeCompleteness: verifyRecipeCompleteness,
-    detectImpossibleNutrition: detectImpossibleNutrition
+    detectImpossibleNutrition: detectImpossibleNutrition,
+    deriveNutritionTags: deriveNutritionTags,
+    validateRecipeTags: validateRecipeTags,
+    validateServingScaling: validateServingScaling,
+    runNutritionSanityChecks: runNutritionSanityChecks
   };
 
   global.ArcApi = global.ArcApi || {};
