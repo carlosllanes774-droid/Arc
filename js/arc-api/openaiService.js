@@ -17,6 +17,9 @@
     off_plan: 'Off-plan eating logged: damage control for remainder of day without guilt-based restriction.',
     performance: 'High output training: intra-workout fuel, elevated carbs around sessions, recovery emphasis.'
   };
+  var OPENAI_TIMEOUT_MS = 8000;
+  var OPENAI_CACHE_TTL_MS = 20 * 60 * 1000;
+  var inFlight = new Map();
 
   function systemPrompt() {
     return [
@@ -39,6 +42,36 @@
     return '';
   }
 
+  function stableStringify(value) {
+    if (value == null) return 'null';
+    if (typeof value !== 'object') return JSON.stringify(value);
+    if (Array.isArray(value)) {
+      return '[' + value.slice(0, 8).map(stableStringify).join(',') + ']';
+    }
+    var keys = Object.keys(value).sort();
+    var out = [];
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      if (k === 'recipes' || k === 'plan' || k === 'history' || k === 'raw') continue;
+      out.push(JSON.stringify(k) + ':' + stableStringify(value[k]));
+    }
+    return '{' + out.join(',') + '}';
+  }
+
+  function compactArcContext(ctx) {
+    ctx = ctx || {};
+    return {
+      goal: ctx.goal || null,
+      targets: ctx.targets || null,
+      budget: ctx.budget || null,
+      adherence: ctx.adherence || null,
+      profile: ctx.profile ? {
+        goal: ctx.profile.goal || null,
+        budgetTier: ctx.profile.budgetTier || null
+      } : null
+    };
+  }
+
   /**
    * @param {{ scenario: string, arcContext: object, userNote?: string }} input
    * @returns {Promise<object>}
@@ -46,26 +79,31 @@
   function callAdaptation(input) {
     var b = Base();
     var scenario = input.scenario || 'general';
-    var cacheKey = 'openai:' + scenario + ':' + JSON.stringify(input.arcContext || {}).slice(0, 200);
+    var compactContext = compactArcContext(input.arcContext);
+    var cacheKey = 'openai:' + scenario + ':' + stableStringify(compactContext) + ':' + String(input.userNote || '').slice(0, 120);
     var c = Cache();
     if (c) {
       var hit = c.get('openai', cacheKey);
       if (hit) return Promise.resolve(hit);
     }
+    if (inFlight.has(cacheKey)) return inFlight.get(cacheKey);
 
     var hint = SCENARIO_PROMPTS[scenario] || SCENARIO_PROMPTS.performance;
     var userContent = [
       'Scenario: ' + scenario,
       'Guidance: ' + hint,
-      'Arc context (read-only): ' + JSON.stringify(input.arcContext || {}),
+      'Arc context: ' + JSON.stringify(compactContext),
       input.userNote ? 'User note: ' + input.userNote : ''
     ].join('\n');
 
-    return b.postJson('/api/ai', {
+    var req = b.postJson('/api/ai', {
       messages: [
         { role: 'system', content: systemPrompt() },
         { role: 'user', content: userContent }
-      ]
+      ],
+      taskType: 'optimization',
+      max_tokens: 220,
+      timeout_ms: OPENAI_TIMEOUT_MS
     }).then(function (res) {
       if (!res.ok) {
         if (res.status === 503) return b.notConfigured(ID, 'adaptation');
@@ -77,11 +115,15 @@
         proposal: text,
         arcOwned: ['targets', 'validation', 'portion_scaling', 'execution']
       });
-      if (c) c.set('openai', cacheKey, out);
+      if (c) c.set('openai', cacheKey, out, OPENAI_CACHE_TTL_MS);
       return out;
     }).catch(function (err) {
       return b.fail(ID, 'adaptation', err && err.message ? err.message : 'Network error');
+    }).finally(function () {
+      inFlight.delete(cacheKey);
     });
+    inFlight.set(cacheKey, req);
+    return req;
   }
 
   function optimizeNutritionStrategy(input) {
@@ -112,6 +154,67 @@
     return callAdaptation(Object.assign({ scenario: 'performance' }, input));
   }
 
+  /**
+   * @param {{ recipe: object, scenario?: string, profile?: object }} input
+   * @returns {Promise<object>}
+   */
+  function enhanceRecipePresentation(input) {
+    input = input || {};
+    var b = Base();
+    var recipe = input.recipe || {};
+    var title = String(recipe.title || recipe.name || 'Meal');
+    var ingredients = Array.isArray(recipe.ingredients) ? recipe.ingredients.slice(0, 14).map(function (ing) {
+      return String((ing && (ing.original || ing.name)) || '').trim();
+    }).filter(Boolean) : [];
+    var instructions = Array.isArray(recipe.instructions) ? recipe.instructions.slice(0, 8) : [];
+
+    if (!title || !ingredients.length) {
+      return Promise.resolve(b.fail(ID, 'adaptation', 'recipe data required for enhancement'));
+    }
+
+    var prompt = [
+      'Enhance recipe title and instructions for Arc premium nutrition coaching.',
+      'Rules:',
+      '- Keep nutrition intent aligned to scenario.',
+      '- Return concise, high-clarity, action-first cooking steps.',
+      '- Improve flavor guidance and cooking terminology.',
+      '- Avoid changing core ingredients or macro intent.',
+      '- Return strict JSON with keys: title, instructions (array of strings).',
+      'Scenario: ' + String(input.scenario || 'performance'),
+      'User goal: ' + String((input.profile && input.profile.goal) || ''),
+      'Recipe title: ' + title,
+      'Ingredients: ' + JSON.stringify(ingredients),
+      'Instructions: ' + JSON.stringify(instructions)
+    ].join('\n');
+
+    return b.postJson('/api/ai', {
+      messages: [
+        { role: 'system', content: 'You are a culinary performance coach. Rewrite recipe title and steps in premium meal-kit style. Return valid JSON only.' },
+        { role: 'user', content: prompt }
+      ],
+      taskType: 'optimization',
+      max_tokens: 350,
+      timeout_ms: OPENAI_TIMEOUT_MS
+    }).then(function (res) {
+      if (!res.ok) {
+        if (res.status === 503) return b.notConfigured(ID, 'adaptation');
+        return b.fail(ID, 'adaptation', (res.json && res.json.error) || 'OpenAI enhancement failed');
+      }
+      var text = extractAiText(res.json);
+      var parsed = null;
+      try { parsed = JSON.parse(text); } catch (e) { parsed = null; }
+      if (!parsed || !parsed.title || !Array.isArray(parsed.instructions) || !parsed.instructions.length) {
+        return b.fail(ID, 'adaptation', 'Invalid enhancement format');
+      }
+      return b.ok(ID, 'adaptation', {
+        enhancedTitle: String(parsed.title),
+        enhancedInstructions: parsed.instructions.map(function (s) { return String(s); }).filter(Boolean)
+      });
+    }).catch(function (err) {
+      return b.fail(ID, 'adaptation', err && err.message ? err.message : 'Network error');
+    });
+  }
+
   var api = {
     id: ID,
     optimizeNutritionStrategy: optimizeNutritionStrategy,
@@ -120,7 +223,8 @@
     adaptForBudget: adaptForBudget,
     adaptForTravel: adaptForTravel,
     adaptForOffPlanEating: adaptForOffPlanEating,
-    adaptForPerformance: adaptForPerformance
+    adaptForPerformance: adaptForPerformance,
+    enhanceRecipePresentation: enhanceRecipePresentation
   };
 
   global.ArcApi = global.ArcApi || {};
