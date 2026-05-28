@@ -1,0 +1,38 @@
+{
+  "recipes": [
+    {
+      "id": 1,
+      "name": "Test Chicken Bowl",
+      "cal": 650,
+      "p": 45,
+      "c": 55,
+      "f": 18,
+      "cat": "Lunch",
+      "time": "25 min",
+      "difficulty": "Easy",
+      "price": 7.5,
+      "servings": 1,
+      "tags": ["High protein"],
+      "ing": ["Chicken breast", "Rice", "Broccoli"],
+      "ingQty": {
+        "Chicken breast": "6 oz",
+        "Rice": "1/2 cup",
+        "Broccoli": "1 cup"
+      },
+      "steps": [
+        { "phase": "Prep", "instruction": "Slice chicken and chop broccoli." },
+        { "phase": "Cook", "instruction": "Pan-sear chicken until done; steam rice and broccoli." },
+        { "phase": "Serve", "instruction": "Plate and serve together." }
+      ]
+    }
+  ],
+  "plan": {
+    "Mon": { "Breakfast": 1, "Lunch": 1, "Dinner": 1 },
+    "Tue": { "Breakfast": 1, "Lunch": 1, "Dinner": 1 },
+    "Wed": { "Breakfast": 1, "Lunch": 1, "Dinner": 1 },
+    "Thu": { "Breakfast": 1, "Lunch": 1, "Dinner": 1 },
+    "Fri": { "Breakfast": 1, "Lunch": 1, "Dinner": 1 },
+    "Sat": { "Breakfast": 1, "Lunch": 1, "Dinner": 1 },
+    "Sun": { "Breakfast": 1, "Lunch": 1, "Dinner": 1 }
+  }
+}
