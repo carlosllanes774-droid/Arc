@@ -483,56 +483,68 @@
                 T.logMessage('Kroger unavailable');
               }
 
-              var enhancementPromise = S.openai && S.openai.enhanceRecipePresentation
-                ? S.openai.enhanceRecipePresentation({
+              var scaledRecipe = null;
+              if (global.ArcEngine && global.ArcEngine.PortionScaler && selectedRecipe.nutrition) {
+                var slot = arcResult && arcResult.mealStrategy && arcResult.mealStrategy.slots && arcResult.mealStrategy.slots[0];
+                var slotTarget = profile.recipeTarget || slot || targets;
+                scaledRecipe = global.ArcEngine.PortionScaler.scaleRecipe(selectedRecipe, {
+                  calories: slotTarget.calories || slotTarget.targetCalories,
+                  protein: slotTarget.protein || slotTarget.proteinTarget,
+                  carbs: slotTarget.carbs || slotTarget.carbTarget,
+                  fat: slotTarget.fat || slotTarget.fatTarget
+                });
+                if (V && V.validateServingScaling) {
+                  var scalingCheck = V.validateServingScaling(scaledRecipe);
+                  if (!scalingCheck.valid && T) T.logMessage('Serving scaling corrected');
+                  scaledRecipe.scalingValidation = scalingCheck;
+                }
+              }
+
+              var finalResult = buildPipelineResult({
+                arcResult: arcResult,
+                scenario: scenario,
+                recipeSearch: recipeSearch,
+                recipe: selectedRecipe,
+                nutrition: selectedEval ? selectedEval.nutrition : null,
+                usdaValidation: selectedEval ? selectedEval.usdaValidation : null,
+                validationReport: selectedEval ? selectedEval.validationReport : null,
+                adaptation: adaptation,
+                pricing: pricing,
+                scaledRecipe: scaledRecipe,
+                nutritionConfidence: selectedRecipe.nutritionConfidence,
+                curatedRecipes: scoredRecipes,
+                rejectedRecipes: curatedResult.rejected
+              });
+
+              if (S.openai && S.openai.enhanceRecipePresentation && Array.isArray(selectedRecipe.instructions) && selectedRecipe.instructions.length) {
+                if (T) T.logMessage('Instruction enhancement started');
+                S.openai.enhanceRecipePresentation({
                   recipe: selectedRecipe,
                   scenario: scenario,
                   profile: { goal: profile.goal, budgetTier: profile.budgetTier }
-                })
-                : Promise.resolve(null);
-
-              return enhancementPromise.then(function (enhancement) {
-                if (enhancement && enhancement.status === 'ok' && enhancement.data) {
-                  selectedRecipe.title = enhancement.data.enhancedTitle || selectedRecipe.title;
-                  selectedRecipe.instructions = enhancement.data.enhancedInstructions || selectedRecipe.instructions;
-                  console.log('[ARC CURATION] Premium instruction enhancement complete');
-                }
-
-                var scaledRecipe = null;
-                if (global.ArcEngine && global.ArcEngine.PortionScaler && selectedRecipe.nutrition) {
-                  var slot = arcResult && arcResult.mealStrategy && arcResult.mealStrategy.slots && arcResult.mealStrategy.slots[0];
-                  var slotTarget = profile.recipeTarget || slot || targets;
-                  scaledRecipe = global.ArcEngine.PortionScaler.scaleRecipe(selectedRecipe, {
-                    calories: slotTarget.calories || slotTarget.targetCalories,
-                    protein: slotTarget.protein || slotTarget.proteinTarget,
-                    carbs: slotTarget.carbs || slotTarget.carbTarget,
-                    fat: slotTarget.fat || slotTarget.fatTarget
-                  });
-                  if (V && V.validateServingScaling) {
-                    var scalingCheck = V.validateServingScaling(scaledRecipe);
-                    if (!scalingCheck.valid && T) T.logMessage('Serving scaling corrected');
-                    scaledRecipe.scalingValidation = scalingCheck;
+                }).then(function (enhancement) {
+                  if (enhancement && enhancement.status === 'ok' && enhancement.data) {
+                    selectedRecipe.title = enhancement.data.enhancedTitle || selectedRecipe.title;
+                    selectedRecipe.instructions = enhancement.data.enhancedInstructions || selectedRecipe.instructions;
+                    if (scaledRecipe && Array.isArray(scaledRecipe.instructions)) {
+                      scaledRecipe.instructions = selectedRecipe.instructions.slice();
+                    }
+                    console.log('[ARC CURATION] Premium instruction enhancement complete');
+                    return;
                   }
-                }
-
-                var finalResult = buildPipelineResult({
-                  arcResult: arcResult,
-                  scenario: scenario,
-                  recipeSearch: recipeSearch,
-                  recipe: selectedRecipe,
-                  nutrition: selectedEval ? selectedEval.nutrition : null,
-                  usdaValidation: selectedEval ? selectedEval.usdaValidation : null,
-                  validationReport: selectedEval ? selectedEval.validationReport : null,
-                  adaptation: adaptation,
-                  pricing: pricing,
-                  scaledRecipe: scaledRecipe,
-                  nutritionConfidence: selectedRecipe.nutritionConfidence,
-                  curatedRecipes: scoredRecipes,
-                  rejectedRecipes: curatedResult.rejected
+                  if (T) T.logMessage('Instruction enhancement fallback used');
+                }).catch(function () {
+                  if (T) T.logMessage('Instruction enhancement fallback used');
                 });
-                if (T) T.logMessage('Final meal generation complete');
-                return finalResult;
-              });
+              } else {
+                if (T) T.logMessage('Instruction enhancement skipped');
+              }
+
+              if (T) {
+                T.logMessage('Base recipe delivery preserved');
+                T.logMessage('Final meal generation complete');
+              }
+              return finalResult;
             });
           });
         });
