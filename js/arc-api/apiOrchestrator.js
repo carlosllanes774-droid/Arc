@@ -309,14 +309,24 @@
             : Promise.resolve(null);
 
           return usdaPromise.then(function (usdaValidation) {
+            var source = (nutrition && nutrition.data && nutrition.data.source) || 'edamam';
+            var usdaOk = !!(usdaValidation && usdaValidation.status === 'ok' && usdaValidation.data && usdaValidation.data.valid);
+            var resolvedConfidence = 'low';
+            if (source === 'edamam' && usdaOk) resolvedConfidence = 'high';
+            else if (source === 'usda' || usdaOk) resolvedConfidence = 'medium';
+            else if (source === 'spoonacular') resolvedConfidence = 'low';
+
             var validationReport = V && macros
               ? V.detectImpossibleNutrition(Object.assign({}, macros, {
                 context: 'meal',
                 weightLb: profile.weight
               }))
               : null;
+            var sanityReport = V && macros && V.runNutritionSanityChecks
+              ? V.runNutritionSanityChecks(macros)
+              : null;
 
-            if (validationReport && !validationReport.safe) {
+            if ((validationReport && !validationReport.safe) || (sanityReport && !sanityReport.valid)) {
               if (T) T.logMessage('USDA validation failed');
               return buildPipelineResult({
                 arcResult: arcResult,
@@ -326,7 +336,8 @@
                 usdaValidation: usdaValidation,
                 validationReport: validationReport,
                 blocked: true,
-                error: 'nutrition_failed_validation'
+                error: 'nutrition_failed_validation',
+                sanityReport: sanityReport
               });
             }
 
@@ -355,8 +366,17 @@
                   protein: macros && macros.protein,
                   carbs: macros && macros.carbs,
                   fat: macros && macros.fat,
-                  nutritionConfidence: nutritionConfidence || 'high'
+                  nutritionConfidence: resolvedConfidence || nutritionConfidence || 'low'
                 });
+                if (V && V.deriveNutritionTags) {
+                  var derived = V.deriveNutritionTags(macros || {});
+                  recipeWithNutrition.nutritionTags = derived.tags;
+                  if (V.validateRecipeTags) {
+                    var checked = V.validateRecipeTags(recipe.tags || [], macros || {});
+                    recipeWithNutrition.validatedTags = checked.validTags;
+                    recipeWithNutrition.rejectedTags = checked.rejectedTags;
+                  }
+                }
 
                 var scaledRecipe = null;
                 if (global.ArcEngine && global.ArcEngine.PortionScaler && macros) {
@@ -368,6 +388,11 @@
                     carbs: slotTarget.carbs || slotTarget.carbTarget,
                     fat: slotTarget.fat || slotTarget.fatTarget
                   });
+                  if (V && V.validateServingScaling) {
+                    var scalingCheck = V.validateServingScaling(scaledRecipe);
+                    if (!scalingCheck.valid && T) T.logMessage('Serving scaling corrected');
+                    scaledRecipe.scalingValidation = scalingCheck;
+                  }
                 }
 
                 var finalResult = buildPipelineResult({
@@ -380,7 +405,8 @@
                   validationReport: validationReport,
                   adaptation: adaptation,
                   pricing: pricing,
-                  scaledRecipe: scaledRecipe
+                  scaledRecipe: scaledRecipe,
+                  nutritionConfidence: resolvedConfidence
                 });
                 if (T) T.logMessage('Final meal generation complete');
                 return finalResult;
@@ -470,8 +496,10 @@
       recipeSearch: parts.recipeSearch || null,
       recipe: parts.recipe || null,
       nutrition: parts.nutrition || null,
+      nutritionConfidence: parts.nutritionConfidence || (parts.nutrition && parts.nutrition.data && parts.nutrition.data.nutritionConfidence) || null,
       usdaValidation: parts.usdaValidation || null,
       validation: parts.validationReport || null,
+      sanity: parts.sanityReport || null,
       adaptation: parts.adaptation || null,
       pricing: parts.pricing || null,
       scaledRecipe: parts.scaledRecipe || null,
