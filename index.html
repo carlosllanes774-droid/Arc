@@ -2613,7 +2613,79 @@ button:not(:disabled):active,
 <script src="js/arc-frontend-contract.js"></script>
 <script>
   // ✅ MUST be inside script
-function parseJSON(raw) {
+function arcExtractJsonParsePosition(err, text) {
+  if (!err || !err.message || !text) return null;
+  var msg = String(err.message);
+  var m = msg.match(/position\s+(\d+)/i);
+  if (m) return parseInt(m[1], 10);
+  m = msg.match(/at\s+line\s+(\d+)\s+column\s+(\d+)/i);
+  if (m) {
+    var line = parseInt(m[1], 10);
+    var col = parseInt(m[2], 10);
+    var lines = String(text).split('\n');
+    var pos = 0;
+    for (var li = 0; li < line - 1 && li < lines.length; li++) pos += lines[li].length + 1;
+    return pos + Math.max(0, col - 1);
+  }
+  return null;
+}
+
+function arcLogJsonParseDiagnostics(raw, cleaned, err, context, aiMeta) {
+  context = context || 'parseJSON';
+  aiMeta = aiMeta || null;
+  var rawStr = raw == null ? '' : (typeof raw === 'string' ? raw : JSON.stringify(raw));
+  var cleanedStr = cleaned == null ? '' : String(cleaned);
+  var pos = arcExtractJsonParsePosition(err, cleanedStr);
+  if (pos == null && cleanedStr) {
+    for (var probe = 1; probe <= cleanedStr.length; probe++) {
+      try {
+        JSON.parse(cleanedStr.slice(0, probe));
+      } catch (probeErr) {
+        pos = arcExtractJsonParsePosition(probeErr, cleanedStr.slice(0, probe));
+        if (pos != null) break;
+      }
+    }
+  }
+  var before = pos != null ? cleanedStr.slice(Math.max(0, pos - 100), pos) : '';
+  var after = pos != null ? cleanedStr.slice(pos, pos + 100) : '';
+  var fragment = pos != null ? (before + '<PARSE FAILURE HERE>' + after) : '(position unknown)';
+  var finishReason = aiMeta && aiMeta.finish_reason ? String(aiMeta.finish_reason) : null;
+  var hitTokenLimit = finishReason === 'length' || !!(aiMeta && aiMeta.hit_token_limit);
+  var truncatedBySlice = !!(aiMeta && aiMeta.content_truncated_by_slice);
+  var truncated = hitTokenLimit || truncatedBySlice || (pos != null && pos >= cleanedStr.length - 2);
+  console.log('[ARC PIPELINE] JSON parse diagnostics', {
+    context: context,
+    error: err && err.message ? err.message : 'unknown_parse_error',
+    parseFailurePosition: pos,
+    totalResponseLength: cleanedStr.length,
+    rawLengthBeforeClean: rawStr.length,
+    truncated: truncated,
+    hitTokenLimit: hitTokenLimit,
+    truncatedByServerSlice: truncatedBySlice,
+    contentLengthBeforeSlice: aiMeta && aiMeta.content_length_before_slice != null ? aiMeta.content_length_before_slice : null,
+    maxTokensRequested: aiMeta && aiMeta.max_tokens_requested != null ? aiMeta.max_tokens_requested : null,
+    maxTokensApplied: aiMeta && aiMeta.max_tokens_applied != null ? aiMeta.max_tokens_applied : null,
+    finishReason: finishReason,
+    usage: aiMeta && aiMeta.usage ? aiMeta.usage : null
+  });
+  console.log('[ARC PIPELINE] FULL raw nested JSON before parseJSON', {
+    context: context,
+    length: rawStr.length,
+    full: rawStr
+  });
+  console.log('[ARC PIPELINE] Malformed JSON fragment', fragment);
+  if (pos != null) {
+    console.log('[ARC PIPELINE] Parse failure neighborhood', {
+      charsBefore: before.length,
+      charsAfter: after.length,
+      before: before,
+      after: after
+    });
+  }
+}
+
+function parseJSON(raw, opts) {
+  opts = opts || {};
   function preview(v) {
     if (v == null) return '';
     var txt = typeof v === 'string' ? v : JSON.stringify(v);
@@ -2672,6 +2744,7 @@ function parseJSON(raw) {
         candidate = unescaped;
         continue;
       }
+      arcLogJsonParseDiagnostics(raw, candidate, e, opts.context || 'parseJSON', opts.aiMeta || null);
       console.log('[ARC PIPELINE] JSON parse failed', {
         reason: e && e.message ? e.message : 'unknown_parse_error',
         rawPreview: rawPreview,
@@ -8432,6 +8505,7 @@ function callAI(system, userMsg, maxTok, callback, taskType) {
       return data;
     }
 
+    var aiMeta = (data && data._meta && typeof data._meta === 'object') ? data._meta : null;
     var text = extractAiResponseText(data).trim();
     if (text) {
       function hasWeekGenerationSchemaShape(v) {
@@ -8440,8 +8514,15 @@ function callAI(system, userMsg, maxTok, callback, taskType) {
       }
       var nestedWeek = null;
       if (data && data.content != null) {
-        console.log('[ARC PIPELINE] Nested week payload detected');
-        var nestedParsed = parseJSON(text);
+        console.log('[ARC PIPELINE] Nested week payload detected', {
+          textLength: text.length,
+          aiMeta: aiMeta
+        });
+        console.log('[ARC PIPELINE] FULL raw nested JSON before parseJSON (callAI)', {
+          length: text.length,
+          full: text
+        });
+        var nestedParsed = parseJSON(text, { context: 'nested_week_callAI', aiMeta: aiMeta });
         if (nestedParsed && hasWeekGenerationSchemaShape(nestedParsed)) {
           console.log('[ARC PIPELINE] Nested JSON parsed successfully');
           nestedWeek = nestedParsed;
@@ -8450,14 +8531,20 @@ function callAI(system, userMsg, maxTok, callback, taskType) {
       if (nestedWeek) {
         console.log('[ARC PIPELINE] Week-generation payload classified correctly');
         console.log('[ARC PIPELINE] Enhancement classification bypassed for valid week schema');
-        callback(null, nestedWeek, { source: 'week_generation', taskType: taskType });
+        callback(null, nestedWeek, { source: 'week_generation', taskType: taskType, aiMeta: aiMeta });
         return nestedWeek;
+      }
+      if (taskType === 'optimization' && text.charAt(0) === '{') {
+        console.log('[ARC PIPELINE] Nested week JSON parse failed — classifying as enhancement', {
+          textLength: text.length,
+          aiMeta: aiMeta
+        });
       }
       console.log('[ARC PIPELINE] Enhancement payload received', {
         taskType: taskType,
         hasContent: true
       });
-      callback(null, text, { source: 'enhancement', taskType: taskType });
+      callback(null, text, { source: 'enhancement', taskType: taskType, aiMeta: aiMeta });
       return text;
     }
 
@@ -10098,7 +10185,35 @@ function buildWeeklyPlanPrompt(intent) {
   u += '9. "ingQty" MUST list every item in "ing" with realistic amounts; prices in USD per single serving.\n';
   u += '10. Output ONLY the JSON object. Begin with { and end with }.';
 
-  return { sysMsg: sysMsg, userMsg: u, mt: mt, calT: calT, macros: macros, slots: slots, uniqueRecipeCount: uniqueRecipeCount };
+  var estCharsPerRecipe = 920;
+  var estPlanChars = 120 + (slots.length * DAYS.length * 12);
+  var estOutputChars = (uniqueRecipeCount * estCharsPerRecipe) + estPlanChars + 48;
+  var estOutputTokens = Math.ceil(estOutputChars / 3.8);
+  var requestedMaxTokens = 420;
+  var serverTaskCap = 220;
+  console.log('[ARC PIPELINE] Week prompt output budget estimate', {
+    uniqueRecipeCount: uniqueRecipeCount,
+    totalSlots: totalSlots,
+    stepsPerRecipe: '5-8',
+    ingredientsPerRecipe: 'up to 5-12',
+    estOutputChars: estOutputChars,
+    estOutputTokens: estOutputTokens,
+    requestedMaxTokens: requestedMaxTokens,
+    serverTaskCapOptimization: serverTaskCap,
+    likelyUnderProvisioned: estOutputTokens > serverTaskCap
+  });
+
+  return {
+    sysMsg: sysMsg,
+    userMsg: u,
+    mt: mt,
+    calT: calT,
+    macros: macros,
+    slots: slots,
+    uniqueRecipeCount: uniqueRecipeCount,
+    estOutputChars: estOutputChars,
+    estOutputTokens: estOutputTokens
+  };
 }
 
 function generateWeeklyPlan(intent) {
@@ -10139,7 +10254,13 @@ function generateWeeklyPlan(intent) {
       err = new Error('Enhancement payload cannot be used as canonical week schema');
     }
     if (!err && raw) {
-      parsed = parseJSON(raw);
+      var parseInput = (typeof raw === 'string') ? raw : JSON.stringify(raw);
+      if (payloadSource === 'week_generation' && typeof raw === 'object') {
+        parsed = raw;
+        console.log('[ARC TRACE] parseJSON skipped', { reason: 'week_generation_pre_parsed_object' });
+      } else {
+        parsed = parseJSON(parseInput, { context: 'applyWeek', aiMeta: meta && meta.aiMeta ? meta.aiMeta : null });
+      }
       if (parsed) {
         console.log('[ARC TRACE] parseJSON success', { parsedType: typeof parsed, isArray: Array.isArray(parsed) });
       } else {
