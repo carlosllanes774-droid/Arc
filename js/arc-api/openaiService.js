@@ -18,7 +18,7 @@
     performance: 'High output training: intra-workout fuel, elevated carbs around sessions, recovery emphasis.'
   };
   var OPENAI_OPTIMIZATION_TIMEOUT_MS = 7000;
-  var OPENAI_ENHANCEMENT_TIMEOUT_MS = 13000;
+  var OPENAI_ENHANCEMENT_TIMEOUT_MS = 12000;
   var OPENAI_CACHE_TTL_MS = 20 * 60 * 1000;
   var OPENAI_ENHANCEMENT_CACHE_TTL_MS = 60 * 60 * 1000;
   var inFlight = new Map();
