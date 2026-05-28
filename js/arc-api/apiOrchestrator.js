@@ -529,38 +529,53 @@
                   applied: false
                 };
                 if (T) T.logMessage('Enhancement running async');
-                S.openai.enhanceRecipePresentation({
-                  recipe: selectedRecipe,
-                  scenario: scenario,
-                  profile: { goal: profile.goal, budgetTier: profile.budgetTier }
-                }).then(function (enhancement) {
-                  if (enhancement && enhancement.status === 'ok' && enhancement.data) {
-                    selectedRecipe.title = enhancement.data.enhancedTitle || selectedRecipe.title;
-                    selectedRecipe.instructions = enhancement.data.enhancedInstructions || selectedRecipe.instructions;
-                    if (scaledRecipe && Array.isArray(scaledRecipe.instructions)) {
-                      scaledRecipe.instructions = selectedRecipe.instructions.slice();
+                try {
+                  Promise.resolve(S.openai.enhanceRecipePresentation({
+                    recipe: selectedRecipe,
+                    scenario: scenario,
+                    profile: { goal: profile.goal, budgetTier: profile.budgetTier }
+                  })).then(function (enhancement) {
+                    try {
+                      if (enhancement && enhancement.status === 'ok' && enhancement.data) {
+                        selectedRecipe.title = enhancement.data.enhancedTitle || selectedRecipe.title;
+                        selectedRecipe.instructions = enhancement.data.enhancedInstructions || selectedRecipe.instructions;
+                        if (scaledRecipe && Array.isArray(scaledRecipe.instructions)) {
+                          scaledRecipe.instructions = selectedRecipe.instructions.slice();
+                        }
+                        notifyEnhancement(profile, {
+                          recipeId: selectedRecipe.recipeId || selectedRecipe.id || null,
+                          title: selectedRecipe.title,
+                          instructions: selectedRecipe.instructions,
+                          enhanced: true,
+                          scenario: scenario
+                        });
+                        console.log('[ARC CURATION] Premium instruction enhancement complete');
+                        return;
+                      }
+                      if (T) T.logMessage('Enhancement exception isolated');
+                      if (T) T.logMessage('Base instructions preserved');
+                    } catch (_) {
+                      if (T) T.logMessage('Enhancement exception isolated');
+                      if (T) T.logMessage('Base instructions preserved');
                     }
-                    notifyEnhancement(profile, {
-                      recipeId: selectedRecipe.recipeId || selectedRecipe.id || null,
-                      title: selectedRecipe.title,
-                      instructions: selectedRecipe.instructions,
-                      enhanced: true,
-                      scenario: scenario
-                    });
-                    console.log('[ARC CURATION] Premium instruction enhancement complete');
-                    return;
-                  }
+                  }).catch(function (err) {
+                    if (T && err && (err.name === 'AbortError' || err.code === 'ABORT_ERR' || err.name === 'APIUserAbortError')) {
+                      T.logMessage('Enhancement timeout isolated');
+                    }
+                    if (T) T.logMessage('Enhancement exception isolated');
+                    if (T) T.logMessage('Base instructions preserved');
+                  });
+                } catch (_) {
+                  if (T) T.logMessage('Enhancement exception isolated');
                   if (T) T.logMessage('Base instructions preserved');
-                }).catch(function () {
-                  if (T) T.logMessage('Enhancement timeout isolated');
-                  if (T) T.logMessage('Base instructions preserved');
-                });
+                }
               } else {
-                if (T) T.logMessage('Instruction enhancement skipped');
+                if (T) T.logMessage('Enhancement skipped safely');
               }
 
               if (T) {
                 T.logMessage('Base recipe delivery complete');
+                T.logMessage('Base meal response preserved');
                 T.logMessage('Final meal generation complete');
               }
               return finalResult;
