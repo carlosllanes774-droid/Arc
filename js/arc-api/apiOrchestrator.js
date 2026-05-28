@@ -500,6 +500,7 @@
                 }
               }
 
+              selectedRecipe.instructions = Array.isArray(selectedRecipe.instructions) ? selectedRecipe.instructions.slice() : [];
               var finalResult = buildPipelineResult({
                 arcResult: arcResult,
                 scenario: scenario,
@@ -515,9 +516,19 @@
                 curatedRecipes: scoredRecipes,
                 rejectedRecipes: curatedResult.rejected
               });
+              finalResult.enhancement = {
+                status: 'skipped',
+                async: false,
+                applied: false
+              };
 
               if (S.openai && S.openai.enhanceRecipePresentation && Array.isArray(selectedRecipe.instructions) && selectedRecipe.instructions.length) {
-                if (T) T.logMessage('Instruction enhancement started');
+                finalResult.enhancement = {
+                  status: 'pending',
+                  async: true,
+                  applied: false
+                };
+                if (T) T.logMessage('Enhancement running async');
                 S.openai.enhanceRecipePresentation({
                   recipe: selectedRecipe,
                   scenario: scenario,
@@ -529,19 +540,27 @@
                     if (scaledRecipe && Array.isArray(scaledRecipe.instructions)) {
                       scaledRecipe.instructions = selectedRecipe.instructions.slice();
                     }
+                    notifyEnhancement(profile, {
+                      recipeId: selectedRecipe.recipeId || selectedRecipe.id || null,
+                      title: selectedRecipe.title,
+                      instructions: selectedRecipe.instructions,
+                      enhanced: true,
+                      scenario: scenario
+                    });
                     console.log('[ARC CURATION] Premium instruction enhancement complete');
                     return;
                   }
-                  if (T) T.logMessage('Instruction enhancement fallback used');
+                  if (T) T.logMessage('Base instructions preserved');
                 }).catch(function () {
-                  if (T) T.logMessage('Instruction enhancement fallback used');
+                  if (T) T.logMessage('Enhancement timeout isolated');
+                  if (T) T.logMessage('Base instructions preserved');
                 });
               } else {
                 if (T) T.logMessage('Instruction enhancement skipped');
               }
 
               if (T) {
-                T.logMessage('Base recipe delivery preserved');
+                T.logMessage('Base recipe delivery complete');
                 T.logMessage('Final meal generation complete');
               }
               return finalResult;
@@ -569,6 +588,18 @@
     if (profile.travelWeek) return 'travel';
     if (profile.budgetTier === 'low' || profile.budgetTier === 'Budget') return 'budget';
     return 'performance';
+  }
+
+  function notifyEnhancement(profile, payload) {
+    profile = profile || {};
+    if (typeof profile.onEnhancementUpdate === 'function') {
+      try { profile.onEnhancementUpdate(payload); } catch (_) {}
+    }
+    if (typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
+      try {
+        global.dispatchEvent(new global.CustomEvent('arc:recipe-enhancement', { detail: payload }));
+      } catch (_) {}
+    }
   }
 
   function pickOpenAiAdaptation(S, scenario, arcResult, profile) {
