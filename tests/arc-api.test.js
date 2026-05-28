@@ -582,10 +582,12 @@ describe('Arc Phase 2 adaptive pipeline (mocked APIs)', () => {
     assert.ok(elapsedMs < 120, 'pipeline should return before enhancement resolves');
 
     const started = logs.find((l) => l.includes('[ARC PIPELINE] Enhancement running async'));
-    const skipped = logs.find((l) => l.includes('[ARC PIPELINE] Instruction enhancement skipped'));
+    const skipped = logs.find((l) => l.includes('[ARC PIPELINE] Enhancement skipped safely'));
     const baseDelivered = logs.find((l) => l.includes('[ARC PIPELINE] Base recipe delivery complete'));
+    const basePreserved = logs.find((l) => l.includes('[ARC PIPELINE] Base meal response preserved'));
     assert.ok(started || skipped, 'expected enhancement started or skipped log');
     assert.ok(baseDelivered, 'expected base delivery complete log');
+    assert.ok(basePreserved, 'expected base response preserved log');
     if (started) {
       await new Promise((resolve) => setTimeout(resolve, 150));
       assert.ok(enhancementUpdate, 'expected async enhancement callback payload');
