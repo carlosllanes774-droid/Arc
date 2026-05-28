@@ -647,6 +647,32 @@ describe('Arc Phase 2 adaptive pipeline (mocked APIs)', () => {
     assert.equal(out.canonicalMeal, null);
     assert.equal(typeof out.schemaValidation.valid, 'boolean');
   });
+
+  test('recipe pipeline still selects recipe when USDA validation is unavailable', async () => {
+    const sandbox = loadEngineAndApi();
+    sandbox.ArcApi.Services.usda.validateMacros = async () => ({
+      provider: 'usda',
+      responsibility: 'macro_validation',
+      status: 'not_configured',
+      data: null
+    });
+
+    const out = await sandbox.ArcApi.Orchestrator.runAdaptiveMealPipeline({
+      goal: 'Maintain weight',
+      weight: 180,
+      height: 70,
+      age: 30,
+      gender: 'male',
+      activityLevel: 'Moderate',
+      mealQuery: 'high protein dinner'
+    });
+
+    assert.equal(out.error, null);
+    assert.ok(out.recipe);
+    assert.equal(out.usdaValidation.status, 'not_configured');
+    assert.equal(out.schema.owner, 'arc_backend');
+    assert.equal(out.schemaValidation.valid, true);
+  });
 });
 
 describe('Arc API pipeline tracing', () => {
