@@ -920,19 +920,48 @@ app.post("/api/ai", async (req, res) => {
           }, { signal: abortController.signal });
           return { ok: true, status: 200, completion: out };
         }).then((r) => r.completion);
+        const choice = completion.choices?.[0] || {};
+        const finishReason = choice.finish_reason || null;
+        const fullText = String(choice.message?.content || "");
+        const SLICE_CAP = 4000;
+        const slicedText = fullText.slice(0, SLICE_CAP);
         const payload = {
           content: [
             {
               type: "text",
-              text: String(completion.choices?.[0]?.message?.content || "").slice(0, 4000),
+              text: slicedText,
             },
           ],
+          _meta: {
+            finish_reason: finishReason,
+            hit_token_limit: finishReason === "length",
+            usage: completion.usage || null,
+            max_tokens_requested: Number.isFinite(requested) ? requested : null,
+            max_tokens_applied: maxTokens,
+            content_length_before_slice: fullText.length,
+            content_truncated_by_slice: fullText.length > SLICE_CAP,
+          },
         };
         const rawText = payload.content[0].text;
         arcPipelineLog("OpenAI text enhancement payload received", {
           taskType,
-          textLength: rawText.length
+          textLength: rawText.length,
+          finishReason,
+          hitTokenLimit: finishReason === "length",
+          contentLengthBeforeSlice: fullText.length,
+          contentTruncatedBySlice: fullText.length > SLICE_CAP,
+          maxTokensApplied: maxTokens,
+          maxTokensRequested: Number.isFinite(requested) ? requested : null,
+          usage: completion.usage || null
         });
+        if (Number.isFinite(requested) && requested > maxTokens) {
+          arcPipelineLog("OpenAI max_tokens capped by task limit", {
+            taskType,
+            requested,
+            applied: maxTokens,
+            taskCap
+          });
+        }
         let serializablePayload = payload;
         try {
           serializablePayload = JSON.parse(JSON.stringify(payload, function (_key, value) {
