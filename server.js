@@ -874,6 +874,8 @@ function buildOpenAiMessages(body) {
 function openAiTaskTokenLimit(taskType) {
   const task = String(taskType || "optimization").toLowerCase();
   if (task === "week_generation") return 6000;
+  if (task === "week_recipe_library") return 2000;
+  if (task === "week_meal_assignment") return 1200;
   if (task === "instruction_enhancement") return 250;
   if (task === "tagging" || task === "classification" || task === "optimization_classification") return 90;
   return 220;
@@ -881,7 +883,9 @@ function openAiTaskTokenLimit(taskType) {
 
 function openAiTaskTimeoutMs(taskType) {
   const task = String(taskType || "optimization").toLowerCase();
-  if (task === "week_generation") return OPENAI_WEEK_GENERATION_TIMEOUT_MS;
+  if (task === "week_generation" || task === "week_recipe_library" || task === "week_meal_assignment") {
+    return OPENAI_WEEK_GENERATION_TIMEOUT_MS;
+  }
   return OPENAI_TIMEOUT_MS;
 }
 
