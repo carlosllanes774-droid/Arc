@@ -2798,6 +2798,168 @@ function arcEnsureRecipesCanonicalBeforeRender() {
   }
 }
 
+function normalizeMealPlanDayKeys(mealPlan) {
+  if (!isPlainObject(mealPlan)) return {};
+  var alias = {
+    monday: 'Mon', mon: 'Mon',
+    tuesday: 'Tue', tue: 'Tue',
+    wednesday: 'Wed', wed: 'Wed',
+    thursday: 'Thu', thu: 'Thu',
+    friday: 'Fri', fri: 'Fri',
+    saturday: 'Sat', sat: 'Sat',
+    sunday: 'Sun', sun: 'Sun'
+  };
+  var out = {};
+  for (var k in mealPlan) {
+    if (!Object.prototype.hasOwnProperty.call(mealPlan, k)) continue;
+    var dayKey = alias[String(k).trim().toLowerCase()] || k;
+    if (DAYS.indexOf(dayKey) !== -1) out[dayKey] = mealPlan[k];
+  }
+  return out;
+}
+
+function computeWeekCoreLibraryTargets(slots) {
+  slots = slots || getSlots();
+  var perCat = {};
+  for (var i = 0; i < slots.length; i++) {
+    var s = String(slots[i]).toLowerCase();
+    if (/breakfast/.test(s)) perCat.Breakfast = 2;
+    else if (/lunch/.test(s)) perCat.Lunch = 2;
+    else if (/dinner/.test(s)) perCat.Dinner = 2;
+    else if (/snack/.test(s)) perCat.Snack = 2;
+  }
+  var keys = Object.keys(perCat);
+  if (!keys.length) perCat.Lunch = 2;
+  var total = 0;
+  keys.forEach(function (k) { total += perCat[k]; });
+  if (total < 4) {
+    keys.forEach(function (k) { perCat[k] = Math.max(perCat[k], 2); });
+    total = 0;
+    keys.forEach(function (k) { total += perCat[k]; });
+  }
+  if (total > 8) {
+    keys.forEach(function (k) { perCat[k] = 1; });
+    total = keys.length;
+  }
+  return { perCat: perCat, total: total };
+}
+
+function appendWeekUserContextBlock(u, intent, ne) {
+  var calT = ne.calT;
+  var macros = ne.macros;
+  var mt = ne.mealTargets;
+  var slots = ne.slots;
+  var slotList = slots.join(', ');
+  var restr = (UP.restrictions || []).filter(function (r) { return r !== 'None'; }).join(', ') || 'none';
+  var cuis = intent.cuisines && intent.cuisines.length
+    ? intent.cuisines.join(', ')
+    : 'varied international';
+  var weeklyBudget = normalizeBudgetValue((intent && intent.weeklyBudget) || UP.weeklyBudget || UP.budget);
+  var budgetNote = {'Budget':'$3-7/serving','Moderate':'$5-12/serving','Flexible':'any price range'}[weeklyBudget] || 'moderate';
+  var skillNote = {'Beginner':'Use max 5 ingredients, simple techniques','Home cook':'Standard home cooking','Confident chef':'Any technique'}[UP.skill] || 'standard techniques';
+  var styleMeta = BW_STYLE_META[intent.style] || BW_STYLE_META.balanced;
+  var focusMeta = BW_FOCUS_META[intent.focus] || BW_FOCUS_META.balanced;
+
+  u += 'User: ' + UP.name + '\n';
+  u += 'Profile: ' + UP.height + ', ' + UP.weight + ' lbs, ' + UP.activity + ', goal ' + UP.goal + '.\n';
+  u += 'Skill: ' + UP.skill + ' — ' + skillNote + '\n';
+  u += 'Weekly budget: ' + weeklyBudget + ' (' + budgetNote + ')\n';
+  u += 'Cuisines: ' + cuis + '\n';
+  u += 'Diet: ' + restr + '\n';
+  u += buildMandatoryDietPrompt(UP.restrictions, UP.dislikes);
+  u += buildFeedbackPromptBlock();
+  u += buildAdaptiveBehaviorPromptBlock();
+  u += formatNutritionPromptBlock(mt, calT, macros);
+  u += buildArcGoalNutritionDirective();
+  u += '\nMEAL SLOTS per day: ' + slotList + '\n';
+  u += 'STYLE — ' + styleMeta.label + ': ' + (styleMeta.directive || '') + '\n';
+  u += 'FOCUS — ' + focusMeta.label + ': ' + (focusMeta.directive || '') + '\n';
+  u += '\nARC STRATEGY: Optimize for adherence, grocery simplicity, shared ingredients, prep efficiency, and nutrition targets — NOT meal novelty. Repeats are intentional.\n';
+  u += 'Arc Engine will verify macros (USDA), estimate grocery cost (Kroger), and apply portion scaling per slot — do not output portion multipliers.\n';
+  return u;
+}
+
+function buildWeekRecipeLibraryPrompt(intent) {
+  var ne = buildNutritionEngine();
+  var targets = computeWeekCoreLibraryTargets(ne.slots);
+  var perCat = targets.perCat;
+  var catLines = Object.keys(perCat).map(function (cat) {
+    return '- ' + cat + ': exactly ' + perCat[cat] + ' core recipes';
+  }).join('\n');
+
+  var sysMsg = 'You are an expert nutritionist. Respond with ONLY valid JSON. No markdown. Start with { end with }. ' +
+    'Build a SMALL core recipe library (4-8 recipes total) for one week. ' +
+    'Each recipe: name, cat, cal, p, c, f, servings, ing (max 6 items), optional ingQty, price (USD/serving). ' +
+    'Do NOT include steps or long instructions. Do NOT assign days. ' +
+    'Macros must align with ingredients. Comply with MANDATORY DIETARY COMPLIANCE.';
+
+  var u = 'STEP 1 — CORE RECIPE LIBRARY ONLY.\n';
+  u = appendWeekUserContextBlock(u, intent, ne);
+  u += '\nGenerate exactly these category counts:\n' + catLines + '\n';
+  u += 'Total recipes: ' + targets.total + ' (between 4 and 8).\n';
+  u += 'Share ingredients across recipes where possible (fewer grocery items).\n';
+  u += 'Each recipe servings = expected weekly uses (typically 2-4 for batch-friendly meals).\n\n';
+  u += 'OUTPUT JSON ONLY:\n';
+  u += '{"recipes":[{"id":1,"name":"Italian Omelette","cat":"Breakfast","cal":380,"p":28,"c":12,"f":22,"servings":2,"ing":["Eggs","Spinach","Cheese"],"ingQty":{"Eggs":"3 large"},"price":4.5}]}\n';
+
+  console.log('[ARC PIPELINE] Week library prompt estimate', {
+    taskType: 'week_recipe_library',
+    recipeCount: targets.total,
+    categories: perCat
+  });
+
+  return {
+    sysMsg: sysMsg,
+    userMsg: u,
+    mt: ne.mealTargets,
+    calT: ne.calT,
+    macros: ne.macros,
+    slots: ne.slots,
+    libraryTargets: targets
+  };
+}
+
+function buildWeekMealAssignmentPrompt(intent, libraryRecipes) {
+  var ne = buildNutritionEngine();
+  var slots = ne.slots;
+  var totalSlots = DAYS.length * slots.length;
+  var catalog = (libraryRecipes || []).map(function (r) {
+    return '"' + String(r.name || '').replace(/"/g, '') + '" (' + (r.cat || 'Lunch') + ', id ' + r.id + ')';
+  }).join('\n');
+
+  var sysMsg = 'You are an Arc meal-planning strategist. Respond with ONLY valid JSON. No markdown. ' +
+    'Assign recipes from the library to every day/slot. Use recipe NAMES as slot values (strings). ' +
+    'Repeat recipes freely — prioritize adherence, grocery overlap, prep efficiency, and daily calorie target — NOT novelty.';
+
+  var u = 'STEP 2 — WEEKLY ASSIGNMENT ONLY (use library below).\n';
+  u = appendWeekUserContextBlock(u, intent, ne);
+  u += '\nRECIPE LIBRARY (use only these names):\n' + catalog + '\n\n';
+  u += 'Fill ALL ' + totalSlots + ' slots across Mon..Sun.\n';
+  u += 'Daily calories ~' + ne.calT + ' kcal (±200). Match slot category to recipe cat.\n';
+  u += 'OUTPUT JSON ONLY:\n';
+  u += '{"meal_plan":{"Mon":{' + slots.map(function (s) { return '"' + s + '":"Recipe Name"'; }).join(',') + '},"Tue":{...},"Wed":{...},"Thu":{...},"Fri":{...},"Sat":{...},"Sun":{...}}}\n';
+
+  console.log('[ARC PIPELINE] Week assignment prompt estimate', {
+    taskType: 'week_meal_assignment',
+    librarySize: libraryRecipes.length,
+    totalSlots: totalSlots
+  });
+
+  return { sysMsg: sysMsg, userMsg: u, mt: ne.mealTargets, slots: slots, calT: ne.calT, macros: ne.macros };
+}
+
+function mergeWeekLibraryAndAssignment(libraryRecipes, assignmentParsed, slots) {
+  if (!Array.isArray(libraryRecipes) || !libraryRecipes.length) return null;
+  var mealPlan = null;
+  if (assignmentParsed && isPlainObject(assignmentParsed.meal_plan)) {
+    mealPlan = normalizeMealPlanDayKeys(assignmentParsed.meal_plan);
+  } else if (assignmentParsed && isPlainObject(assignmentParsed.plan)) {
+    mealPlan = assignmentParsed.plan;
+  }
+  if (!mealPlan || !Object.keys(mealPlan).length) return null;
+  return { recipes: libraryRecipes, plan: mealPlan };
+}
+
 function normalizeWeekPayloadContract(parsed, slots) {
   if (!isPlainObject(parsed)) return null;
   var src = isPlainObject(parsed.week) ? parsed.week : (isPlainObject(parsed.data) ? parsed.data : parsed);
@@ -2831,10 +2993,18 @@ function normalizeWeekPayloadContract(parsed, slots) {
     idSet[r.id] = true;
   });
 
+  var nameToId = {};
+  recipes.forEach(function (r) {
+    if (r && r.name) nameToId[String(r.name).trim().toLowerCase()] = r.id;
+  });
+
   var fallbackId = recipes[0] ? recipes[0].id : 1;
   var dayNames = DAYS.slice();
   var normalizedPlan = {};
   var inputPlan = isPlainObject(src.plan) ? src.plan : {};
+  if (!Object.keys(inputPlan).length && isPlainObject(src.meal_plan)) {
+    inputPlan = normalizeMealPlanDayKeys(src.meal_plan);
+  }
   var usedFallback = false;
   for (var d = 0; d < dayNames.length; d++) {
     var day = dayNames[d];
@@ -2843,7 +3013,12 @@ function normalizeWeekPayloadContract(parsed, slots) {
     var activeSlots = Array.isArray(slots) && slots.length ? slots : SLOT_SETS[String(UP.meals)] || SLOT_SETS['3'];
     for (var s = 0; s < activeSlots.length; s++) {
       var slot = activeSlots[s];
-      var rid = parseInt(dayPlan[slot], 10);
+      var slotVal = dayPlan[slot];
+      var rid = parseInt(slotVal, 10);
+      if ((!rid || !idSet[rid]) && typeof slotVal === 'string') {
+        var nameKey = String(slotVal).trim().toLowerCase();
+        if (nameToId[nameKey]) rid = nameToId[nameKey];
+      }
       if (!rid || !idSet[rid]) {
         usedFallback = true;
         var preferred = recipes.find(function (r) {
@@ -8512,29 +8687,46 @@ function callAI(system, userMsg, maxTok, callback, taskType) {
         if (!isPlainObject(v)) return false;
         return Array.isArray(v.recipes) && isPlainObject(v.plan);
       }
+      function hasWeekRecipeLibraryShape(v) {
+        if (!isPlainObject(v)) return false;
+        return Array.isArray(v.recipes) && v.recipes.length >= 1;
+      }
+      function hasWeekMealAssignmentShape(v) {
+        if (!isPlainObject(v)) return false;
+        return isPlainObject(v.meal_plan) || isPlainObject(v.plan);
+      }
       var nestedWeek = null;
+      var nestedSource = null;
       if (data && data.content != null) {
         console.log('[ARC PIPELINE] Nested week payload detected', {
           textLength: text.length,
-          aiMeta: aiMeta
+          aiMeta: aiMeta,
+          taskType: taskType
         });
         console.log('[ARC PIPELINE] FULL raw nested JSON before parseJSON (callAI)', {
           length: text.length,
           full: text
         });
         var nestedParsed = parseJSON(text, { context: 'nested_week_callAI', aiMeta: aiMeta });
-        if (nestedParsed && hasWeekGenerationSchemaShape(nestedParsed)) {
-          console.log('[ARC PIPELINE] Nested JSON parsed successfully');
+        if (nestedParsed && taskType === 'week_recipe_library' && hasWeekRecipeLibraryShape(nestedParsed)) {
           nestedWeek = nestedParsed;
+          nestedSource = 'week_recipe_library';
+        } else if (nestedParsed && taskType === 'week_meal_assignment' && hasWeekMealAssignmentShape(nestedParsed)) {
+          nestedWeek = nestedParsed;
+          nestedSource = 'week_meal_assignment';
+        } else if (nestedParsed && hasWeekGenerationSchemaShape(nestedParsed)) {
+          nestedWeek = nestedParsed;
+          nestedSource = 'week_generation';
         }
+        if (nestedWeek) console.log('[ARC PIPELINE] Nested JSON parsed successfully', { source: nestedSource });
       }
-      if (nestedWeek) {
-        console.log('[ARC PIPELINE] Week-generation payload classified correctly');
+      if (nestedWeek && nestedSource) {
+        console.log('[ARC PIPELINE] Week payload classified correctly', { source: nestedSource });
         console.log('[ARC PIPELINE] Enhancement classification bypassed for valid week schema');
-        callback(null, nestedWeek, { source: 'week_generation', taskType: taskType, aiMeta: aiMeta });
+        callback(null, nestedWeek, { source: nestedSource, taskType: taskType, aiMeta: aiMeta });
         return nestedWeek;
       }
-      if ((taskType === 'optimization' || taskType === 'week_generation') && text.charAt(0) === '{') {
+      if ((taskType === 'optimization' || taskType === 'week_generation' || taskType === 'week_recipe_library' || taskType === 'week_meal_assignment') && text.charAt(0) === '{') {
         console.log('[ARC PIPELINE] Nested week JSON parse failed — classifying as enhancement', {
           textLength: text.length,
           aiMeta: aiMeta
@@ -10091,132 +10283,6 @@ function planSlotsByStyle(style) {
   return DAYS.length * slots.length;
 }
 
-function buildWeeklyPlanPrompt(intent) {
-  var ne         = buildNutritionEngine();
-  var calT       = ne.calT;
-  var macros     = ne.macros;
-  var mt         = ne.mealTargets;
-  var slots      = ne.slots;
-  var slotList   = slots.join(', ');
-  var totalSlots = DAYS.length * slots.length;
-
-  var restr      = (UP.restrictions || []).filter(function(r) { return r !== 'None'; }).join(', ') || 'none';
-  var cuis       = intent.cuisines && intent.cuisines.length
-    ? intent.cuisines.join(', ')
-    : 'varied international';
-  var weeklyBudget = normalizeBudgetValue((intent && intent.weeklyBudget) || UP.weeklyBudget || UP.budget);
-  var budgetNote = {'Budget':'$3-7/serving','Moderate':'$5-12/serving','Flexible':'any price range'}[weeklyBudget] || 'moderate';
-  var skillNote  = {'Beginner':'Use max 5 ingredients, simple techniques (no sautéing, braising, or multi-step processes)','Home cook':'Standard home cooking techniques','Confident chef':'Any technique including advanced methods'}[UP.skill] || 'standard techniques';
-
-  var styleMeta  = BW_STYLE_META[intent.style] || BW_STYLE_META.fresh;
-  var focusMeta  = BW_FOCUS_META[intent.focus] || BW_FOCUS_META.balanced;
-
-  // Per-style directive
-  var styleDirective;
-  var uniqueRecipeCount;
-  if (intent.style === 'fresh') {
-    uniqueRecipeCount = totalSlots;
-    styleDirective = 'FRESH-DAILY MODE: Generate ' + totalSlots + ' UNIQUE recipes — one for every slot in the week. servings = 1 for every recipe. Distribute cuisines across the week so flavors rotate.';
-  } else if (intent.style === 'prep') {
-    var pUnique = Math.max(3, Math.min(5, Math.ceil(totalSlots / 5)));
-    uniqueRecipeCount = pUnique;
-    styleDirective = 'MEAL-PREP MODE: Generate ONLY ' + pUnique + ' unique recipes for the entire week. Each recipe MUST repeat across multiple slots — design each to be batched. Set each recipe\'s "servings" to the exact count of slots it fills (typically 3-5). Pick recipes whose ingredients overlap heavily so the shopping list is small. Group repeats on consecutive days where possible so leftovers stay fresh.';
-  } else if (intent.style === 'balanced') {
-    var bUnique = Math.round(totalSlots * 0.66);
-    bUnique = Math.max(6, Math.min(totalSlots - 1, bUnique));
-    uniqueRecipeCount = bUnique;
-    styleDirective = 'BALANCED MODE: Generate ~' + bUnique + ' unique recipes for ' + totalSlots + ' slots. Most meals are fresh, but repeat several recipes 2–3 times (especially lunch) on consecutive days when it keeps flavors coherent. Heavy ingredient overlap is encouraged. Set each recipe\'s "servings" to the number of times it appears in the plan grid.';
-  } else {
-    var fUnique = Math.max(5, Math.ceil(totalSlots * 0.4));
-    uniqueRecipeCount = fUnique;
-    styleDirective = 'FAMILY-STYLE MODE: Generate ' + fUnique + ' unique recipes. Dinners should be shareable; the next day\'s lunch can reuse the leftover dinner. Set servings = 3 on dinners that span two slots.';
-  }
-
-  var sysMsg = 'You are an expert nutritionist and chef. You MUST respond with ONLY a valid JSON object. ' +
-               'No markdown, no code fences, no explanation before or after. ' +
-               'Start your response with { and end with }. ' +
-               'You will design a WEEK PLAN — a set of recipes AND the day×slot grid that uses them. ' +
-               'Every recipe MUST comply 100% with the MANDATORY DIETARY COMPLIANCE block; never relax it. ' +
-               'Every recipe\'s cal/p/c/f MUST fall within ±10% of its category target. ' +
-               'CRITICAL: The macros (cal, p, c, f) MUST mathematically align with the ingredients provided. 1g of protein = 4 cal, 1g carb = 4 cal, 1g fat = 9 cal. Do not hallucinate macros that contradict the ingredient list.';
-
-  var u = '';
-  u += 'Build a complete 7-day meal plan for this user.\n';
-  u += 'Name: ' + UP.name + '\n';
-  u += 'Body profile: ' + UP.height + ' (' + Math.round(UP.heightCm || 0) + ' cm), ' + UP.weight + ' lbs, ' + UP.activity + ' activity, goal: ' + UP.goal + '.\n';
-  u += 'Cooking skill: ' + UP.skill + ' — ' + skillNote + '\n';
-  u += 'Weekly budget: ' + weeklyBudget + ' (' + budgetNote + ')\n';
-  u += 'Cuisines requested this week: ' + cuis + '\n';
-  u += 'Diet tags (informational): ' + restr + '\n';
-  u += buildMandatoryDietPrompt(UP.restrictions, UP.dislikes);
-  u += buildFeedbackPromptBlock();
-  u += buildAdaptiveBehaviorPromptBlock();
-  u += formatNutritionPromptBlock(mt, calT, macros);
-  u += buildArcGoalNutritionDirective();
-
-  var weekAdapt = getBehaviorAdaptations();
-  if (weekAdapt && weekAdapt.budgetTier === 'tighter' && weeklyBudget !== 'Budget') {
-    u += 'Observed habit: value-focused meals land better—favor Budget-tier pricing ($3–7/serving) where compatible.\n';
-  }
-  if (weekAdapt && weekAdapt.mealTiming === 'flex_and_later') {
-    u += 'Observed habit: meals often land later—make lunch/dinner satisfying; keep breakfasts optional or very fast.\n';
-  }
-
-  u += '\nMEAL SLOTS each day: ' + slotList + ' (' + slots.length + ' per day, ' + totalSlots + ' total)\n';
-
-  u += '\nTHIS WEEK\'S COOKING STYLE — ' + styleMeta.label + ':\n' + styleDirective + '\n';
-  u += '\nTHIS WEEK\'S FOCUS — ' + focusMeta.label + ':\n' + focusMeta.directive + '\n';
-
-  u += '\nOUTPUT JSON SHAPE:\n';
-  u += '{\n';
-  u += '  "recipes": [ {"id":1,"name":"...","cal":420,"p":32,"c":38,"f":14,"time":"20 min","difficulty":"Easy","price":7.50,"cat":"Lunch","servings":1,"tags":["High protein"],"ing":["Chicken breast","Rice","Broccoli"],"ingQty":{"Chicken breast":"6 oz","Rice":"1/2 cup","Broccoli":"1 cup"},"steps":[{"phase":"Prep","instruction":"Slice chicken and chop broccoli."},{"phase":"Cook","instruction":"Pan-sear chicken until 165F internal; steam rice and broccoli."},{"phase":"Serve","instruction":"Plate with a squeeze of lemon."}]} ],\n';
-  u += '  "plan":   { "Mon":{' + slots.map(function(s){ return '"' + s + '":1'; }).join(',') + '}, "Tue":{...}, "Wed":{...}, "Thu":{...}, "Fri":{...}, "Sat":{...}, "Sun":{...} }\n';
-  u += '}\n\n';
-
-  u += 'STRICT RULES:\n';
-  u += '1. The "recipes" array MUST contain exactly ' + uniqueRecipeCount + ' UNIQUE recipes (no two with the same name).\n';
-  u += '2. The "plan" object MUST cover ALL 7 days (Mon..Sun) with ALL ' + slots.length + ' slots filled, total ' + totalSlots + ' assignments.\n';
-  u += '3. Every plan slot value MUST be the integer id of a recipe in the recipes array.\n';
-  u += '4. Slot-category match: Breakfast slot → cat "Breakfast"; Lunch → "Lunch"; Dinner → "Dinner"; *snack → "Snack".\n';
-  u += '5. Daily total calories across the slots MUST be close to ' + calT + ' kcal (±200).\n';
-  u += '6. Every recipe MUST satisfy the MANDATORY DIETARY COMPLIANCE block.\n';
-  u += '7. "servings" on each recipe MUST equal the number of times that recipe appears in the plan grid (so meal prep maths out for shopping). For fresh-daily mode, every recipe appears once and servings=1.\n';
-  u += '8. "steps" MUST be an array of 5-8 objects: {"phase":"Prep"|"Cook"|"Serve","instruction":"..."}; each instruction must be specific and actionable.\n';
-  u += '9. "ingQty" MUST list every item in "ing" with realistic amounts; prices in USD per single serving.\n';
-  u += '10. Output ONLY the JSON object. Begin with { and end with }.';
-
-  var estCharsPerRecipe = 920;
-  var estPlanChars = 120 + (slots.length * DAYS.length * 12);
-  var estOutputChars = (uniqueRecipeCount * estCharsPerRecipe) + estPlanChars + 48;
-  var estOutputTokens = Math.ceil(estOutputChars / 3.8);
-  var requestedMaxTokens = 6000;
-  var serverTaskCap = 6000;
-  console.log('[ARC PIPELINE] Week prompt output budget estimate', {
-    taskType: 'week_generation',
-    uniqueRecipeCount: uniqueRecipeCount,
-    totalSlots: totalSlots,
-    stepsPerRecipe: '5-8',
-    ingredientsPerRecipe: 'up to 5-12',
-    estOutputChars: estOutputChars,
-    estOutputTokens: estOutputTokens,
-    requestedMaxTokens: requestedMaxTokens,
-    serverTaskCapWeekGeneration: serverTaskCap,
-    likelyUnderProvisioned: estOutputTokens > serverTaskCap
-  });
-
-  return {
-    sysMsg: sysMsg,
-    userMsg: u,
-    mt: mt,
-    calT: calT,
-    macros: macros,
-    slots: slots,
-    uniqueRecipeCount: uniqueRecipeCount,
-    estOutputChars: estOutputChars,
-    estOutputTokens: estOutputTokens
-  };
-}
-
 function generateWeeklyPlan(intent) {
   var ok = validateProfileForGeneration();
   if (!ok.ok) {
@@ -10230,9 +10296,56 @@ function generateWeeklyPlan(intent) {
 
   if (intent && intent.style === 'mixed') intent.style = 'balanced';
 
-  var built = buildWeeklyPlanPrompt(intent);
-  nutriDebug('Final week-direct AI user message (' + built.userMsg.length + ' chars)', built.userMsg.length > 20000 ? built.userMsg.slice(0, 20000) + '\n… [truncated for console]' : built.userMsg);
-  setGenPhase('balancing');
+  var built = buildWeekRecipeLibraryPrompt(intent);
+  var weekLibraryRecipes = null;
+  nutriDebug('Week step 1 library prompt (' + built.userMsg.length + ' chars)', built.userMsg.length > 12000 ? built.userMsg.slice(0, 12000) + '\n…' : built.userMsg);
+  setGenPhase('recipes');
+
+  function failWeekGeneration(detail, rawPreview) {
+    if (myGen !== recipeGenId) return;
+    stopGenLoadingUI();
+    nutriDebug('Week generation failed', { detail: detail, rawPreview: rawPreview || null });
+    tab('plan');
+    showToast(ARC_COPY.toast.weekBuildAdjusted);
+  }
+
+  function parseAiObject(err, raw, meta) {
+    if (err) return { err: err, parsed: null };
+    var payloadSource = (meta && meta.source) ? String(meta.source) : 'unknown';
+    if (payloadSource === 'enhancement') {
+      return { err: new Error('Enhancement payload cannot be used as week schema'), parsed: null };
+    }
+    var parsed = null;
+    if (raw) {
+      if (typeof raw === 'object') parsed = raw;
+      else parsed = parseJSON(String(raw), { context: 'week_gen', aiMeta: meta && meta.aiMeta ? meta.aiMeta : null });
+    }
+    return { err: null, parsed: parsed, payloadSource: payloadSource };
+  }
+
+  function applyLibrary(err, raw, meta) {
+    if (myGen !== recipeGenId) return;
+    var libResult = parseAiObject(err, raw, meta);
+    if (libResult.err || !libResult.parsed || !Array.isArray(libResult.parsed.recipes) || !libResult.parsed.recipes.length) {
+      failWeekGeneration(libResult.err ? (libResult.err.message || String(libResult.err)) : 'Recipe library missing', raw);
+      return;
+    }
+    weekLibraryRecipes = libResult.parsed.recipes.map(function (r, i) {
+      r = arcAdaptRecipeForRender(isPlainObject(r) ? r : {}, { log: false });
+      r.id = safeNum(r.id, i + 1);
+      if (!r.name) r.name = 'Recipe ' + (i + 1);
+      return r;
+    });
+    if (weekLibraryRecipes.length < 4) {
+      failWeekGeneration('Core library must include at least 4 recipes', raw);
+      return;
+    }
+    console.log('[ARC PIPELINE] Week recipe library ready', { count: weekLibraryRecipes.length });
+    setGenPhase('balancing');
+    var assignBuilt = buildWeekMealAssignmentPrompt(intent, weekLibraryRecipes);
+    nutriDebug('Week step 2 assignment prompt (' + assignBuilt.userMsg.length + ' chars)', assignBuilt.userMsg);
+    callAIWithRetry(assignBuilt.sysMsg, assignBuilt.userMsg, 1200, applyWeek, 2, 'week_meal_assignment');
+  }
 
   function applyWeek(err, raw, meta) {
     console.log('[ARC TRACE] applyWeek entered', { myGen: myGen, recipeGenId: recipeGenId, hasErr: !!err, hasRaw: !!raw });
@@ -10247,30 +10360,17 @@ function generateWeeklyPlan(intent) {
       rawPreview: raw ? String(raw).slice(0, 500) : null
     });
 
-    var parsed = null;
-    var payloadSource = (meta && meta.source) ? String(meta.source) : 'unknown';
-    console.log('[ARC PIPELINE] Parser source check', { expected: 'canonical_backend', received: payloadSource });
-    if (!err && payloadSource === 'enhancement') {
-      console.log('[ARC TRACE] early return', { reason: 'enhancement_guard_triggered', payloadSource: payloadSource, expected: 'canonical_backend' });
-      err = new Error('Enhancement payload cannot be used as canonical week schema');
-    }
-    if (!err && raw) {
-      var parseInput = (typeof raw === 'string') ? raw : JSON.stringify(raw);
-      if (payloadSource === 'week_generation' && typeof raw === 'object') {
-        parsed = raw;
-        console.log('[ARC TRACE] parseJSON skipped', { reason: 'week_generation_pre_parsed_object' });
-      } else {
-        parsed = parseJSON(parseInput, { context: 'applyWeek', aiMeta: meta && meta.aiMeta ? meta.aiMeta : null });
-      }
-      if (parsed) {
-        console.log('[ARC TRACE] parseJSON success', { parsedType: typeof parsed, isArray: Array.isArray(parsed) });
-      } else {
-        console.log('[ARC TRACE] parseJSON failed', { reason: 'parser_returned_null', rawType: typeof raw });
-      }
-    } else if (!err && !raw) {
-      console.log('[ARC TRACE] parseJSON skipped', { reason: 'empty_raw_body' });
-    } else if (err) {
-      console.log('[ARC TRACE] parseJSON skipped', { reason: 'err_before_parse', errMessage: err.message || String(err) });
+    var assignResult = parseAiObject(err, raw, meta);
+    err = assignResult.err;
+    var parsed = assignResult.parsed;
+    var payloadSource = assignResult.payloadSource || 'unknown';
+    console.log('[ARC PIPELINE] Parser source check', { expected: 'week_meal_assignment', received: payloadSource });
+    if (!err && weekLibraryRecipes && parsed) {
+      parsed = mergeWeekLibraryAndAssignment(weekLibraryRecipes, parsed, built.slots);
+      console.log('[ARC PIPELINE] Week library + assignment merged', {
+        recipes: parsed && parsed.recipes ? parsed.recipes.length : 0,
+        hasPlan: !!(parsed && parsed.plan)
+      });
     }
     var normalized = normalizeWeekPayloadContract(parsed, built.slots);
     if (normalized) {
@@ -10436,7 +10536,7 @@ function generateWeeklyPlan(intent) {
     }
   }
 
-  callAIWithRetry(built.sysMsg, built.userMsg, 6000, applyWeek, 2, 'week_generation');
+  callAIWithRetry(built.sysMsg, built.userMsg, 2000, applyLibrary, 2, 'week_recipe_library');
 }
 
 /* ── Built-for header on the planner ── */
