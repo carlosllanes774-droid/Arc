@@ -8455,16 +8455,38 @@ function callAI(system, userMsg, maxTok, callback, taskType) {
       callback(new Error(typeof err === 'string' ? err : (err.message || 'Request could not be completed')), null);
       return;
     }
-
-    var text = extractAiResponseText(data).trim();
-
-    if (!text) {
-      callback(new Error('No usable reply from the recipe service. Try again in a moment.'), null);
-      return;
+    function isPlainObject(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
+    function hasCanonicalSchemaShape(v) {
+      if (!isPlainObject(v)) return false;
+      if (v.schema && isPlainObject(v.schema) && String(v.schema.owner || '').toLowerCase() === 'arc_backend') return true;
+      if (isPlainObject(v.canonicalMeal) || Array.isArray(v.meals)) return true;
+      if (Array.isArray(v.recipes) || isPlainObject(v.plan) || isPlainObject(v.meal_plan)) return true;
+      if (isPlainObject(v.week) || isPlainObject(v.data)) return true;
+      return false;
     }
 
-    callback(null, text);
-    return text;
+    var canonicalPayload = hasCanonicalSchemaShape(data);
+    if (canonicalPayload) {
+      console.log('[ARC PIPELINE] Canonical backend response received', {
+        taskType: taskType,
+        keys: Object.keys(data || {})
+      });
+      callback(null, data, { source: 'canonical_backend', taskType: taskType });
+      return data;
+    }
+
+    var text = extractAiResponseText(data).trim();
+    if (text) {
+      console.log('[ARC PIPELINE] Enhancement payload received', {
+        taskType: taskType,
+        hasContent: true
+      });
+      callback(null, text, { source: 'enhancement', taskType: taskType });
+      return text;
+    }
+
+    callback(new Error('No usable reply from the recipe service. Try again in a moment.'), null);
+    return;
   })
   .catch(function(err) {
     callback(err, null);
@@ -8478,8 +8500,8 @@ function callAI(system, userMsg, maxTok, callback, taskType) {
 
 function callAIWithRetry(system, userMsg, maxTok, callback, retries, taskType) {
   retries = (retries == null) ? 2 : retries;
-  callAI(system, userMsg, maxTok, function(err, raw) {
-    if (!err || retries <= 0) { callback(err, raw); return; }
+  callAI(system, userMsg, maxTok, function(err, raw, meta) {
+    if (!err || retries <= 0) { callback(err, raw, meta); return; }
     setTimeout(function() { callAIWithRetry(system, userMsg, maxTok, callback, retries - 1, taskType); }, 700);
   }, taskType);
 }
@@ -10120,7 +10142,7 @@ function generateWeeklyPlan(intent) {
   nutriDebug('Final week-direct AI user message (' + built.userMsg.length + ' chars)', built.userMsg.length > 20000 ? built.userMsg.slice(0, 20000) + '\n… [truncated for console]' : built.userMsg);
   setGenPhase('balancing');
 
-  function applyWeek(err, raw) {
+  function applyWeek(err, raw, meta) {
     if (myGen !== recipeGenId) return;
 
     console.log('[ARC PIPELINE] Raw backend payload', {
@@ -10130,6 +10152,11 @@ function generateWeeklyPlan(intent) {
     });
 
     var parsed = null;
+    var payloadSource = (meta && meta.source) ? String(meta.source) : 'unknown';
+    console.log('[ARC PIPELINE] Parser source check', { expected: 'canonical_backend', received: payloadSource });
+    if (!err && payloadSource === 'enhancement') {
+      err = new Error('Enhancement payload cannot be used as canonical week schema');
+    }
     if (!err && raw) parsed = parseJSON(raw);
     var normalized = normalizeWeekPayloadContract(parsed, built.slots);
     if (normalized && normalized.fallbackApplied) {
@@ -10248,7 +10275,7 @@ function generateWeeklyPlan(intent) {
     }
   }
 
-  callAIWithRetry(built.sysMsg, built.userMsg, 420, applyWeek, 2, 'instruction_enhancement');
+  callAIWithRetry(built.sysMsg, built.userMsg, 420, applyWeek, 2, 'optimization');
 }
 
 /* ── Built-for header on the planner ── */
@@ -10486,10 +10513,15 @@ function generateRecipes() {
 
   setGenPhase('balancing');
 
-  function processRecipes(err, raw) {
+  function processRecipes(err, raw, meta) {
     if (myGen !== recipeGenId) return;
 
     var parsed = null;
+    var payloadSource = (meta && meta.source) ? String(meta.source) : 'unknown';
+    console.log('[ARC PIPELINE] Parser source check', { expected: 'canonical_backend', received: payloadSource });
+    if (!err && payloadSource === 'enhancement') {
+      err = new Error('Enhancement payload cannot be used as recipe schema');
+    }
     if (!err && raw) parsed = parseJSON(raw);
 
     if (parsed && Array.isArray(parsed) && parsed.length >= 10) {
@@ -10542,7 +10574,7 @@ function generateRecipes() {
   }
 
   // Try with retries
-  callAIWithRetry(sysMsg, userMsg, 420, processRecipes, 2, 'instruction_enhancement');
+  callAIWithRetry(sysMsg, userMsg, 420, processRecipes, 2, 'optimization');
 }
 
 function syncCatTabsUI() {
@@ -11372,9 +11404,14 @@ function refreshSingleSlotMeal() {
   userMsg += 'price is USD per serving for budget ' + budgetNote + '.\n';
   userMsg += 'Return ONE object in a one-element JSON array.\n';
 
-  callAIWithRetry(sysMsg, userMsg, 420, function(err, raw) {
+  callAIWithRetry(sysMsg, userMsg, 420, function(err, raw, meta) {
     if (mtToken !== refreshMealGen) return;
     var parsed = null;
+    var payloadSource = (meta && meta.source) ? String(meta.source) : 'unknown';
+    console.log('[ARC PIPELINE] Parser source check', { expected: 'canonical_backend', received: payloadSource });
+    if (!err && payloadSource === 'enhancement') {
+      err = new Error('Enhancement payload cannot be used as meal schema');
+    }
     if (!err && raw) parsed = parseJSON(raw);
     var r0 = null;
     if (parsed && Array.isArray(parsed) && parsed.length >= 1) r0 = parsed[0];
@@ -11411,7 +11448,7 @@ function refreshSingleSlotMeal() {
     }
     showToast(ARC_COPY.toast.composeAdjusted);
     openAssign(day, slot, assignIntent);
-  }, 2, 'instruction_enhancement');
+  }, 2, 'optimization');
 }
 
 function openAssign(day, slot, intent) {
