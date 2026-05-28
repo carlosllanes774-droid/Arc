@@ -2613,22 +2613,74 @@ button:not(:disabled):active,
 <script>
   // ✅ MUST be inside script
 function parseJSON(raw) {
-  if (!raw) return null;
-
-  raw = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-
-  try { return JSON.parse(raw); } catch(e) {}
-
-  var arrMatch = raw.match(/\[[\s\S]*\]/);
-  if (arrMatch) {
-    try { return JSON.parse(arrMatch[0]); } catch(e2) {}
+  function preview(v) {
+    if (v == null) return '';
+    var txt = typeof v === 'string' ? v : JSON.stringify(v);
+    return String(txt || '').replace(/\s+/g, ' ').slice(0, 320);
+  }
+  function cleanJsonPayload(input) {
+    var txt = input == null ? '' : (typeof input === 'string' ? input : JSON.stringify(input));
+    // Remove markdown code fences and any stray backticks before parsing.
+    txt = String(txt || '')
+      .replace(/^\s*```(?:json)?\s*/i, '')
+      .replace(/\s*```\s*$/i, '')
+      .replace(/```(?:json)?/gi, '')
+      .replace(/`+/g, '')
+      .trim();
+    return txt;
+  }
+  function extractLikelyJsonSegment(txt) {
+    if (!txt) return txt;
+    var arrMatch = txt.match(/\[[\s\S]*\]/);
+    var objMatch = txt.match(/\{[\s\S]*\}/);
+    if (arrMatch && objMatch) return arrMatch[0].length >= objMatch[0].length ? arrMatch[0] : objMatch[0];
+    if (arrMatch) return arrMatch[0];
+    if (objMatch) return objMatch[0];
+    return txt;
   }
 
-  var objMatch = raw.match(/\{[\s\S]*\}/);
-  if (objMatch) {
-    try { return JSON.parse(objMatch[0]); } catch(e3) {}
+  var rawPreview = preview(raw);
+  var cleaned = cleanJsonPayload(raw);
+  var cleanedPreview = preview(cleaned);
+  console.log('[ARC PIPELINE] Raw payload cleaned', { rawPreview: rawPreview, cleanedPreview: cleanedPreview });
+
+  if (!cleaned) {
+    console.log('[ARC PIPELINE] JSON parse failed', { reason: 'empty_cleaned_payload', rawPreview: rawPreview });
+    return null;
   }
 
+  var candidate = cleaned;
+  for (var attempt = 0; attempt < 4; attempt++) {
+    try {
+      var parsed = JSON.parse(candidate);
+      if (typeof parsed === 'string') {
+        candidate = cleanJsonPayload(parsed);
+        continue;
+      }
+      console.log('[ARC PIPELINE] JSON parse success', { attempt: attempt + 1, cleanedPreview: preview(candidate) });
+      return parsed;
+    } catch (e) {
+      var extracted = extractLikelyJsonSegment(candidate);
+      if (extracted && extracted !== candidate) {
+        candidate = extracted;
+        continue;
+      }
+      // Try to parse escaped newlines/tabs if provider double-escaped a JSON body.
+      var unescaped = candidate.replace(/\\n/g, '\n').replace(/\\t/g, '\t').trim();
+      if (unescaped && unescaped !== candidate) {
+        candidate = unescaped;
+        continue;
+      }
+      console.log('[ARC PIPELINE] JSON parse failed', {
+        reason: e && e.message ? e.message : 'unknown_parse_error',
+        rawPreview: rawPreview,
+        cleanedPreview: cleanedPreview
+      });
+      return null;
+    }
+  }
+
+  console.log('[ARC PIPELINE] JSON parse failed', { reason: 'max_attempts_reached', rawPreview: rawPreview, cleanedPreview: cleanedPreview });
   return null;
 }
 
@@ -2644,13 +2696,19 @@ function safeNum(v, fallback) {
 function normalizeWeekPayloadContract(parsed, slots) {
   if (!isPlainObject(parsed)) return null;
   var src = isPlainObject(parsed.week) ? parsed.week : (isPlainObject(parsed.data) ? parsed.data : parsed);
-  var recipesInput = Array.isArray(src.recipes) ? src.recipes : [];
-  var mealsObj = isPlainObject(src.meals) ? src.meals : {};
-  if (!recipesInput.length && (Array.isArray(mealsObj.breakfast) || Array.isArray(mealsObj.lunch) || Array.isArray(mealsObj.dinner))) {
+  var mealPlanNode = isPlainObject(src.meal_plan) ? src.meal_plan : (isPlainObject(parsed.meal_plan) ? parsed.meal_plan : null);
+  var recipesInput = Array.isArray(src.recipes) ? src.recipes : (mealPlanNode && Array.isArray(mealPlanNode.recipes) ? mealPlanNode.recipes : []);
+  var mealsObj = isPlainObject(src.meals) ? src.meals : (mealPlanNode && isPlainObject(mealPlanNode.meals) ? mealPlanNode.meals : {});
+  var breakfastArr = Array.isArray(mealsObj.breakfast) ? mealsObj.breakfast : (Array.isArray(src.breakfast) ? src.breakfast : []);
+  var lunchArr = Array.isArray(mealsObj.lunch) ? mealsObj.lunch : (Array.isArray(src.lunch) ? src.lunch : []);
+  var dinnerArr = Array.isArray(mealsObj.dinner) ? mealsObj.dinner : (Array.isArray(src.dinner) ? src.dinner : []);
+  var snackArr = Array.isArray(mealsObj.snack) ? mealsObj.snack : (Array.isArray(src.snack) ? src.snack : []);
+  if (!recipesInput.length && (breakfastArr.length || lunchArr.length || dinnerArr.length || snackArr.length)) {
     recipesInput = []
-      .concat(Array.isArray(mealsObj.breakfast) ? mealsObj.breakfast : [])
-      .concat(Array.isArray(mealsObj.lunch) ? mealsObj.lunch : [])
-      .concat(Array.isArray(mealsObj.dinner) ? mealsObj.dinner : []);
+      .concat(breakfastArr)
+      .concat(lunchArr)
+      .concat(dinnerArr)
+      .concat(snackArr);
   }
   if (!recipesInput.length) return null;
 
@@ -2673,6 +2731,9 @@ function normalizeWeekPayloadContract(parsed, slots) {
     var p = Math.round(safeNum(r.p, safeNum(macros.protein, 0)));
     var c = Math.round(safeNum(r.c, safeNum(macros.carbs, 0)));
     var f = Math.round(safeNum(r.f, safeNum(macros.fat, 0)));
+    if (!Array.isArray(instructions) || !instructions.length) {
+      instructions = [{ phase: 'Cook', instruction: 'Prepare ingredients and cook until done.' }];
+    }
     return {
       id: safeNum(r.id, idx + 1),
       name: r.name || r.title || ('Recipe ' + (idx + 1)),
@@ -2730,6 +2791,31 @@ function normalizeWeekPayloadContract(parsed, slots) {
   }
 
   return { recipes: recipes, plan: normalizedPlan, fallbackApplied: usedFallback };
+}
+
+function validateRecipesForRender(recipesInput) {
+  var src = Array.isArray(recipesInput) ? recipesInput : [];
+  var safe = [];
+  for (var i = 0; i < src.length; i++) {
+    var rec = isPlainObject(src[i]) ? src[i] : null;
+    if (!rec) continue;
+    if (!Array.isArray(rec.steps) || !rec.steps.length) {
+      rec.steps = [{ phase: 'Cook', instruction: 'Prepare ingredients and cook until done.' }];
+    }
+    if (!Array.isArray(rec.instructions) || !rec.instructions.length) {
+      rec.instructions = rec.steps.slice();
+    }
+    if (!isPlainObject(rec.macros)) {
+      rec.macros = {
+        calories: safeNum(rec.cal, 0),
+        protein: safeNum(rec.p, 0),
+        carbs: safeNum(rec.c, 0),
+        fat: safeNum(rec.f, 0)
+      };
+    }
+    safe.push(rec);
+  }
+  return safe;
 }
 
 // ============================================================
@@ -10051,7 +10137,7 @@ function generateWeeklyPlan(intent) {
     }
     if (normalized) {
       parsed = { recipes: normalized.recipes, plan: normalized.plan };
-      console.log('[ARC PIPELINE] Response schema normalized', {
+      console.log('[ARC PIPELINE] Response normalized', {
         recipes: parsed.recipes.length,
         days: Object.keys(parsed.plan || {}).length
       });
@@ -10078,7 +10164,12 @@ function generateWeeklyPlan(intent) {
     }
 
     setGenPhase('recipes');
-    recipes = parsed.recipes.map(function(r, i) { return normalizeGeneratedRecipe(r, i, built.mt); });
+    recipes = validateRecipesForRender(parsed.recipes).map(function(r, i) { return normalizeGeneratedRecipe(r, i, built.mt); });
+    recipes = validateRecipesForRender(recipes);
+    console.log('[ARC PIPELINE] Recipes extracted successfully', {
+      total: recipes.length,
+      hasBreakfast: recipes.some(function(r) { return String(r.cat || '').toLowerCase() === 'breakfast'; })
+    });
 
     function finishWeekPlanAfterNutrition() {
       var recById = {};
