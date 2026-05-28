@@ -520,8 +520,13 @@
                 ? V.detectImpossibleNutrition(Object.assign({}, evalData.macros, { context: 'meal', weightLb: profile.weight }))
                 : null;
               var sanityReport = V && V.runNutritionSanityChecks ? V.runNutritionSanityChecks(evalData.macros) : null;
-              var valid = (!validationReport || validationReport.safe) && (!sanityReport || sanityReport.valid) &&
-                !!(usdaValidation && usdaValidation.status === 'ok' && usdaValidation.data && usdaValidation.data.valid);
+              var arcValidationPassed = (!validationReport || validationReport.safe) && (!sanityReport || sanityReport.valid);
+              var usdaValidationPassed = !!(usdaValidation && usdaValidation.status === 'ok' && usdaValidation.data && usdaValidation.data.valid);
+              var usdaUnavailable = !usdaValidation ||
+                usdaValidation.status === 'not_configured' ||
+                usdaValidation.status === 'provider_missing';
+              // Keep recipe generation resilient when USDA is unavailable; Arc guardrails still enforce nutrition sanity.
+              var valid = arcValidationPassed && (usdaValidationPassed || usdaUnavailable);
               return Object.assign({}, evalData, {
                 usdaValidation: usdaValidation,
                 validationReport: validationReport,
