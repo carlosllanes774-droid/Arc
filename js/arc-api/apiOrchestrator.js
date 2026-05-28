@@ -214,9 +214,26 @@
     if (!result.canonicalMeal || typeof result.canonicalMeal !== 'object') issues.push('canonical_meal_missing');
     if (!Array.isArray(result.meals)) issues.push('meals_not_array');
     if (result.canonicalMeal) {
+      if (!result.canonicalMeal.mealId) issues.push('meal_id_missing');
+      if (!result.canonicalMeal.title) issues.push('title_missing');
+      if (!result.canonicalMeal.mealCategory) issues.push('meal_category_missing');
+      if (!result.canonicalMeal.nutritionConfidence) issues.push('nutrition_confidence_missing');
       if (!Array.isArray(result.canonicalMeal.ingredients)) issues.push('ingredients_not_array');
       if (!Array.isArray(result.canonicalMeal.instructions)) issues.push('instructions_not_array');
-      if (!result.canonicalMeal.macros || typeof result.canonicalMeal.macros !== 'object') issues.push('macros_missing');
+      if (!result.canonicalMeal.macros || typeof result.canonicalMeal.macros !== 'object') {
+        issues.push('macros_missing');
+      } else {
+        if (!isFinite(Number(result.canonicalMeal.macros.calories))) issues.push('macro_calories_missing');
+        if (!isFinite(Number(result.canonicalMeal.macros.protein))) issues.push('macro_protein_missing');
+        if (!isFinite(Number(result.canonicalMeal.macros.carbs))) issues.push('macro_carbs_missing');
+        if (!isFinite(Number(result.canonicalMeal.macros.fat))) issues.push('macro_fat_missing');
+      }
+    }
+    if (Array.isArray(result.meals)) {
+      if (!result.meals.length) issues.push('meals_empty');
+      if (result.canonicalMeal && result.meals[0] && result.meals[0].mealId !== result.canonicalMeal.mealId) {
+        issues.push('meals_canonical_mismatch');
+      }
     }
     try {
       JSON.stringify(result);
@@ -572,7 +589,7 @@
                 scenario: scenario,
                 nutritionConfidence: selectedRecipe.nutritionConfidence
               });
-              if (T) T.logMessage('Canonical meal schema created');
+              if (T) T.logMessage('Canonical backend schema created');
               var finalResult = buildPipelineResult({
                 arcResult: arcResult,
                 scenario: scenario,
@@ -631,7 +648,7 @@
                         if (scaledRecipe && Array.isArray(scaledRecipe.instructions)) {
                           scaledRecipe.instructions = selectedRecipe.instructions.slice();
                         }
-                        if (T) T.logMessage('OpenAI enhancement merged');
+                        if (T) T.logMessage('OpenAI enhancement merged safely');
                         notifyEnhancement(profile, {
                           recipeId: selectedRecipe.recipeId || selectedRecipe.id || null,
                           title: selectedRecipe.title,
@@ -665,7 +682,8 @@
                 finalResult.degraded = true;
                 finalResult.error = finalResult.error || 'schema_validation_failed';
               } else if (T) {
-                T.logMessage('Stable response generated');
+                T.logMessage('Frontend render contract validated');
+                T.logMessage('Stable deterministic response sent');
               }
 
               if (T) {
