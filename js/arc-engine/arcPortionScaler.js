@@ -86,9 +86,54 @@
       if (ing.protein != null) out.protein = roundQuantity(Number(ing.protein) * factor);
       if (ing.carbs != null) out.carbs = roundQuantity(Number(ing.carbs) * factor);
       if (ing.fat != null) out.fat = roundQuantity(Number(ing.fat) * factor);
+      if (isOilLike(out) && isFinite(Number(out.quantity != null ? out.quantity : out.amount))) {
+        var oilQty = Number(out.quantity != null ? out.quantity : out.amount);
+        var capped = Math.min(oilQty, 6);
+        if (out.quantity != null) out.quantity = capped;
+        if (out.amount != null) out.amount = capped;
+      }
       out.scaleFactor = factor;
       return out;
     });
+  }
+
+  function isOilLike(ing) {
+    var name = String((ing && (ing.name || ing.original || ''))).toLowerCase();
+    return name.indexOf('oil') !== -1 || name.indexOf('butter') !== -1 || name.indexOf('ghee') !== -1;
+  }
+
+  function recalculateScaledMacros(current, scaledIngredients, factor) {
+    var ingredientTotals = {
+      calories: sumIngredientField(scaledIngredients, 'calories'),
+      protein: sumIngredientField(scaledIngredients, 'protein'),
+      carbs: sumIngredientField(scaledIngredients, 'carbs'),
+      fat: sumIngredientField(scaledIngredients, 'fat')
+    };
+    if (ingredientTotals.calories > 0) {
+      return {
+        calories: Math.round(ingredientTotals.calories),
+        protein: Math.round(ingredientTotals.protein),
+        carbs: Math.round(ingredientTotals.carbs),
+        fat: Math.round(ingredientTotals.fat)
+      };
+    }
+    return {
+      calories: Math.round(current.calories * factor),
+      protein: Math.round(current.protein * factor),
+      carbs: Math.round(current.carbs * factor),
+      fat: Math.round(current.fat * factor)
+    };
+  }
+
+  function validateMacroMath(macros) {
+    var calories = Number(macros.calories) || 0;
+    var protein = Number(macros.protein) || 0;
+    var carbs = Number(macros.carbs) || 0;
+    var fat = Number(macros.fat) || 0;
+    var computed = protein * 4 + carbs * 4 + fat * 9;
+    if (!(calories > 0)) return false;
+    if (fat * 9 > calories * 1.15) return false;
+    return Math.abs(computed - calories) / calories <= 0.22;
   }
 
   /**
@@ -141,12 +186,17 @@
     if (opts.minScale != null) factor = Math.max(factor, opts.minScale);
 
     var scaledIngredients = scaleIngredients(recipeNutrition.ingredients, factor);
-    var scaledNutrition = {
-      calories: Math.round(current.calories * factor),
-      protein: Math.round(current.protein * factor),
-      carbs: Math.round(current.carbs * factor),
-      fat: Math.round(current.fat * factor)
-    };
+    var scaledNutrition = recalculateScaledMacros(current, scaledIngredients, factor);
+    var corrected = false;
+    if (!validateMacroMath(scaledNutrition)) {
+      corrected = true;
+      scaledNutrition = {
+        calories: Math.round(current.calories * factor),
+        protein: Math.round(current.protein * factor),
+        carbs: Math.round(current.carbs * factor),
+        fat: Math.round(current.fat * factor)
+      };
+    }
 
     return {
       recipeName: recipeNutrition.name || 'recipe',
@@ -155,6 +205,7 @@
       target: target,
       scaled: scaledNutrition,
       ingredients: scaledIngredients,
+      corrected: corrected,
       delta: {
         calories: scaledNutrition.calories - current.calories,
         protein: scaledNutrition.protein - current.protein
