@@ -26,6 +26,10 @@
     return (global.ArcApi && global.ArcApi.Validation) || null;
   }
 
+  function curation() {
+    return (global.ArcApi && global.ArcApi.Curation) || null;
+  }
+
   /**
    * @type {Object<string, string>}
    */
@@ -303,19 +307,19 @@
     var S = services();
     var V = validation();
 
+    var finalRecipeCount = Math.max(1, profile.recipeCount || 3);
     var searchFilters = {
       query: profile.mealQuery || 'high protein dinner',
       maxCalories: profile.maxCalories || (targets.targetCalories ? Math.round(targets.targetCalories / (profile.mealsPerDay || 3)) : null),
       diet: profile.diet,
-      number: profile.recipeCount || 3
+      number: Math.min(20, Math.max(8, finalRecipeCount * 4))
     };
 
     var flow = (S.spoonacular ? S.spoonacular.searchRecipes(searchFilters) : dispatch('discoverMeals', searchFilters))
       .then(function (recipeSearch) {
         var recipes = (recipeSearch.data && recipeSearch.data.recipes) || [];
-        var recipe = recipes[0] || profile.recipe || null;
-
-        if (!recipe) {
+        if (!recipes.length && profile.recipe) recipes = [profile.recipe];
+        if (!recipes.length) {
           if (T) T.logMessage('Spoonacular no recipes found');
           return buildPipelineResult({
             arcResult: arcResult,
@@ -326,13 +330,12 @@
           });
         }
 
-        var ingrLines = (recipe.ingredients || []).map(function (i) {
-          return i.original || i.name || String(i);
-        }).filter(Boolean);
+        function nutritionForRecipe(recipe) {
+          var ingrLines = (recipe.ingredients || []).map(function (i) {
+            return i.original || i.name || String(i);
+          }).filter(Boolean);
 
-        var edamamPromise = profile.foodLogText
-          ? (S.edamam ? S.edamam.parseFoodInput({ text: profile.foodLogText }) : dispatch('parseFoodInput', { text: profile.foodLogText }))
-          : (S.edamam
+          var edamamPromise = S.edamam
             ? S.edamam.analyzeRecipeNutrition({
               title: recipe.title,
               ingr: ingrLines,
@@ -342,88 +345,164 @@
               title: recipe.title,
               ingr: ingrLines,
               spoonacularRecipeId: recipe.recipeId || recipe.id
-            }));
+            });
 
-        function proceedWithNutrition(nutrition, macros, nutritionConfidence) {
-          var usdaPromise = macros
-            ? (S.usda ? S.usda.validateMacros(macros) : dispatch('validateMacros', macros))
-            : Promise.resolve(null);
-
-          return usdaPromise.then(function (usdaValidation) {
-            var source = (nutrition && nutrition.data && nutrition.data.source) || 'edamam';
-            var usdaOk = !!(usdaValidation && usdaValidation.status === 'ok' && usdaValidation.data && usdaValidation.data.valid);
-            var resolvedConfidence = 'low';
-            if (source === 'edamam' && usdaOk) resolvedConfidence = 'high';
-            else if (source === 'usda' || usdaOk) resolvedConfidence = 'medium';
-            else if (source === 'spoonacular') resolvedConfidence = 'low';
-
-            var validationReport = V && macros
-              ? V.detectImpossibleNutrition(Object.assign({}, macros, {
-                context: 'meal',
-                weightLb: profile.weight
-              }))
-              : null;
-            var sanityReport = V && macros && V.runNutritionSanityChecks
-              ? V.runNutritionSanityChecks(macros)
-              : null;
-
-            if ((validationReport && !validationReport.safe) || (sanityReport && !sanityReport.valid)) {
-              if (T) T.logMessage('USDA validation failed');
-              return buildPipelineResult({
-                arcResult: arcResult,
-                scenario: scenario,
+          return edamamPromise.then(function (nutrition) {
+            var macros = nutrition.data && (nutrition.data.normalized || nutrition.data.totalNutrients);
+            if (nutrition.status !== 'ok' || !macros) {
+              return resolveNutritionAfterEdamamFailure({
                 recipe: recipe,
-                nutrition: nutrition,
-                usdaValidation: usdaValidation,
-                validationReport: validationReport,
-                blocked: true,
-                error: 'nutrition_failed_validation',
-                sanityReport: sanityReport
+                ingrLines: ingrLines
+              }).then(function (fallbackNutrition) {
+                if (!fallbackNutrition) return { recipe: recipe, nutrition: nutrition, macros: null, rejected: 'nutrition_unavailable' };
+                return { recipe: recipe, nutrition: fallbackNutrition, macros: fallbackNutrition.data.normalized };
               });
             }
+            return { recipe: recipe, nutrition: nutrition, macros: macros };
+          });
+        }
 
-            var openaiPromise = pickOpenAiAdaptation(S, scenario, arcResult, profile);
-            return openaiPromise.then(function (adaptation) {
-              var groceryIngredients = (recipe.ingredients || []).map(function (ing, idx) {
-                return { key: 'ing_' + idx, name: ing.name || ing.original || 'ingredient' };
+        function evaluateCandidate(recipe) {
+          return nutritionForRecipe(recipe).then(function (evalData) {
+            if (!evalData.macros) return evalData;
+            var usdaPromise = S.usda ? S.usda.validateMacros(evalData.macros) : dispatch('validateMacros', evalData.macros);
+            return usdaPromise.then(function (usdaValidation) {
+              var validationReport = V && V.detectImpossibleNutrition
+                ? V.detectImpossibleNutrition(Object.assign({}, evalData.macros, { context: 'meal', weightLb: profile.weight }))
+                : null;
+              var sanityReport = V && V.runNutritionSanityChecks ? V.runNutritionSanityChecks(evalData.macros) : null;
+              var valid = (!validationReport || validationReport.safe) && (!sanityReport || sanityReport.valid) &&
+                !!(usdaValidation && usdaValidation.status === 'ok' && usdaValidation.data && usdaValidation.data.valid);
+              return Object.assign({}, evalData, {
+                usdaValidation: usdaValidation,
+                validationReport: validationReport,
+                sanityReport: sanityReport,
+                rejected: valid ? null : 'nutrition_failed_validation'
               });
+            });
+          });
+        }
 
-              var krogerPromise = S.kroger
-                ? S.kroger.estimateGroceryCost({
-                  zipCode: profile.zipCode,
-                  ingredients: groceryIngredients,
-                  budgetConstraints: arcResult && arcResult.budget
+        function evaluateAll(candidates) {
+          var out = [];
+          var idx = 0;
+          var workers = [];
+          var concurrency = 3;
+          function worker() {
+            var i = idx++;
+            if (i >= candidates.length) return Promise.resolve();
+            return evaluateCandidate(candidates[i]).then(function (entry) {
+              out[i] = entry;
+              return worker();
+            });
+          }
+          var wCount = Math.min(concurrency, candidates.length);
+          for (var w = 0; w < wCount; w++) workers.push(worker());
+          return Promise.all(workers).then(function () { return out; });
+        }
+
+        return evaluateAll(recipes).then(function (evaluated) {
+          var candidateRecipes = [];
+          evaluated.forEach(function (entry) {
+            if (!entry || entry.rejected || !entry.macros) return;
+            var recipeWithNutrition = Object.assign({}, entry.recipe, {
+              nutrition: entry.macros || {},
+              calories: entry.macros && entry.macros.calories,
+              protein: entry.macros && entry.macros.protein,
+              carbs: entry.macros && entry.macros.carbs,
+              fat: entry.macros && entry.macros.fat,
+              nutritionConfidence: (entry.nutrition && entry.nutrition.data && entry.nutrition.data.nutritionConfidence) || 'medium'
+            });
+            if (V && V.deriveNutritionTags) {
+              var derived = V.deriveNutritionTags(entry.macros || {});
+              recipeWithNutrition.nutritionTags = derived.tags;
+            }
+            candidateRecipes.push(recipeWithNutrition);
+          });
+
+          var C = curation();
+          var curatedResult = C && C.curateRecipes
+            ? C.curateRecipes(candidateRecipes, {
+              desiredCount: finalRecipeCount,
+              profile: profile,
+              scenario: scenario,
+              varietyState: profile.varietyState || {}
+            })
+            : { curated: candidateRecipes.slice(0, finalRecipeCount), rejected: [], varietyState: {} };
+
+          var scoredRecipes = curatedResult.curated.map(function (entry) {
+            var merged = Object.assign({}, entry.recipe, {
+              recipeQualityScore: entry.recipeQualityScore,
+              qualityCategoryScores: entry.categoryScores,
+              varietyPenalty: entry.varietyPenalty || 0
+            });
+            console.log('[ARC CURATION] Recipe scored ' + entry.recipeQualityScore);
+            return merged;
+          });
+          curatedResult.rejected.forEach(function () {
+            console.log('[ARC CURATION] Low quality recipe rejected');
+          });
+          if (scoredRecipes.length) console.log('[ARC CURATION] Variety balancing applied');
+
+          var selectedRecipe = scoredRecipes[0] || null;
+          if (!selectedRecipe) {
+            return buildPipelineResult({
+              arcResult: arcResult,
+              scenario: scenario,
+              recipeSearch: recipeSearch,
+              error: 'no_curated_recipe_found',
+              degraded: true
+            });
+          }
+
+          var selectedEval = null;
+          var e;
+          for (e = 0; e < evaluated.length; e++) {
+            if (evaluated[e] && evaluated[e].recipe && (evaluated[e].recipe.recipeId || evaluated[e].recipe.id) === (selectedRecipe.recipeId || selectedRecipe.id)) {
+              selectedEval = evaluated[e];
+              break;
+            }
+          }
+
+          var openaiPromise = pickOpenAiAdaptation(S, scenario, arcResult, profile);
+          return openaiPromise.then(function (adaptation) {
+            var groceryIngredients = (selectedRecipe.ingredients || []).map(function (ing, idx) {
+              return { key: 'ing_' + idx, name: ing.name || ing.original || 'ingredient' };
+            });
+
+            var krogerPromise = S.kroger
+              ? S.kroger.estimateGroceryCost({
+                zipCode: profile.zipCode,
+                ingredients: groceryIngredients,
+                budgetConstraints: arcResult && arcResult.budget
+              })
+              : dispatch('getGroceryPricing', { zipCode: profile.zipCode, items: groceryIngredients });
+
+            return krogerPromise.then(function (pricing) {
+              if (T && pricing && pricing.status === 'not_configured') {
+                T.logMessage('Kroger unavailable');
+              }
+
+              var enhancementPromise = S.openai && S.openai.enhanceRecipePresentation
+                ? S.openai.enhanceRecipePresentation({
+                  recipe: selectedRecipe,
+                  scenario: scenario,
+                  profile: { goal: profile.goal, budgetTier: profile.budgetTier }
                 })
-                : dispatch('getGroceryPricing', { zipCode: profile.zipCode, items: groceryIngredients });
+                : Promise.resolve(null);
 
-              return krogerPromise.then(function (pricing) {
-                if (T && pricing && pricing.status === 'not_configured') {
-                  T.logMessage('Kroger unavailable');
-                }
-
-                var recipeWithNutrition = Object.assign({}, recipe, {
-                  nutrition: macros || {},
-                  calories: macros && macros.calories,
-                  protein: macros && macros.protein,
-                  carbs: macros && macros.carbs,
-                  fat: macros && macros.fat,
-                  nutritionConfidence: resolvedConfidence || nutritionConfidence || 'low'
-                });
-                if (V && V.deriveNutritionTags) {
-                  var derived = V.deriveNutritionTags(macros || {});
-                  recipeWithNutrition.nutritionTags = derived.tags;
-                  if (V.validateRecipeTags) {
-                    var checked = V.validateRecipeTags(recipe.tags || [], macros || {});
-                    recipeWithNutrition.validatedTags = checked.validTags;
-                    recipeWithNutrition.rejectedTags = checked.rejectedTags;
-                  }
+              return enhancementPromise.then(function (enhancement) {
+                if (enhancement && enhancement.status === 'ok' && enhancement.data) {
+                  selectedRecipe.title = enhancement.data.enhancedTitle || selectedRecipe.title;
+                  selectedRecipe.instructions = enhancement.data.enhancedInstructions || selectedRecipe.instructions;
+                  console.log('[ARC CURATION] Premium instruction enhancement complete');
                 }
 
                 var scaledRecipe = null;
-                if (global.ArcEngine && global.ArcEngine.PortionScaler && macros) {
+                if (global.ArcEngine && global.ArcEngine.PortionScaler && selectedRecipe.nutrition) {
                   var slot = arcResult && arcResult.mealStrategy && arcResult.mealStrategy.slots && arcResult.mealStrategy.slots[0];
                   var slotTarget = profile.recipeTarget || slot || targets;
-                  scaledRecipe = global.ArcEngine.PortionScaler.scaleRecipe(recipeWithNutrition, {
+                  scaledRecipe = global.ArcEngine.PortionScaler.scaleRecipe(selectedRecipe, {
                     calories: slotTarget.calories || slotTarget.targetCalories,
                     protein: slotTarget.protein || slotTarget.proteinTarget,
                     carbs: slotTarget.carbs || slotTarget.carbTarget,
@@ -440,58 +519,22 @@
                   arcResult: arcResult,
                   scenario: scenario,
                   recipeSearch: recipeSearch,
-                  recipe: recipe,
-                  nutrition: nutrition,
-                  usdaValidation: usdaValidation,
-                  validationReport: validationReport,
+                  recipe: selectedRecipe,
+                  nutrition: selectedEval ? selectedEval.nutrition : null,
+                  usdaValidation: selectedEval ? selectedEval.usdaValidation : null,
+                  validationReport: selectedEval ? selectedEval.validationReport : null,
                   adaptation: adaptation,
                   pricing: pricing,
                   scaledRecipe: scaledRecipe,
-                  nutritionConfidence: resolvedConfidence
+                  nutritionConfidence: selectedRecipe.nutritionConfidence,
+                  curatedRecipes: scoredRecipes,
+                  rejectedRecipes: curatedResult.rejected
                 });
                 if (T) T.logMessage('Final meal generation complete');
                 return finalResult;
               });
             });
           });
-        }
-
-        return edamamPromise.then(function (nutrition) {
-          var macros = nutrition.data && (nutrition.data.normalized || nutrition.data.totalNutrients);
-          if (nutrition.data && nutrition.data.normalized) macros = nutrition.data.normalized;
-
-          var nutritionConfidence = (nutrition.data && nutrition.data.nutritionConfidence) || 'high';
-
-          if (nutrition.status !== 'ok') {
-            if (profile.foodLogText) {
-              if (T) T.logMessage('Edamam nutrition analysis failed');
-              return proceedWithNutrition(nutrition, null, 'low');
-            }
-            return resolveNutritionAfterEdamamFailure({
-              recipe: recipe,
-              ingrLines: ingrLines
-            }).then(function (fallbackNutrition) {
-              if (!fallbackNutrition) {
-                if (T) T.logMessage('Edamam nutrition analysis failed');
-                return buildPipelineResult({
-                  arcResult: arcResult,
-                  scenario: scenario,
-                  recipe: recipe,
-                  nutrition: nutrition,
-                  error: 'nutrition_unavailable',
-                  degraded: true
-                });
-              }
-              macros = fallbackNutrition.data.normalized;
-              return proceedWithNutrition(fallbackNutrition, macros, 'low');
-            });
-          }
-
-          if (nutrition.data && nutrition.data.fallback) {
-            nutritionConfidence = 'low';
-          }
-
-          return proceedWithNutrition(nutrition, macros, nutritionConfidence);
         });
       }).catch(function (err) {
         if (T) T.logOrchestrator('meal pipeline failed');
@@ -551,6 +594,8 @@
       adaptation: parts.adaptation || null,
       pricing: parts.pricing || null,
       scaledRecipe: parts.scaledRecipe || null,
+      curatedRecipes: parts.curatedRecipes || [],
+      rejectedRecipes: parts.rejectedRecipes || [],
       note: 'Arc Engine owns intelligence; external APIs provide information'
     };
   }
