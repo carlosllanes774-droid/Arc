@@ -536,7 +536,7 @@ describe('Arc Phase 2 adaptive pipeline (mocked APIs)', () => {
             json: () => new Promise((resolve) => {
               setTimeout(() => {
                 resolve({
-                  content: [{ type: 'text', text: '{"title":"Enhanced Bowl","instructions":["Sear chicken quickly.","Plate with warm rice."]}' }]
+                  content: [{ type: 'text', text: 'TITLE: Enhanced Bowl\nSUMMARY: Fast post-workout bowl.\nLABELS: high protein, quick prep\nINSTRUCTIONS:\n1) Sear chicken quickly.\n2) Plate with warm rice.' }]
                 });
               }, 120);
             })
@@ -580,14 +580,16 @@ describe('Arc Phase 2 adaptive pipeline (mocked APIs)', () => {
     assert.equal(out.recipe.title, 'Fast chicken bowl');
     assert.ok(out.enhancement.status === 'pending' || out.enhancement.status === 'skipped');
     assert.ok(elapsedMs < 120, 'pipeline should return before enhancement resolves');
+    assert.ok(out.canonicalMeal, 'expected canonical meal schema');
+    assert.ok(Array.isArray(out.meals), 'expected stable meals array');
+    assert.equal(out.schema.owner, 'arc_backend');
+    assert.equal(out.schemaValidation.valid, true);
 
     const started = logs.find((l) => l.includes('[ARC PIPELINE] Enhancement running async'));
     const skipped = logs.find((l) => l.includes('[ARC PIPELINE] Enhancement skipped safely'));
     const baseDelivered = logs.find((l) => l.includes('[ARC PIPELINE] Base recipe delivery complete'));
-    const basePreserved = logs.find((l) => l.includes('[ARC PIPELINE] Base meal response preserved'));
     assert.ok(started || skipped, 'expected enhancement started or skipped log');
     assert.ok(baseDelivered, 'expected base delivery complete log');
-    assert.ok(basePreserved, 'expected base response preserved log');
     if (started) {
       await new Promise((resolve) => setTimeout(resolve, 150));
       assert.ok(enhancementUpdate, 'expected async enhancement callback payload');
