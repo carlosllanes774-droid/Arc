@@ -816,132 +816,6 @@ function openAiTaskTokenLimit(taskType) {
   return 220;
 }
 
-function isPlainObject(value) {
-  return !!value && typeof value === "object" && !Array.isArray(value);
-}
-
-function toFiniteNumber(value, fallback) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-}
-
-function normalizeInstructionSteps(input) {
-  if (!Array.isArray(input)) return [];
-  const out = [];
-  for (const item of input) {
-    if (typeof item === "string") {
-      const text = item.trim();
-      if (text) out.push({ phase: "Cook", instruction: text });
-      continue;
-    }
-    if (!isPlainObject(item)) continue;
-    const instruction = String(item.instruction ?? item.text ?? item.step ?? "").trim();
-    if (!instruction) continue;
-    const phaseRaw = String(item.phase || "Cook").trim().toLowerCase();
-    const phase = phaseRaw.startsWith("prep") ? "Prep" : phaseRaw.startsWith("serve") ? "Serve" : "Cook";
-    out.push({ phase, instruction });
-  }
-  return out;
-}
-
-function normalizeIngredientsList(recipe) {
-  const ing = Array.isArray(recipe.ing) ? recipe.ing : null;
-  if (ing && ing.length) return ing.map((x) => String(x || "").trim()).filter(Boolean);
-  const ingredients = Array.isArray(recipe.ingredients) ? recipe.ingredients : [];
-  return ingredients.map((item) => {
-    if (typeof item === "string") return item.trim();
-    if (!isPlainObject(item)) return "";
-    return String(item.original || item.name || "").trim();
-  }).filter(Boolean);
-}
-
-function normalizeRecipeContract(recipe, idx) {
-  recipe = isPlainObject(recipe) ? recipe : {};
-  const macros = isPlainObject(recipe.macros) ? recipe.macros : {};
-  const cal = Math.round(toFiniteNumber(recipe.cal, toFiniteNumber(macros.calories, 0)));
-  const p = Math.round(toFiniteNumber(recipe.p, toFiniteNumber(macros.protein, 0)));
-  const c = Math.round(toFiniteNumber(recipe.c, toFiniteNumber(macros.carbs, 0)));
-  const f = Math.round(toFiniteNumber(recipe.f, toFiniteNumber(macros.fat, 0)));
-  const instructions = normalizeInstructionSteps(
-    Array.isArray(recipe.steps) ? recipe.steps : (Array.isArray(recipe.instructions) ? recipe.instructions : [])
-  );
-  const ingredients = normalizeIngredientsList(recipe);
-  const catRaw = String(recipe.cat || recipe.mealType || recipe.slot || "Lunch").toLowerCase();
-  const cat = catRaw.includes("breakfast") ? "Breakfast" : catRaw.includes("dinner") ? "Dinner" : catRaw.includes("snack") ? "Snack" : "Lunch";
-  return {
-    id: Number.isFinite(Number(recipe.id)) ? Number(recipe.id) : idx + 1,
-    name: String(recipe.name || recipe.title || `Recipe ${idx + 1}`),
-    cal,
-    p,
-    c,
-    f,
-    macros: { calories: cal, protein: p, carbs: c, fat: f },
-    time: String(recipe.time || "20 min"),
-    difficulty: String(recipe.difficulty || "Easy"),
-    price: toFiniteNumber(recipe.price, 0),
-    cat,
-    servings: Math.max(1, Math.round(toFiniteNumber(recipe.servings, 1))),
-    tags: Array.isArray(recipe.tags) ? recipe.tags.map((t) => String(t || "")).filter(Boolean) : [],
-    ing: ingredients,
-    ingredients,
-    ingQty: isPlainObject(recipe.ingQty) ? recipe.ingQty : {},
-    steps: instructions,
-    instructions: instructions.map((s) => s.instruction),
-    nutritionConfidence: String(recipe.nutritionConfidence || "medium")
-  };
-}
-
-function normalizePlanMap(plan, recipeIds) {
-  const normalized = {};
-  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const fallbackId = recipeIds[0] || 1;
-  for (const day of days) {
-    const dayPlan = isPlainObject(plan && plan[day]) ? plan[day] : {};
-    normalized[day] = {};
-    for (const slot of Object.keys(dayPlan)) {
-      const rid = Number(dayPlan[slot]);
-      normalized[day][slot] = recipeIds.includes(rid) ? rid : fallbackId;
-    }
-  }
-  return normalized;
-}
-
-function normalizeWeekResponseContract(obj) {
-  const source = isPlainObject(obj)
-    ? (isPlainObject(obj.week) ? obj.week : (isPlainObject(obj.data) ? obj.data : obj))
-    : {};
-  const recipesInput = Array.isArray(source.recipes) ? source.recipes : [];
-  if (!recipesInput.length) return { applied: false, value: obj };
-  const recipes = recipesInput.map((recipe, idx) => normalizeRecipeContract(recipe, idx));
-  const recipeIds = recipes.map((r) => r.id);
-  const normalizedPlan = normalizePlanMap(source.plan, recipeIds);
-  const meals = {
-    breakfast: recipes.filter((r) => r.cat === "Breakfast").map((r) => r.id),
-    lunch: recipes.filter((r) => r.cat === "Lunch").map((r) => r.id),
-    dinner: recipes.filter((r) => r.cat === "Dinner").map((r) => r.id)
-  };
-  return {
-    applied: true,
-    value: {
-      recipes,
-      plan: normalizedPlan,
-      meals
-    }
-  };
-}
-
-function normalizeWeekTextPayload(text) {
-  if (!text || typeof text !== "string") return { normalizedText: text, normalized: false };
-  try {
-    const parsed = JSON.parse(text);
-    const out = normalizeWeekResponseContract(parsed);
-    if (!out.applied) return { normalizedText: text, normalized: false };
-    return { normalizedText: JSON.stringify(out.value), normalized: true };
-  } catch {
-    return { normalizedText: text, normalized: false };
-  }
-}
-
 /** OpenAI — adaptation / reasoning only; never authoritative for displayed macros. */
 app.post("/api/ai", async (req, res) => {
   try {
@@ -994,16 +868,10 @@ app.post("/api/ai", async (req, res) => {
           ],
         };
         const rawText = payload.content[0].text;
-        arcPipelineLog("Frontend parser received payload", {
+        arcPipelineLog("OpenAI text enhancement payload received", {
           taskType,
-          textLength: rawText.length,
-          preview: rawText.slice(0, 280)
+          textLength: rawText.length
         });
-        const normalizedWeek = normalizeWeekTextPayload(rawText);
-        if (normalizedWeek.normalized) {
-          payload.content[0].text = normalizedWeek.normalizedText;
-          arcPipelineLog("Response schema normalized", { taskType });
-        }
         let serializablePayload = payload;
         try {
           serializablePayload = JSON.parse(JSON.stringify(payload, function (_key, value) {
