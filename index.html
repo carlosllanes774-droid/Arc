@@ -8534,7 +8534,7 @@ function callAI(system, userMsg, maxTok, callback, taskType) {
         callback(null, nestedWeek, { source: 'week_generation', taskType: taskType, aiMeta: aiMeta });
         return nestedWeek;
       }
-      if (taskType === 'optimization' && text.charAt(0) === '{') {
+      if ((taskType === 'optimization' || taskType === 'week_generation') && text.charAt(0) === '{') {
         console.log('[ARC PIPELINE] Nested week JSON parse failed — classifying as enhancement', {
           textLength: text.length,
           aiMeta: aiMeta
@@ -10189,9 +10189,10 @@ function buildWeeklyPlanPrompt(intent) {
   var estPlanChars = 120 + (slots.length * DAYS.length * 12);
   var estOutputChars = (uniqueRecipeCount * estCharsPerRecipe) + estPlanChars + 48;
   var estOutputTokens = Math.ceil(estOutputChars / 3.8);
-  var requestedMaxTokens = 420;
-  var serverTaskCap = 220;
+  var requestedMaxTokens = 6000;
+  var serverTaskCap = 6000;
   console.log('[ARC PIPELINE] Week prompt output budget estimate', {
+    taskType: 'week_generation',
     uniqueRecipeCount: uniqueRecipeCount,
     totalSlots: totalSlots,
     stepsPerRecipe: '5-8',
@@ -10199,7 +10200,7 @@ function buildWeeklyPlanPrompt(intent) {
     estOutputChars: estOutputChars,
     estOutputTokens: estOutputTokens,
     requestedMaxTokens: requestedMaxTokens,
-    serverTaskCapOptimization: serverTaskCap,
+    serverTaskCapWeekGeneration: serverTaskCap,
     likelyUnderProvisioned: estOutputTokens > serverTaskCap
   });
 
@@ -10435,7 +10436,7 @@ function generateWeeklyPlan(intent) {
     }
   }
 
-  callAIWithRetry(built.sysMsg, built.userMsg, 420, applyWeek, 2, 'optimization');
+  callAIWithRetry(built.sysMsg, built.userMsg, 6000, applyWeek, 2, 'week_generation');
 }
 
 /* ── Built-for header on the planner ── */
