@@ -588,8 +588,14 @@ describe('Arc Phase 2 adaptive pipeline (mocked APIs)', () => {
     const started = logs.find((l) => l.includes('[ARC PIPELINE] Enhancement running async'));
     const skipped = logs.find((l) => l.includes('[ARC PIPELINE] Enhancement skipped safely'));
     const baseDelivered = logs.find((l) => l.includes('[ARC PIPELINE] Base recipe delivery complete'));
+    const canonicalLogged = logs.find((l) => l.includes('[ARC PIPELINE] Canonical backend schema created'));
+    const contractLogged = logs.find((l) => l.includes('[ARC PIPELINE] Frontend render contract validated'));
+    const stableResponseLogged = logs.find((l) => l.includes('[ARC PIPELINE] Stable deterministic response sent'));
     assert.ok(started || skipped, 'expected enhancement started or skipped log');
     assert.ok(baseDelivered, 'expected base delivery complete log');
+    assert.ok(canonicalLogged, 'expected canonical schema log');
+    assert.ok(contractLogged, 'expected frontend contract validation log');
+    assert.ok(stableResponseLogged, 'expected deterministic response log');
     if (started) {
       await new Promise((resolve) => setTimeout(resolve, 150));
       assert.ok(enhancementUpdate, 'expected async enhancement callback payload');
