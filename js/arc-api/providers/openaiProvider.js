@@ -37,7 +37,7 @@
       userMsg: input.userMsg,
       taskType: input.taskType || 'optimization',
       max_tokens: input.max_tokens || 220,
-      timeout_ms: 8000
+      timeout_ms: 7000
     }).then(function (res) {
       if (!res.ok) {
         var err = (res.json && res.json.error) ? res.json.error : 'OpenAI proxy request failed';
