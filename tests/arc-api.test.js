@@ -602,6 +602,51 @@ describe('Arc Phase 2 adaptive pipeline (mocked APIs)', () => {
       assert.equal(enhancementUpdate.enhanced, true);
     }
   });
+
+  test('degraded no-recipe response still returns stable schema contract', async () => {
+    const sandbox = loadArcApi({
+      fetch: mockFetch((url) => {
+        if (url.indexOf('/api/spoonacular/search') !== -1) {
+          return {
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ results: [] })
+          };
+        }
+        if (url.indexOf('/api/ai') !== -1) {
+          return {
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ content: [{ type: 'text', text: 'ok' }] })
+          };
+        }
+        return { ok: false, status: 404, json: () => Promise.resolve({ error: 'not found' }) };
+      })
+    });
+
+    const context = vm.createContext(sandbox);
+    for (const file of ENGINE_LOAD) {
+      vm.runInContext(readFileSync(path.join(ENGINE_DIR, file), 'utf8'), context, { filename: file });
+    }
+
+    const out = await sandbox.ArcApi.Orchestrator.runAdaptiveMealPipeline({
+      goal: 'Maintain weight',
+      weight: 175,
+      height: 70,
+      age: 31,
+      gender: 'female',
+      activityLevel: 'Moderate'
+    });
+
+    assert.equal(out.error, 'no_recipe_found');
+    assert.equal(out.degraded, true);
+    assert.ok(out.schema);
+    assert.equal(out.schema.owner, 'arc_backend');
+    assert.equal(Array.isArray(out.meals), true);
+    assert.equal(out.meals.length, 0);
+    assert.equal(out.canonicalMeal, null);
+    assert.equal(typeof out.schemaValidation.valid, 'boolean');
+  });
 });
 
 describe('Arc API pipeline tracing', () => {
