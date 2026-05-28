@@ -103,7 +103,7 @@
         { role: 'system', content: systemPrompt() },
         { role: 'user', content: userContent }
       ],
-      taskType: 'optimization',
+      taskType: 'instruction_enhancement',
       max_tokens: 220,
       timeout_ms: OPENAI_OPTIMIZATION_TIMEOUT_MS
     }).then(function (res) {
