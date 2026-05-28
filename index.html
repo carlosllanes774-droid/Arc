@@ -2610,6 +2610,7 @@ button:not(:disabled):active,
 <script src="js/arc-runtime.js"></script>
 <script src="js/arc-nutrition-pipeline.js"></script>
 <script src="js/arc-backend.js"></script>
+<script src="js/arc-frontend-contract.js"></script>
 <script>
   // ✅ MUST be inside script
 function parseJSON(raw) {
@@ -2693,6 +2694,37 @@ function safeNum(v, fallback) {
   return isFinite(n) ? n : fallback;
 }
 
+/** Canonical frontend contract adapter (verbose / legacy → cal, p, c, f, cat, ing, steps). */
+function arcAdaptRecipeForRender(recipe, opts) {
+  if (typeof ArcFrontendContract !== 'undefined' && ArcFrontendContract.validateFrontendRecipeContract) {
+    return ArcFrontendContract.validateFrontendRecipeContract(recipe, opts);
+  }
+  return recipe;
+}
+
+function arcNormalizeRecipesForRender(recipesInput, opts) {
+  opts = opts || {};
+  if (typeof ArcFrontendContract !== 'undefined' && ArcFrontendContract.normalizeRecipesForRender) {
+    return ArcFrontendContract.normalizeRecipesForRender(recipesInput, opts);
+  }
+  var src = Array.isArray(recipesInput) ? recipesInput : [];
+  var safe = [];
+  for (var i = 0; i < src.length; i++) {
+    if (src[i] && typeof src[i] === 'object') safe.push(src[i]);
+  }
+  return safe;
+}
+
+function arcEnsureRecipesCanonicalBeforeRender() {
+  if (typeof recipes !== 'undefined' && Array.isArray(recipes)) {
+    if (typeof ArcFrontendContract !== 'undefined' && ArcFrontendContract.ensureRecipesCanonicalBeforeRender) {
+      ArcFrontendContract.ensureRecipesCanonicalBeforeRender(recipes);
+    } else {
+      recipes = arcNormalizeRecipesForRender(recipes, { log: false });
+    }
+  }
+}
+
 function normalizeWeekPayloadContract(parsed, slots) {
   if (!isPlainObject(parsed)) return null;
   var src = isPlainObject(parsed.week) ? parsed.week : (isPlainObject(parsed.data) ? parsed.data : parsed);
@@ -2713,48 +2745,10 @@ function normalizeWeekPayloadContract(parsed, slots) {
   if (!recipesInput.length) return null;
 
   var recipes = recipesInput.map(function (r, idx) {
-    r = isPlainObject(r) ? r : {};
-    var macros = isPlainObject(r.macros) ? r.macros : {};
-    var catRaw = String(r.cat || r.mealType || r.slot || '').toLowerCase();
-    var cat = /breakfast/.test(catRaw) ? 'Breakfast' : /dinner/.test(catRaw) ? 'Dinner' : /snack/.test(catRaw) ? 'Snack' : 'Lunch';
-    var ingredients = Array.isArray(r.ing) ? r.ing.slice() : (
-      Array.isArray(r.ingredients)
-        ? r.ingredients.map(function (x) {
-            if (typeof x === 'string') return x;
-            if (!isPlainObject(x)) return '';
-            return x.original || x.name || '';
-          }).filter(Boolean)
-        : []
-    );
-    var instructions = Array.isArray(r.steps) ? r.steps : (Array.isArray(r.instructions) ? r.instructions : []);
-    var cal = Math.round(safeNum(r.cal, safeNum(macros.calories, 0)));
-    var p = Math.round(safeNum(r.p, safeNum(macros.protein, 0)));
-    var c = Math.round(safeNum(r.c, safeNum(macros.carbs, 0)));
-    var f = Math.round(safeNum(r.f, safeNum(macros.fat, 0)));
-    if (!Array.isArray(instructions) || !instructions.length) {
-      instructions = [{ phase: 'Cook', instruction: 'Prepare ingredients and cook until done.' }];
-    }
-    return {
-      id: safeNum(r.id, idx + 1),
-      name: r.name || r.title || ('Recipe ' + (idx + 1)),
-      cal: cal,
-      p: p,
-      c: c,
-      f: f,
-      macros: { calories: cal, protein: p, carbs: c, fat: f },
-      cat: cat,
-      ing: ingredients,
-      ingredients: ingredients.slice(),
-      ingQty: isPlainObject(r.ingQty) ? r.ingQty : {},
-      steps: instructions,
-      instructions: instructions,
-      tags: Array.isArray(r.tags) ? r.tags : [],
-      nutritionConfidence: r.nutritionConfidence || 'medium',
-      servings: Math.max(1, Math.round(safeNum(r.servings, 1))),
-      time: r.time || '20 min',
-      difficulty: r.difficulty || 'Easy',
-      price: safeNum(r.price, 6)
-    };
+    r = arcAdaptRecipeForRender(isPlainObject(r) ? r : {}, { log: true });
+    r.id = safeNum(r.id, idx + 1);
+    if (!r.name) r.name = 'Recipe ' + (idx + 1);
+    return r;
   });
 
   var idSet = {};
@@ -2794,28 +2788,7 @@ function normalizeWeekPayloadContract(parsed, slots) {
 }
 
 function validateRecipesForRender(recipesInput) {
-  var src = Array.isArray(recipesInput) ? recipesInput : [];
-  var safe = [];
-  for (var i = 0; i < src.length; i++) {
-    var rec = isPlainObject(src[i]) ? src[i] : null;
-    if (!rec) continue;
-    if (!Array.isArray(rec.steps) || !rec.steps.length) {
-      rec.steps = [{ phase: 'Cook', instruction: 'Prepare ingredients and cook until done.' }];
-    }
-    if (!Array.isArray(rec.instructions) || !rec.instructions.length) {
-      rec.instructions = rec.steps.slice();
-    }
-    if (!isPlainObject(rec.macros)) {
-      rec.macros = {
-        calories: safeNum(rec.cal, 0),
-        protein: safeNum(rec.p, 0),
-        carbs: safeNum(rec.c, 0),
-        fat: safeNum(rec.f, 0)
-      };
-    }
-    safe.push(rec);
-  }
-  return safe;
+  return arcNormalizeRecipesForRender(recipesInput, { log: false });
 }
 
 // ============================================================
@@ -6535,25 +6508,8 @@ function normalizeRecipeSteps(steps) {
 }
 
 function normalizeGeneratedRecipe(r, i, mt) {
-  r = r || {};
-  var cat = r.cat || r.mealType || 'Lunch';
-  if (String(cat).toLowerCase().indexOf('breakfast') !== -1) cat = 'Breakfast';
-  else if (String(cat).toLowerCase().indexOf('dinner') !== -1) cat = 'Dinner';
-  else if (String(cat).toLowerCase().indexOf('snack') !== -1) cat = 'Snack';
-  else cat = 'Lunch';
-  var macros = (r.macros && typeof r.macros === 'object') ? r.macros : {};
-  var rawIngredients = Array.isArray(r.ing) ? r.ing : (
-    Array.isArray(r.ingredients)
-      ? r.ingredients.map(function (x) {
-          if (typeof x === 'string') return x;
-          if (!x || typeof x !== 'object') return '';
-          return x.original || x.name || '';
-        }).filter(Boolean)
-      : []
-  );
-  var rawSteps = Array.isArray(r.steps) ? r.steps : (
-    Array.isArray(r.instructions) ? r.instructions : []
-  );
+  r = arcAdaptRecipeForRender(r || {}, { log: false });
+  var cat = r.cat || 'Lunch';
   var t = categoryTargetsFor(cat, mt);
   function num(v, fallback) {
     var n = Number(v);
@@ -6562,20 +6518,21 @@ function normalizeGeneratedRecipe(r, i, mt) {
   return {
     id:         i + 1,
     name:       r.name || r.title || ('Recipe ' + (i + 1)),
-    cal:        Math.round(num(r.cal, num(macros.calories, t.cal))),
-    p:          Math.round(num(r.p, num(macros.protein, t.p))),
-    c:          Math.round(num(r.c, num(macros.carbs, t.c))),
-    f:          Math.round(num(r.f, num(macros.fat, t.f))),
+    cal:        Math.round(num(r.cal, t.cal)),
+    p:          Math.round(num(r.p, t.p)),
+    c:          Math.round(num(r.c, t.c)),
+    f:          Math.round(num(r.f, t.f)),
     time:       r.time || '20 min',
     difficulty: r.difficulty || 'Easy',
     price:      num(r.price, 6.00),
     cat:        cat,
-    tags:       Array.isArray(r.tags) ? r.tags : [],
-    ing:        rawIngredients,
+    tags:       Array.isArray(r.tags) ? r.tags.slice() : [],
+    ing:        Array.isArray(r.ing) ? r.ing.slice() : [],
     ingQty:     (r.ingQty && typeof r.ingQty === 'object') ? r.ingQty : {},
-    steps:      normalizeRecipeSteps(rawSteps),
+    steps:      normalizeRecipeSteps(r.steps || []),
     nutritionConfidence: String(r.nutritionConfidence || 'medium'),
-    servings:   Math.max(1, parseInt(r.servings, 10) || 1)
+    servings:   Math.max(1, parseInt(r.servings, 10) || 1),
+    image:      r.image || null
   };
 }
 
@@ -10191,8 +10148,8 @@ function generateWeeklyPlan(intent) {
     }
 
     setGenPhase('recipes');
-    recipes = validateRecipesForRender(parsed.recipes).map(function(r, i) { return normalizeGeneratedRecipe(r, i, built.mt); });
-    recipes = validateRecipesForRender(recipes);
+    recipes = arcNormalizeRecipesForRender(parsed.recipes, { log: true }).map(function(r, i) { return normalizeGeneratedRecipe(r, i, built.mt); });
+    recipes = arcNormalizeRecipesForRender(recipes, { log: false });
     console.log('[ARC PIPELINE] Recipes extracted successfully', {
       total: recipes.length,
       hasBreakfast: recipes.some(function(r) { return String(r.cat || '').toLowerCase() === 'breakfast'; })
@@ -10349,6 +10306,7 @@ function recipesSavedFromLibrary() {
 }
 
 function renderLibrary() {
+  arcEnsureRecipesCanonicalBeforeRender();
   var listEl = el('recipes-list');
   if (!listEl) return;
   var catTabs = el('cat-tabs');
@@ -10526,10 +10484,11 @@ function generateRecipes() {
 
     if (parsed && Array.isArray(parsed) && parsed.length >= 10) {
       setGenPhase('recipes');
-      var normalized = parsed.map(function(r, i) { return normalizeGeneratedRecipe(r, i, mt); });
+      var normalized = arcNormalizeRecipesForRender(parsed, { log: true }).map(function(r, i) { return normalizeGeneratedRecipe(r, i, mt); });
+      normalized = arcNormalizeRecipesForRender(normalized, { log: false });
       arcVerifyRecipesBeforeSave(normalized, mt, function(verified) {
         if (myGen !== recipeGenId) return;
-        recipes = verified;
+        recipes = arcNormalizeRecipesForRender(verified, { log: false });
         saveSessionState();
         setGenPhase('grocery');
         renderRecipes();
@@ -11084,6 +11043,7 @@ function findPrepSlotRun(day, slot) {
 }
 
 function renderPlanner() {
+  arcEnsureRecipesCanonicalBeforeRender();
   renderBuiltForHeader();
   var listEl = el('planner-list');
   // Hide the day grid entirely until a plan has been built (or carried over manually).
