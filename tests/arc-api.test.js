@@ -28,6 +28,7 @@ const LOAD_ORDER = [
   'krogerService.js',
   'openaiService.js',
   'arcValidationService.js',
+  'arcRecipeCurationService.js',
   'providers/spoonacularProvider.js',
   'providers/edamamProvider.js',
   'providers/usdaProvider.js',
