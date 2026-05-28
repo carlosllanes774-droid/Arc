@@ -44,6 +44,53 @@
     return '';
   }
 
+  function sanitizeLabel(value) {
+    return String(value || '').trim().toLowerCase().replace(/[^a-z0-9_\- ]/g, '').replace(/\s+/g, '_').slice(0, 32);
+  }
+
+  function parseEnhancementText(rawText) {
+    var text = String(rawText || '').replace(/\r/g, '');
+    var lines = text.split('\n');
+    var out = {
+      title: '',
+      summary: '',
+      labels: [],
+      instructions: []
+    };
+    var inInstructions = false;
+    var i;
+    for (i = 0; i < lines.length; i++) {
+      var line = String(lines[i] || '').trim();
+      if (!line) continue;
+      var upper = line.toUpperCase();
+      if (upper.indexOf('TITLE:') === 0) {
+        out.title = line.slice(6).trim();
+        inInstructions = false;
+        continue;
+      }
+      if (upper.indexOf('SUMMARY:') === 0) {
+        out.summary = line.slice(8).trim();
+        inInstructions = false;
+        continue;
+      }
+      if (upper.indexOf('LABELS:') === 0) {
+        var labelsRaw = line.slice(7).split(',');
+        out.labels = labelsRaw.map(sanitizeLabel).filter(Boolean).slice(0, 8);
+        inInstructions = false;
+        continue;
+      }
+      if (upper.indexOf('INSTRUCTIONS:') === 0) {
+        inInstructions = true;
+        continue;
+      }
+      if (inInstructions) {
+        out.instructions.push(line.replace(/^[\-*\d.)\s]+/, '').trim());
+      }
+    }
+    out.instructions = out.instructions.map(function (s) { return String(s || '').trim(); }).filter(Boolean).slice(0, 10);
+    return out;
+  }
+
   function stableStringify(value) {
     if (value == null) return 'null';
     if (typeof value !== 'object') return JSON.stringify(value);
@@ -200,7 +247,14 @@
       '- Avoid changing core ingredients or macro intent.',
       '- Keep each instruction under 18 words.',
       '- No narrative, no storytelling, no extra explanations.',
-      '- Return strict JSON with keys: title, instructions (array of strings).',
+      '- Return plain text only; never return JSON, arrays, or objects.',
+      '- Output format exactly:',
+      'TITLE: <one line>',
+      'SUMMARY: <optional one line>',
+      'LABELS: <comma separated labels>',
+      'INSTRUCTIONS:',
+      '1) <step>',
+      '2) <step>',
       'Scenario: ' + String(input.scenario || 'performance'),
       'User goal: ' + String((input.profile && input.profile.goal) || ''),
       'Recipe title: ' + title,
@@ -222,13 +276,14 @@
         return b.fail(ID, 'adaptation', (res.json && res.json.error) || 'OpenAI enhancement failed');
       }
       var text = extractAiText(res.json);
-      var parsed = null;
-      try { parsed = JSON.parse(text); } catch (e) { parsed = null; }
-      if (!parsed || !parsed.title || !Array.isArray(parsed.instructions) || !parsed.instructions.length) {
+      var parsed = parseEnhancementText(text);
+      if (!parsed || (!parsed.title && !parsed.instructions.length && !parsed.summary)) {
         return b.fail(ID, 'adaptation', 'Invalid enhancement format');
       }
       var out = b.ok(ID, 'adaptation', {
-        enhancedTitle: String(parsed.title),
+        enhancedTitle: parsed.title ? String(parsed.title) : null,
+        enhancedSummary: parsed.summary ? String(parsed.summary) : null,
+        enhancedLabels: parsed.labels || [],
         enhancedInstructions: parsed.instructions.map(function (s) { return String(s); }).filter(Boolean)
       });
       if (c) c.set('openai', enhancementKey, out, OPENAI_ENHANCEMENT_CACHE_TTL_MS);
