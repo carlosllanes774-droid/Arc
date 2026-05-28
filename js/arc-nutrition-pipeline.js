@@ -10,18 +10,26 @@
     return path;
   }
 
+  function normalizeLine(s) {
+    var E = global.ArcApi && global.ArcApi.Edamam;
+    if (E && E.normalizeIngredientLine) return E.normalizeIngredientLine(s);
+    return String(s || '').trim();
+  }
+
   function ingredientLines(recipe) {
     var lines = [];
     if (Array.isArray(recipe.ing)) {
       recipe.ing.forEach(function (name) {
-        var line = String(name || '').trim();
+        var line = normalizeLine(name);
         if (!line) return;
         if (recipe.ingQty && recipe.ingQty[name]) {
-          line = recipe.ingQty[name] + ' ' + line;
+          line = normalizeLine(recipe.ingQty[name] + ' ' + line);
         }
         lines.push(line);
       });
     }
+    var E = global.ArcApi && global.ArcApi.Edamam;
+    if (E && E.normalizeIngredientLines) return E.normalizeIngredientLines(lines);
     return lines.filter(Boolean);
   }
 
@@ -102,7 +110,8 @@
     return postJson('/api/nutrition/pipeline', {
       title: recipe.name || 'Recipe',
       ingr: ingr,
-      reported: reported
+      reported: reported,
+      spoonacularRecipeId: recipe.spoonacularId || recipe.recipeId || recipe.id || null
     }).then(function (res) {
       if (!res.ok || !res.json) {
         if (Trace) Trace.logFallback('category_targets', 'pipeline_unavailable');
@@ -110,6 +119,24 @@
       }
 
       var data = res.json;
+
+      if (data.fallback && data.macros && data.macros.calories > 0) {
+        recipe.cal = Math.round(data.macros.calories);
+        recipe.p = Math.round(data.macros.protein);
+        recipe.c = Math.round(data.macros.carbs);
+        recipe.f = Math.round(data.macros.fat);
+        recipe.nutritionSource = data.source || 'fallback';
+        recipe.nutritionVerified = false;
+        recipe.nutritionConfidence = data.nutritionConfidence || 'low';
+        if (Trace) Trace.logFallback(data.source || 'usda', 'edamam_failed');
+        return {
+          recipe: recipe,
+          verified: false,
+          source: data.source,
+          validation: data.validation || { safe: false, reason: 'edamam_fallback' }
+        };
+      }
+
       if (!data.verified || !data.macros) {
         if (Trace && (data.reason === 'validation_failed' || !data.verified)) {
           Trace.logMessage('USDA validation failed');
@@ -136,6 +163,7 @@
       recipe.f = Math.round(data.macros.fat);
       recipe.nutritionSource = data.source || 'verified';
       recipe.nutritionVerified = true;
+      recipe.nutritionConfidence = data.nutritionConfidence || 'high';
 
       return {
         recipe: recipe,
