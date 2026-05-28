@@ -872,6 +872,7 @@ function buildOpenAiMessages(body) {
 
 function openAiTaskTokenLimit(taskType) {
   const task = String(taskType || "optimization").toLowerCase();
+  if (task === "week_generation") return 6000;
   if (task === "instruction_enhancement") return 250;
   if (task === "tagging" || task === "classification" || task === "optimization_classification") return 90;
   return 220;
