@@ -17,8 +17,10 @@
     off_plan: 'Off-plan eating logged: damage control for remainder of day without guilt-based restriction.',
     performance: 'High output training: intra-workout fuel, elevated carbs around sessions, recovery emphasis.'
   };
-  var OPENAI_TIMEOUT_MS = 8000;
+  var OPENAI_OPTIMIZATION_TIMEOUT_MS = 7000;
+  var OPENAI_ENHANCEMENT_TIMEOUT_MS = 13000;
   var OPENAI_CACHE_TTL_MS = 20 * 60 * 1000;
+  var OPENAI_ENHANCEMENT_CACHE_TTL_MS = 60 * 60 * 1000;
   var inFlight = new Map();
 
   function systemPrompt() {
@@ -103,7 +105,7 @@
       ],
       taskType: 'optimization',
       max_tokens: 220,
-      timeout_ms: OPENAI_TIMEOUT_MS
+      timeout_ms: OPENAI_OPTIMIZATION_TIMEOUT_MS
     }).then(function (res) {
       if (!res.ok) {
         if (res.status === 503) return b.notConfigured(ID, 'adaptation');
@@ -167,10 +169,27 @@
       return String((ing && (ing.original || ing.name)) || '').trim();
     }).filter(Boolean) : [];
     var instructions = Array.isArray(recipe.instructions) ? recipe.instructions.slice(0, 8) : [];
+    var compactInstructions = instructions.map(function (step) {
+      return String(step || '').trim();
+    }).filter(Boolean);
+    var compactIngredients = ingredients.slice(0, 10);
+    var enhancementKey = 'openai:enhance:' + stableStringify({
+      scenario: input.scenario || 'performance',
+      goal: input.profile && input.profile.goal,
+      title: title,
+      ingredients: compactIngredients,
+      instructions: compactInstructions.slice(0, 6)
+    });
+    var c = Cache();
 
     if (!title || !ingredients.length) {
       return Promise.resolve(b.fail(ID, 'adaptation', 'recipe data required for enhancement'));
     }
+    if (c) {
+      var hit = c.get('openai', enhancementKey);
+      if (hit) return Promise.resolve(hit);
+    }
+    if (inFlight.has(enhancementKey)) return inFlight.get(enhancementKey);
 
     var prompt = [
       'Enhance recipe title and instructions for Arc premium nutrition coaching.',
@@ -179,22 +198,24 @@
       '- Return concise, high-clarity, action-first cooking steps.',
       '- Improve flavor guidance and cooking terminology.',
       '- Avoid changing core ingredients or macro intent.',
+      '- Keep each instruction under 18 words.',
+      '- No narrative, no storytelling, no extra explanations.',
       '- Return strict JSON with keys: title, instructions (array of strings).',
       'Scenario: ' + String(input.scenario || 'performance'),
       'User goal: ' + String((input.profile && input.profile.goal) || ''),
       'Recipe title: ' + title,
-      'Ingredients: ' + JSON.stringify(ingredients),
-      'Instructions: ' + JSON.stringify(instructions)
+      'Ingredients: ' + JSON.stringify(compactIngredients),
+      'Instructions: ' + JSON.stringify(compactInstructions)
     ].join('\n');
 
-    return b.postJson('/api/ai', {
+    var req = b.postJson('/api/ai', {
       messages: [
         { role: 'system', content: 'You are a culinary performance coach. Rewrite recipe title and steps in premium meal-kit style. Return valid JSON only.' },
         { role: 'user', content: prompt }
       ],
       taskType: 'optimization',
-      max_tokens: 350,
-      timeout_ms: OPENAI_TIMEOUT_MS
+      max_tokens: 240,
+      timeout_ms: OPENAI_ENHANCEMENT_TIMEOUT_MS
     }).then(function (res) {
       if (!res.ok) {
         if (res.status === 503) return b.notConfigured(ID, 'adaptation');
@@ -206,13 +227,19 @@
       if (!parsed || !parsed.title || !Array.isArray(parsed.instructions) || !parsed.instructions.length) {
         return b.fail(ID, 'adaptation', 'Invalid enhancement format');
       }
-      return b.ok(ID, 'adaptation', {
+      var out = b.ok(ID, 'adaptation', {
         enhancedTitle: String(parsed.title),
         enhancedInstructions: parsed.instructions.map(function (s) { return String(s); }).filter(Boolean)
       });
+      if (c) c.set('openai', enhancementKey, out, OPENAI_ENHANCEMENT_CACHE_TTL_MS);
+      return out;
     }).catch(function (err) {
       return b.fail(ID, 'adaptation', err && err.message ? err.message : 'Network error');
+    }).finally(function () {
+      inFlight.delete(enhancementKey);
     });
+    inFlight.set(enhancementKey, req);
+    return req;
   }
 
   var api = {
