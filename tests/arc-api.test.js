@@ -187,6 +187,32 @@ describe('Arc API validation layer', () => {
     assert.equal(r.complete, false);
     assert.ok(r.missing.includes('ingredients'));
   });
+
+  test('deriveNutritionTags returns data-driven tags', () => {
+    const { ArcApi } = loadArcApi();
+    const tags = ArcApi.Validation.deriveNutritionTags({
+      calories: 520,
+      protein: 38,
+      carbs: 20,
+      fat: 26,
+      fiber: 9
+    });
+    assert.equal(tags.rules.high_protein, true);
+    assert.equal(tags.rules.low_carb, true);
+    assert.equal(tags.rules.high_fiber, true);
+  });
+
+  test('runNutritionSanityChecks flags impossible macro ratios', () => {
+    const { ArcApi } = loadArcApi();
+    const sanity = ArcApi.Validation.runNutritionSanityChecks({
+      calories: 400,
+      protein: 10,
+      carbs: 10,
+      fat: 70
+    });
+    assert.equal(sanity.valid, false);
+    assert.ok(sanity.issues.includes('fat_exceeds_calorie_math'));
+  });
 });
 
 describe('Arc API Edamam helpers', () => {
