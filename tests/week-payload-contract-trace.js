@@ -121,11 +121,31 @@ function simulateCallAiDispatch(backendBody) {
     return c.map((b) => (b && typeof b.text === 'string' ? b.text : '')).join('');
   }
 
+  function hasWeekGenerationSchemaShape(v) {
+    if (!isPlainObject(v)) return false;
+    return Array.isArray(v.recipes) && isPlainObject(v.plan);
+  }
+
   if (hasCanonicalSchemaShape(backendBody)) {
     return { source: 'canonical_backend', raw: backendBody, dispatchNote: 'Object passed through without text extraction' };
   }
   const text = extractAiResponseText(backendBody).trim();
-  return { source: 'enhancement', raw: text, dispatchNote: 'content[].text extracted — week applyWeek rejects enhancement source' };
+  if (text && backendBody && backendBody.content != null) {
+    let nestedParsed = null;
+    try {
+      nestedParsed = JSON.parse(text);
+    } catch (_) {
+      nestedParsed = null;
+    }
+    if (nestedParsed && hasWeekGenerationSchemaShape(nestedParsed)) {
+      return {
+        source: 'week_generation',
+        raw: nestedParsed,
+        dispatchNote: 'Nested week JSON in content[].text — classified as week_generation'
+      };
+    }
+  }
+  return { source: 'enhancement', raw: text, dispatchNote: 'content[].text extracted — not a valid week schema' };
 }
 
 function simulatePreAdapterNormalizeGeneratedRecipe(r, i, mt) {
@@ -189,7 +209,9 @@ function traceVerboseWeekRecipe() {
       dispatch.dispatchNote,
       dispatch.source === 'enhancement'
         ? 'applyWeek sets err: Enhancement payload cannot be used as canonical week schema — pipeline STOPS before parse if meta.source=enhancement'
-        : 'Would pass to parseJSON as object or string'
+        : dispatch.source === 'week_generation'
+          ? 'Nested week in content[].text — applyWeek proceeds (meta.source=week_generation)'
+          : 'Would pass to parseJSON as object or string'
     ].join('\n')
   );
 
@@ -199,8 +221,10 @@ function traceVerboseWeekRecipe() {
     parsed = S.parseJSON(dispatch.raw);
     parseNote = 'parseJSON on extracted AI text string';
   } else {
-    parsed = dispatch.raw;
-    parseNote = 'canonical_backend object — parseJSON skipped in applyWeek when raw is object? applyWeek always calls parseJSON(raw)';
+    parseNote =
+      dispatch.source === 'week_generation'
+        ? 'week_generation nested object — parseJSON in applyWeek'
+        : 'canonical_backend object — parseJSON in applyWeek';
     parsed = S.parseJSON(dispatch.raw);
   }
 
