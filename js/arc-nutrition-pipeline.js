@@ -127,7 +127,7 @@
         recipe.f = Math.round(data.macros.fat);
         recipe.nutritionSource = data.source || 'fallback';
         recipe.nutritionVerified = false;
-        recipe.nutritionConfidence = data.nutritionConfidence || 'low';
+        recipe.nutritionConfidence = data.nutritionConfidence || (data.source === 'usda' ? 'medium' : 'low');
         if (Trace) Trace.logFallback(data.source || 'usda', 'edamam_failed');
         return {
           recipe: recipe,
@@ -164,6 +164,8 @@
       recipe.nutritionSource = data.source || 'verified';
       recipe.nutritionVerified = true;
       recipe.nutritionConfidence = data.nutritionConfidence || 'high';
+      recipe.nutritionTags = data.nutritionTags || [];
+      recipe.validatedTags = data.validatedTags || [];
 
       return {
         recipe: recipe,
