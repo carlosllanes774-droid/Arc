@@ -10119,7 +10119,11 @@ function generateWeeklyPlan(intent) {
   setGenPhase('balancing');
 
   function applyWeek(err, raw, meta) {
-    if (myGen !== recipeGenId) return;
+    console.log('[ARC TRACE] applyWeek entered', { myGen: myGen, recipeGenId: recipeGenId, hasErr: !!err, hasRaw: !!raw });
+    if (myGen !== recipeGenId) {
+      console.log('[ARC TRACE] early return', { reason: 'stale_generation', myGen: myGen, recipeGenId: recipeGenId });
+      return;
+    }
 
     console.log('[ARC PIPELINE] Raw backend payload', {
       hasError: !!err,
@@ -10131,10 +10135,32 @@ function generateWeeklyPlan(intent) {
     var payloadSource = (meta && meta.source) ? String(meta.source) : 'unknown';
     console.log('[ARC PIPELINE] Parser source check', { expected: 'canonical_backend', received: payloadSource });
     if (!err && payloadSource === 'enhancement') {
+      console.log('[ARC TRACE] early return', { reason: 'enhancement_guard_triggered', payloadSource: payloadSource, expected: 'canonical_backend' });
       err = new Error('Enhancement payload cannot be used as canonical week schema');
     }
-    if (!err && raw) parsed = parseJSON(raw);
+    if (!err && raw) {
+      parsed = parseJSON(raw);
+      if (parsed) {
+        console.log('[ARC TRACE] parseJSON success', { parsedType: typeof parsed, isArray: Array.isArray(parsed) });
+      } else {
+        console.log('[ARC TRACE] parseJSON failed', { reason: 'parser_returned_null', rawType: typeof raw });
+      }
+    } else if (!err && !raw) {
+      console.log('[ARC TRACE] parseJSON skipped', { reason: 'empty_raw_body' });
+    } else if (err) {
+      console.log('[ARC TRACE] parseJSON skipped', { reason: 'err_before_parse', errMessage: err.message || String(err) });
+    }
     var normalized = normalizeWeekPayloadContract(parsed, built.slots);
+    if (normalized) {
+      console.log('[ARC TRACE] normalization success', { recipeCount: normalized.recipes ? normalized.recipes.length : 0, fallbackApplied: !!normalized.fallbackApplied });
+    } else {
+      console.log('[ARC TRACE] normalization failed', {
+        reason: !parsed ? 'parsed_null' : (!isPlainObject(parsed) ? 'parsed_not_plain_object' : 'no_recipes_extractable'),
+        parsedIsObject: isPlainObject(parsed),
+        parsedHasRecipes: parsed && Array.isArray(parsed.recipes),
+        parsedRecipesLength: parsed && Array.isArray(parsed.recipes) ? parsed.recipes.length : 0
+      });
+    }
     if (normalized && normalized.fallbackApplied) {
       console.log('[ARC PIPELINE] Parser fallback applied', { reason: 'plan_slots_recovered' });
     }
@@ -10150,7 +10176,29 @@ function generateWeeklyPlan(intent) {
     var validPlan = parsed && parsed.plan && typeof parsed.plan === 'object';
 
     if (!validRecipes || !validPlan) {
-      if (myGen !== recipeGenId) return;
+      if (myGen !== recipeGenId) {
+        console.log('[ARC TRACE] early return', { reason: 'stale_generation_during_validation', myGen: myGen, recipeGenId: recipeGenId });
+        return;
+      }
+      var traceFailReason = 'validation_failed';
+      if (err) traceFailReason = 'callback_err';
+      else if (!raw) traceFailReason = 'no_response_body';
+      else if (!parsed) traceFailReason = 'parseJSON_returned_null';
+      else if (!validRecipes && !validPlan) traceFailReason = 'invalid_recipes_and_invalid_plan';
+      else if (!validRecipes) traceFailReason = 'invalid_recipes';
+      else if (!validPlan) traceFailReason = 'invalid_plan';
+      console.log('[ARC TRACE] early return', {
+        reason: traceFailReason,
+        payloadSource: payloadSource,
+        validRecipes: !!validRecipes,
+        validPlan: !!validPlan,
+        hasParsed: !!parsed,
+        recipesIsArray: !!(parsed && Array.isArray(parsed.recipes)),
+        recipesLength: parsed && Array.isArray(parsed.recipes) ? parsed.recipes.length : 0,
+        planExists: !!(parsed && parsed.plan),
+        planType: parsed && parsed.plan ? typeof parsed.plan : 'n/a',
+        errMessage: err ? (err.message || String(err)) : null
+      });
       stopGenLoadingUI();
       var detail = '';
       if (err) detail = err.message || String(err);
@@ -10175,6 +10223,7 @@ function generateWeeklyPlan(intent) {
     });
 
     function finishWeekPlanAfterNutrition() {
+      console.log('[ARC TRACE] finishWeekPlanAfterNutrition entered', { recipeCount: recipes.length, myGen: myGen, recipeGenId: recipeGenId });
       var recById = {};
       for (var ri = 0; ri < recipes.length; ri++) recById[recipes[ri].id] = recipes[ri];
 
@@ -10217,8 +10266,12 @@ function generateWeeklyPlan(intent) {
       UP.weeklyPlanDraft = null;
 
       setGenPhase('grocery');
+      console.log('[ARC TRACE] renderLibrary starting', { recipeCount: recipes.length });
       renderLibrary();
+      console.log('[ARC TRACE] renderLibrary completed');
+      console.log('[ARC TRACE] renderPlanner starting');
       renderPlanner();
+      console.log('[ARC TRACE] renderPlanner completed');
       renderNutrition();
       renderShopping();
 
@@ -10238,15 +10291,25 @@ function generateWeeklyPlan(intent) {
 
     setGenPhase('balancing');
     if (typeof ArcNutritionPipeline !== 'undefined' && ArcNutritionPipeline.verifyRecipes) {
+      console.log('[ARC TRACE] ArcNutritionPipeline.verifyRecipes starting', { recipeCount: recipes.length });
       ArcNutritionPipeline.verifyRecipes(recipes, built.mt, 3).then(function(verified) {
-        if (myGen !== recipeGenId) return;
+        if (myGen !== recipeGenId) {
+          console.log('[ARC TRACE] early return', { reason: 'stale_generation_after_nutrition_verify', myGen: myGen, recipeGenId: recipeGenId });
+          return;
+        }
+        console.log('[ARC TRACE] ArcNutritionPipeline.verifyRecipes resolved');
         recipes = verified;
         finishWeekPlanAfterNutrition();
-      }).catch(function() {
-        if (myGen !== recipeGenId) return;
+      }).catch(function(nutritionErr) {
+        if (myGen !== recipeGenId) {
+          console.log('[ARC TRACE] early return', { reason: 'stale_generation_after_nutrition_verify_catch', myGen: myGen, recipeGenId: recipeGenId });
+          return;
+        }
+        console.log('[ARC TRACE] ArcNutritionPipeline.verifyRecipes catch — continuing', { err: nutritionErr ? String(nutritionErr) : null });
         finishWeekPlanAfterNutrition();
       });
     } else {
+      console.log('[ARC TRACE] ArcNutritionPipeline skipped — calling finishWeekPlanAfterNutrition');
       finishWeekPlanAfterNutrition();
     }
   }
