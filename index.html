@@ -8188,19 +8188,33 @@ function extractAiResponseText(data) {
   return out.join('');
 }
 
-function callAI(system, userMsg, maxTok, callback) {
-  maxTok = maxTok || 1200;
+var arcAiInFlight = {};
+
+function callAI(system, userMsg, maxTok, callback, taskType) {
+  maxTok = maxTok || 220;
+  taskType = taskType || 'optimization';
   var messages = [
     { role: 'system', content: system || 'You assist Arc. Propose meal ideas and structure only; Arc Engine owns calorie and macro targets.' },
     { role: 'user', content: userMsg || '' }
   ];
+  var dedupeKey = taskType + '|' + String(maxTok) + '|' + String(userMsg || '').slice(0, 240);
+  if (arcAiInFlight[dedupeKey]) {
+    arcAiInFlight[dedupeKey].then(function(text) {
+      callback(null, text);
+    }).catch(function(err) {
+      callback(err, null);
+    });
+    return;
+  }
 
-  fetch(arcApiPath('/api/ai'), {
+  var req = fetch(arcApiPath('/api/ai'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       messages: messages,
-      max_tokens: maxTok
+      max_tokens: maxTok,
+      taskType: taskType,
+      timeout_ms: 8000
     })
   })
   .then(function(resp) {
@@ -8237,16 +8251,24 @@ function callAI(system, userMsg, maxTok, callback) {
     }
 
     callback(null, text);
+    return text;
   })
-  .catch(function(err) { callback(err, null); });
+  .catch(function(err) {
+    callback(err, null);
+    throw err;
+  })
+  .finally(function() {
+    delete arcAiInFlight[dedupeKey];
+  });
+  arcAiInFlight[dedupeKey] = req;
 }
 
-function callAIWithRetry(system, userMsg, maxTok, callback, retries) {
+function callAIWithRetry(system, userMsg, maxTok, callback, retries, taskType) {
   retries = (retries == null) ? 2 : retries;
   callAI(system, userMsg, maxTok, function(err, raw) {
     if (!err || retries <= 0) { callback(err, raw); return; }
-    setTimeout(function() { callAIWithRetry(system, userMsg, maxTok, callback, retries - 1); }, 1500);
-  });
+    setTimeout(function() { callAIWithRetry(system, userMsg, maxTok, callback, retries - 1, taskType); }, 700);
+  }, taskType);
 }
 
 // ── Height helpers ────────────────────────────────────────────
@@ -9988,7 +10010,7 @@ function generateWeeklyPlan(intent) {
     }
   }
 
-  callAIWithRetry(built.sysMsg, built.userMsg, 9000, applyWeek, 3);
+  callAIWithRetry(built.sysMsg, built.userMsg, 420, applyWeek, 2, 'instruction_enhancement');
 }
 
 /* ── Built-for header on the planner ── */
@@ -10282,7 +10304,7 @@ function generateRecipes() {
   }
 
   // Try with retries
-  callAIWithRetry(sysMsg, userMsg, 8000, processRecipes, 3);
+  callAIWithRetry(sysMsg, userMsg, 420, processRecipes, 2, 'instruction_enhancement');
 }
 
 function syncCatTabsUI() {
@@ -10637,7 +10659,7 @@ function fetchSteps(id) {
   userMsg    += 'Use "Serve" for resting, plating, garnishing, and storing leftovers. ';
   userMsg    += 'Example: [{"phase":"Prep","instruction":"Dice the onion and mince the garlic."},{"phase":"Cook","instruction":"Sauté the onion in oil over medium heat until translucent, about 4 minutes."},{"phase":"Serve","instruction":"Divide between bowls and top with fresh herbs."}]';
 
-  callAIWithRetry(sysMsg, userMsg, 1200, function(err, raw) {
+  callAIWithRetry(sysMsg, userMsg, 380, function(err, raw) {
     var steps = normalizeRecipeSteps([
       { phase: 'Prep', instruction: 'Gather and prepare all listed ingredients.' },
       { phase: 'Cook', instruction: 'Cook using a standard method appropriate for this dish until done in the center.' },
@@ -10652,7 +10674,7 @@ function fetchSteps(id) {
       el('tab-steps').innerHTML = buildStepsTab(steps);
     }
     syncTodayPeekStepsIfOpen(id, steps);
-  }, 2);
+  }, 2, 'instruction_enhancement');
 }
 
 function setupRMTabs() {
@@ -10694,7 +10716,7 @@ function openSwap(ing, rid) {
   userMsg    += 'calDiff is estimated calorie difference vs original (negative = fewer calories). ';
   userMsg    += 'Start with [ and end with ]';
 
-  callAIWithRetry(sysMsg, userMsg, 700, function(err, raw) {
+  callAIWithRetry(sysMsg, userMsg, 90, function(err, raw) {
     var opts = [{name: ing + ' alternative', qty: iqStr, reason: 'Try a similar ingredient from your pantry.', calDiff: 0}];
     if (!err && raw) {
       var parsed = parseJSON(raw);
@@ -10720,7 +10742,7 @@ function openSwap(ing, rid) {
     for (var j = 0; j < swapOptEls.length; j++) {
       swapOptEls[j].addEventListener('click', function() { applySwap(this.dataset.name, this.dataset.qty); });
     }
-  }, 2);
+  }, 2, 'classification');
 }
 
 function applySwap(newName, newQty) {
@@ -11112,7 +11134,7 @@ function refreshSingleSlotMeal() {
   userMsg += 'price is USD per serving for budget ' + budgetNote + '.\n';
   userMsg += 'Return ONE object in a one-element JSON array.\n';
 
-  callAIWithRetry(sysMsg, userMsg, 5500, function(err, raw) {
+  callAIWithRetry(sysMsg, userMsg, 420, function(err, raw) {
     if (mtToken !== refreshMealGen) return;
     var parsed = null;
     if (!err && raw) parsed = parseJSON(raw);
@@ -11151,7 +11173,7 @@ function refreshSingleSlotMeal() {
     }
     showToast(ARC_COPY.toast.composeAdjusted);
     openAssign(day, slot, assignIntent);
-  }, 2);
+  }, 2, 'instruction_enhancement');
 }
 
 function openAssign(day, slot, intent) {
@@ -11621,7 +11643,7 @@ function aiCreatePlan() {
     showToast(planApplied ? ARC_COPY.toast.weekPlanned : ARC_COPY.toast.weekFilled);
   }
 
-  callAIWithRetry(sysMsg, userMsg, 1500, applyPlan, 3);
+  callAIWithRetry(sysMsg, userMsg, 240, applyPlan, 2, 'optimization');
 }
 
 // ── Adapt plan ────────────────────────────────────────────────
@@ -11694,7 +11716,7 @@ function openAdaptModal() {
   userMsg += buildAdaptiveBehaviorPromptBlock();
   userMsg += 'Suggest up to 3 meal swaps to bring each day closer to the target. Return JSON: [{"day":"Mon","slot":"Dinner","recipeId":5,"reason":"brief reason"}] Start with [';
 
-  callAIWithRetry(sysMsg, userMsg, 800, function(err, raw) {
+  callAIWithRetry(sysMsg, userMsg, 90, function(err, raw) {
     if (err || !raw) { el('adapt-suggestions').innerHTML = '<div style="color:#9ca3af;font-size:13px;padding:8px">Suggestions are taking a moment—try again shortly.</div>'; return; }
     var suggs = parseJSON(raw);
     if (!Array.isArray(suggs) || !suggs.length) {
@@ -11737,7 +11759,7 @@ function openAdaptModal() {
     for (var sk = 0; sk < skipBtns.length; sk++) {
       skipBtns[sk].addEventListener('click', function() { this.closest('.adapt-change').style.opacity = '.4'; });
     }
-  }, 2);
+  }, 2, 'classification');
 }
 
 // ── Nutrition ─────────────────────────────────────────────────
@@ -13001,12 +13023,12 @@ function finalizeFoodLogReply(fullMsg) {
   userMsg += buildAdaptiveBehaviorPromptBlock();
   userMsg += 'Here is what I ate (include any follow-up detail): ' + fullMsg;
 
-  callAIWithRetry(sysMsg, userMsg, 800, function(err, raw) {
+  callAIWithRetry(sysMsg, userMsg, 380, function(err, raw) {
     logs = logs.filter(function(m) { return m.type !== 'thinking'; });
     if (!err && raw) logs.push({ type: 'ai', text: raw });
     else logs.push({ type: 'ai', text: 'Got it, logged! Every meal is a step toward your goal — keep it up!' });
     renderLog();
-  }, 2);
+  }, 2, 'instruction_enhancement');
 }
 
 function sendLog() {
@@ -13035,7 +13057,7 @@ function sendLog() {
     'OR {"log":true,"reply":"2–3 sentences: warm acknowledgment, rough calories plus protein/carbs/fat in plain words, tiny encouragement."}\n' +
     'Prefer {"log":true,...} whenever a reasonable guess exists. Never ask more than one question.';
 
-  callAIWithRetry(triSys, 'User said: ' + msg, 450, function(err, raw) {
+  callAIWithRetry(triSys, 'User said: ' + msg, 90, function(err, raw) {
     logs = logs.filter(function(m) { return m.type !== 'thinking'; });
     var j = !err && raw ? parseJSON(raw) : null;
     if (j && j.clarify && String(j.clarify).trim() && !j.log) {
@@ -13052,7 +13074,7 @@ function sendLog() {
     logs.push({ type: 'thinking' });
     renderLog();
     finalizeFoodLogReply(msg);
-  }, 2);
+  }, 2, 'classification');
 }
 
 // ═══════════════════════════════════════════════════════
