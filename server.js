@@ -811,7 +811,7 @@ function buildOpenAiMessages(body) {
 
 function openAiTaskTokenLimit(taskType) {
   const task = String(taskType || "optimization").toLowerCase();
-  if (task === "instruction_enhancement") return 420;
+  if (task === "instruction_enhancement") return 250;
   if (task === "tagging" || task === "classification" || task === "optimization_classification") return 90;
   return 220;
 }
@@ -883,14 +883,26 @@ app.post("/api/ai", async (req, res) => {
       openAiInFlight.delete(cacheKey);
     }
   } catch (err) {
-    if (err && (err.name === "AbortError" || err.code === "ABORT_ERR")) {
+    const failedTask = String((req.body && req.body.taskType) || "optimization").toLowerCase();
+    if (err && (err.name === "AbortError" || err.code === "ABORT_ERR" || err.name === "APIUserAbortError")) {
       arcPipelineLog("OpenAI timeout fallback triggered", { timeoutMs: OPENAI_TIMEOUT_MS });
       return res.json({
         content: [{ type: "text", text: "fallback: timeout; continue pipeline" }],
         timeoutFallback: true,
       });
     }
-    console.error(err);
+    if (failedTask === "instruction_enhancement") {
+      arcPipelineLog("OpenAI enhancement fallback triggered", { reason: err && err.name ? err.name : "request_failed" });
+      return res.json({
+        content: [{ type: "text", text: "fallback: enhancement unavailable; preserve base instructions" }],
+        enhancementFallback: true,
+      });
+    }
+    if (process.env.ARC_DEBUG_OPENAI === "1") {
+      console.error(err);
+    } else {
+      arcPipelineLog("OpenAI fallback response used", { reason: err && err.name ? err.name : "request_failed" });
+    }
     res.status(500).json({ error: "Server error" });
   }
 });
