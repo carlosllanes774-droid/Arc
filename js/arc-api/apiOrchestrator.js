@@ -160,6 +160,72 @@
     });
   }
 
+  function normalizeInstructionLines(value) {
+    if (!Array.isArray(value)) return [];
+    return value.map(function (line) { return String(line || '').trim(); }).filter(Boolean);
+  }
+
+  function deriveMealCategory(recipe, scenario) {
+    var text = String((recipe && recipe.title) || '').toLowerCase();
+    if (text.indexOf('breakfast') !== -1) return 'breakfast';
+    if (text.indexOf('lunch') !== -1) return 'lunch';
+    if (text.indexOf('snack') !== -1) return 'snack';
+    if (scenario === 'off_plan') return 'recovery_meal';
+    return 'dinner';
+  }
+
+  function buildCanonicalMealSchema(payload) {
+    payload = payload || {};
+    var recipe = payload.recipe || {};
+    var nutrition = recipe.nutrition || {};
+    var instructions = normalizeInstructionLines(recipe.instructions);
+    var ingredients = Array.isArray(recipe.ingredients) ? recipe.ingredients.map(function (ing) {
+      return {
+        name: String((ing && (ing.name || ing.original)) || '').trim(),
+        original: String((ing && (ing.original || ing.name)) || '').trim(),
+        quantity: ing && ing.quantity != null ? Number(ing.quantity) : null,
+        unit: ing && ing.unit ? String(ing.unit) : null
+      };
+    }).filter(function (ing) { return !!ing.name; }) : [];
+
+    return {
+      mealId: recipe.recipeId || recipe.id || null,
+      title: String(recipe.title || recipe.name || 'Meal'),
+      description: String(recipe.description || ''),
+      summary: String(recipe.summary || ''),
+      labels: Array.isArray(recipe.labels) ? recipe.labels.slice(0, 8).map(function (l) { return String(l); }) : [],
+      mealCategory: deriveMealCategory(recipe, payload.scenario),
+      servings: Number(recipe.servings || 1),
+      nutritionConfidence: String(payload.nutritionConfidence || recipe.nutritionConfidence || 'medium'),
+      macros: {
+        calories: Number(nutrition.calories || recipe.calories || 0),
+        protein: Number(nutrition.protein || recipe.protein || 0),
+        carbs: Number(nutrition.carbs || recipe.carbs || 0),
+        fat: Number(nutrition.fat || recipe.fat || 0)
+      },
+      ingredients: ingredients,
+      instructions: instructions
+    };
+  }
+
+  function validateStableResponseShape(result) {
+    if (!result || typeof result !== 'object') return { valid: false, issues: ['response_missing'] };
+    var issues = [];
+    if (!result.canonicalMeal || typeof result.canonicalMeal !== 'object') issues.push('canonical_meal_missing');
+    if (!Array.isArray(result.meals)) issues.push('meals_not_array');
+    if (result.canonicalMeal) {
+      if (!Array.isArray(result.canonicalMeal.ingredients)) issues.push('ingredients_not_array');
+      if (!Array.isArray(result.canonicalMeal.instructions)) issues.push('instructions_not_array');
+      if (!result.canonicalMeal.macros || typeof result.canonicalMeal.macros !== 'object') issues.push('macros_missing');
+    }
+    try {
+      JSON.stringify(result);
+    } catch (_) {
+      issues.push('serialization_failed');
+    }
+    return { valid: issues.length === 0, issues: issues };
+  }
+
   function dispatch(operationName, input) {
     var op = OPERATIONS[operationName];
     if (!op) {
@@ -501,6 +567,12 @@
               }
 
               selectedRecipe.instructions = Array.isArray(selectedRecipe.instructions) ? selectedRecipe.instructions.slice() : [];
+              var canonicalMeal = buildCanonicalMealSchema({
+                recipe: selectedRecipe,
+                scenario: scenario,
+                nutritionConfidence: selectedRecipe.nutritionConfidence
+              });
+              if (T) T.logMessage('Canonical meal schema created');
               var finalResult = buildPipelineResult({
                 arcResult: arcResult,
                 scenario: scenario,
@@ -516,6 +588,13 @@
                 curatedRecipes: scoredRecipes,
                 rejectedRecipes: curatedResult.rejected
               });
+              finalResult.canonicalMeal = canonicalMeal;
+              finalResult.meals = [canonicalMeal];
+              finalResult.schema = {
+                owner: 'arc_backend',
+                version: '1.0.0',
+                stable: true
+              };
               finalResult.enhancement = {
                 status: 'skipped',
                 async: false,
@@ -538,10 +617,21 @@
                     try {
                       if (enhancement && enhancement.status === 'ok' && enhancement.data) {
                         selectedRecipe.title = enhancement.data.enhancedTitle || selectedRecipe.title;
+                        selectedRecipe.summary = enhancement.data.enhancedSummary || selectedRecipe.summary || '';
+                        selectedRecipe.labels = Array.isArray(enhancement.data.enhancedLabels)
+                          ? enhancement.data.enhancedLabels.slice()
+                          : (selectedRecipe.labels || []);
                         selectedRecipe.instructions = enhancement.data.enhancedInstructions || selectedRecipe.instructions;
+                        finalResult.canonicalMeal = buildCanonicalMealSchema({
+                          recipe: selectedRecipe,
+                          scenario: scenario,
+                          nutritionConfidence: selectedRecipe.nutritionConfidence
+                        });
+                        finalResult.meals = [finalResult.canonicalMeal];
                         if (scaledRecipe && Array.isArray(scaledRecipe.instructions)) {
                           scaledRecipe.instructions = selectedRecipe.instructions.slice();
                         }
+                        if (T) T.logMessage('OpenAI enhancement merged');
                         notifyEnhancement(profile, {
                           recipeId: selectedRecipe.recipeId || selectedRecipe.id || null,
                           title: selectedRecipe.title,
@@ -552,25 +642,30 @@
                         console.log('[ARC CURATION] Premium instruction enhancement complete');
                         return;
                       }
-                      if (T) T.logMessage('Enhancement exception isolated');
-                      if (T) T.logMessage('Base instructions preserved');
+                      if (T) T.logMessage('Enhancement safely skipped');
                     } catch (_) {
-                      if (T) T.logMessage('Enhancement exception isolated');
-                      if (T) T.logMessage('Base instructions preserved');
+                      if (T) T.logMessage('Enhancement safely skipped');
                     }
                   }).catch(function (err) {
                     if (T && err && (err.name === 'AbortError' || err.code === 'ABORT_ERR' || err.name === 'APIUserAbortError')) {
                       T.logMessage('Enhancement timeout isolated');
                     }
-                    if (T) T.logMessage('Enhancement exception isolated');
-                    if (T) T.logMessage('Base instructions preserved');
+                    if (T) T.logMessage('Enhancement safely skipped');
                   });
                 } catch (_) {
-                  if (T) T.logMessage('Enhancement exception isolated');
-                  if (T) T.logMessage('Base instructions preserved');
+                  if (T) T.logMessage('Enhancement safely skipped');
                 }
               } else {
                 if (T) T.logMessage('Enhancement skipped safely');
+              }
+
+              var schemaValidation = validateStableResponseShape(finalResult);
+              finalResult.schemaValidation = schemaValidation;
+              if (!schemaValidation.valid) {
+                finalResult.degraded = true;
+                finalResult.error = finalResult.error || 'schema_validation_failed';
+              } else if (T) {
+                T.logMessage('Stable response generated');
               }
 
               if (T) {
