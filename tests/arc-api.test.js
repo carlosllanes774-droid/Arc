@@ -562,6 +562,7 @@ describe('Arc Phase 2 adaptive pipeline (mocked APIs)', () => {
     }
 
     const start = Date.now();
+    let enhancementUpdate = null;
     const out = await sandbox.ArcApi.Orchestrator.runAdaptiveMealPipeline({
       goal: 'Maintain weight',
       weight: 180,
@@ -569,20 +570,27 @@ describe('Arc Phase 2 adaptive pipeline (mocked APIs)', () => {
       age: 30,
       gender: 'male',
       activityLevel: 'Moderate',
-      mealQuery: 'chicken bowl'
+      mealQuery: 'chicken bowl',
+      onEnhancementUpdate: (payload) => { enhancementUpdate = payload; }
     });
     const elapsedMs = Date.now() - start;
 
     assert.equal(out.error, null);
     assert.ok(out.recipe);
     assert.equal(out.recipe.title, 'Fast chicken bowl');
+    assert.ok(out.enhancement.status === 'pending' || out.enhancement.status === 'skipped');
     assert.ok(elapsedMs < 120, 'pipeline should return before enhancement resolves');
 
-    const started = logs.find((l) => l.includes('[ARC PIPELINE] Instruction enhancement started'));
+    const started = logs.find((l) => l.includes('[ARC PIPELINE] Enhancement running async'));
     const skipped = logs.find((l) => l.includes('[ARC PIPELINE] Instruction enhancement skipped'));
-    const basePreserved = logs.find((l) => l.includes('[ARC PIPELINE] Base recipe delivery preserved'));
+    const baseDelivered = logs.find((l) => l.includes('[ARC PIPELINE] Base recipe delivery complete'));
     assert.ok(started || skipped, 'expected enhancement started or skipped log');
-    assert.ok(basePreserved, 'expected base delivery preserved log');
+    assert.ok(baseDelivered, 'expected base delivery complete log');
+    if (started) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      assert.ok(enhancementUpdate, 'expected async enhancement callback payload');
+      assert.equal(enhancementUpdate.enhanced, true);
+    }
   });
 });
 
