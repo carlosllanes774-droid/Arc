@@ -10648,23 +10648,55 @@ function planSlotsByStyle(style) {
   return DAYS.length * slots.length;
 }
 
+/** Spoonacular is the default week library; OpenAI only when opted out or Spoonacular fails. */
 function shouldUseSpoonacularWeekLibrary() {
   try {
-    if (UP && UP.arcWeekLibrarySource === 'spoonacular') return true;
-    if (typeof localStorage !== 'undefined' && localStorage.getItem('arcWeekLibrarySource') === 'spoonacular') return true;
+    if (UP && UP.arcWeekLibrarySource === 'openai') return false;
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('arcWeekLibrarySource') === 'openai') return false;
   } catch (e) { /* ignore */ }
-  return false;
+  return true;
+}
+
+function logWeekLibrarySource(tag, detail) {
+  if (detail != null && detail !== '') {
+    console.log('[ARC WEEK SOURCE] ' + tag, { reason: String(detail) });
+  } else {
+    console.log('[ARC WEEK SOURCE] ' + tag);
+  }
+}
+
+function spoonacularFallbackReason(err, payload) {
+  if (err && err.type === 'validation_failed') {
+    var vErr = err.validation && err.validation.errors;
+    if (Array.isArray(vErr) && vErr.length) {
+      return 'spoonacular_validation_failed:' + vErr.join(';');
+    }
+    return 'spoonacular_validation_failed';
+  }
+  if (!err && (!payload || !Array.isArray(payload.recipes) || !payload.recipes.length)) {
+    return 'empty_spoonacular_payload';
+  }
+  if (!err) return 'empty_spoonacular_payload';
+  var msg = err.message || String(err);
+  if (err.status === 402 || /402/.test(msg)) return 'spoonacular_quota_exceeded';
+  if (err.status === 503 || /503/.test(msg) || /not configured/i.test(msg)) {
+    return 'spoonacular_not_configured';
+  }
+  if (/bulk failed/i.test(msg)) return 'spoonacular_bulk_failed:' + msg;
+  if (/search returned no recipe/i.test(msg)) return 'spoonacular_search_empty';
+  if (/network|fetch failed|failed to fetch/i.test(msg)) return 'spoonacular_network_error:' + msg;
+  return 'spoonacular_fetch_failed:' + msg;
 }
 
 /** Spoonacular library fetch with validation gate; invalid payloads never reach applyLibrary. */
 function dispatchWeekLibraryFetch(built, applyLibraryFn) {
   function openAiLibraryFallback(reason) {
-    console.log('[ARC SPOONACULAR] OpenAI library fallback', reason);
+    logWeekLibrarySource('openai_fallback', reason);
     callAIWithRetry(built.sysMsg, built.userMsg, 2000, applyLibraryFn, 2, 'week_recipe_library');
   }
 
   if (!shouldUseSpoonacularWeekLibrary()) {
-    callAIWithRetry(built.sysMsg, built.userMsg, 2000, applyLibraryFn, 2, 'week_recipe_library');
+    openAiLibraryFallback('week_library_source_pref_openai');
     return;
   }
 
@@ -10673,15 +10705,16 @@ function dispatchWeekLibraryFetch(built, applyLibraryFn) {
     return;
   }
 
+  logWeekLibrarySource('spoonacular');
   built.restrictions = (UP && UP.restrictions) ? UP.restrictions.slice() : [];
 
   ArcSpoonacularWeekLibrary.fetchSpoonacularWeekLibrary(built, function (err, payload, meta) {
     if (err && err.type === 'validation_failed') {
-      openAiLibraryFallback(err.validation && err.validation.errors ? err.validation.errors : 'validation_failed');
+      openAiLibraryFallback(spoonacularFallbackReason(err, payload));
       return;
     }
     if (err || !payload || !Array.isArray(payload.recipes) || !payload.recipes.length) {
-      openAiLibraryFallback(err ? (err.message || String(err)) : 'empty_spoonacular_payload');
+      openAiLibraryFallback(spoonacularFallbackReason(err, payload));
       return;
     }
     if (payload && Array.isArray(payload.recipes)) {
@@ -10694,6 +10727,10 @@ function dispatchWeekLibraryFetch(built, applyLibraryFn) {
         }
       });
     }
+    console.log('[ARC WEEK SOURCE] spoonacular', {
+      recipeCount: payload.recipes.length,
+      validation: 'passed'
+    });
     applyLibraryFn(null, payload, meta || { source: 'spoonacular' });
   });
 }
