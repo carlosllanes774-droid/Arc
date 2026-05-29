@@ -505,11 +505,23 @@ async function aggregateUsdaNutritionFromIngredients(ingr) {
 /**
  * Spoonacular (recipe id) → USDA (ingredient lines). Never throws.
  */
+function edamamDiagnosticLog(message, detail) {
+  if (detail && typeof detail === "object") {
+    console.log(`[ARC EDAMAM] ${message}`, detail);
+    return;
+  }
+  console.log(`[ARC EDAMAM] ${message}`);
+}
+
 async function nutritionFallbackAfterEdamam({ ingr, spoonacularRecipeId }) {
+  edamamDiagnosticLog("spoonacular fallback recipe id", {
+    spoonacularRecipeId: spoonacularRecipeId != null ? spoonacularRecipeId : null,
+  });
   const spoonMacros = await fetchSpoonacularNutrition(spoonacularRecipeId);
   if (spoonMacros && spoonMacros.calories > 0) {
     ArcTrace.logFallback("spoonacular", "edamam_failed");
     arcPipelineLog("Nutrition confidence LOW");
+    edamamDiagnosticLog("fallback nutrition source", { source: "spoonacular" });
     return { macros: spoonMacros, source: "spoonacular", provider: "spoonacular" };
   }
 
@@ -518,9 +530,11 @@ async function nutritionFallbackAfterEdamam({ ingr, spoonacularRecipeId }) {
     ArcTrace.logFallback("usda", "edamam_failed");
     arcPipelineLog("USDA reconciliation success");
     arcPipelineLog("Nutrition confidence MEDIUM");
+    edamamDiagnosticLog("fallback nutrition source", { source: "usda" });
     return { macros: usdaMacros, source: "usda", provider: "usda" };
   }
 
+  edamamDiagnosticLog("fallback nutrition source", { source: null });
   return null;
 }
 
@@ -1049,6 +1063,13 @@ app.post("/api/nutrition/pipeline", async (req, res) => {
       (req.body && typeof req.body.title === "string" && req.body.title.trim()) || "Recipe";
     const rawIngr = Array.isArray(req.body?.ingr) ? req.body.ingr : [];
     const cleanIngr = EdamamHelpers.normalizeIngredientLines(rawIngr);
+    const spoonacularRecipeId = req.body?.spoonacularRecipeId || req.body?.recipeId || null;
+    edamamDiagnosticLog("ingredient lines sent", {
+      title,
+      spoonacularRecipeId: spoonacularRecipeId != null ? spoonacularRecipeId : null,
+      lineCount: cleanIngr.length,
+      lines: cleanIngr.slice(0, 12),
+    });
     if (!cleanIngr.length) {
       EdamamHelpers.logEdamamFailure(ArcTrace, "payload", {
         httpStatus: 400,
@@ -1062,7 +1083,6 @@ app.post("/api/nutrition/pipeline", async (req, res) => {
     }
 
     const reported = req.body?.reported || {};
-    const spoonacularRecipeId = req.body?.spoonacularRecipeId || req.body?.recipeId || null;
 
     let macros = null;
     let nutritionSource = "edamam";
