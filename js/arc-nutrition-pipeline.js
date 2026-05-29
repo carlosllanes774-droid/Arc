@@ -16,21 +16,62 @@
     return String(s || '').trim();
   }
 
+  /**
+   * Join qty + name without duplicating when qty already contains the food name.
+   * @param {string} qty
+   * @param {string} name
+   * @returns {string}
+   */
+  function joinQtyAndName(qty, name) {
+    var q = normalizeLine(qty);
+    var n = normalizeLine(name);
+    if (!n) return q;
+    if (!q) return n;
+    var ql = q.toLowerCase();
+    var nl = n.toLowerCase();
+    if (ql === nl || ql.endsWith(' ' + nl) || ql.indexOf(nl) !== -1) return q;
+    return normalizeLine(q + ' ' + n);
+  }
+
   function ingredientLines(recipe) {
+    recipe = recipe || {};
     var lines = [];
-    if (Array.isArray(recipe.ing)) {
-      recipe.ing.forEach(function (name) {
+
+    if (Array.isArray(recipe.ingEdamam) && recipe.ingEdamam.length) {
+      recipe.ingEdamam.forEach(function (line) {
+        var n = normalizeLine(line);
+        if (n) lines.push(n);
+      });
+    } else if (Array.isArray(recipe.ing)) {
+      var keys = Array.isArray(recipe.ingKeys) ? recipe.ingKeys : [];
+      recipe.ing.forEach(function (name, idx) {
         var line = normalizeLine(name);
         if (!line) return;
-        if (recipe.ingQty && recipe.ingQty[name]) {
-          line = normalizeLine(recipe.ingQty[name] + ' ' + line);
-        }
+        var qtyKey = keys[idx];
+        var qty = (qtyKey && recipe.ingQty && recipe.ingQty[qtyKey]) ||
+          (recipe.ingQty && recipe.ingQty[name]);
+        if (qty) line = joinQtyAndName(qty, line);
         lines.push(line);
       });
     }
+
     var E = global.ArcApi && global.ArcApi.Edamam;
     if (E && E.normalizeIngredientLines) return E.normalizeIngredientLines(lines);
     return lines.filter(Boolean);
+  }
+
+  function logEdamamDiagnostic(message, detail) {
+    if (detail && typeof detail === 'object') {
+      console.log('[ARC EDAMAM] ' + message, detail);
+      return;
+    }
+    console.log('[ARC EDAMAM] ' + message);
+  }
+
+  function spoonacularRecipeIdFor(recipe) {
+    if (recipe.spoonacularId != null && recipe.spoonacularId !== '') return recipe.spoonacularId;
+    if (recipe.recipeId != null && recipe.recipeId !== '') return recipe.recipeId;
+    return null;
   }
 
   function postJson(path, body) {
@@ -176,6 +217,15 @@
     var ingr = ingredientLines(recipe);
     var reported = reportedFromRecipe(recipe);
     var fallback = opts.fallbackTargets || null;
+    var spRecipeId = spoonacularRecipeIdFor(recipe);
+
+    logEdamamDiagnostic('ingredient lines sent', {
+      recipe: recipe.name || 'Recipe',
+      localId: recipe.id != null ? recipe.id : null,
+      spoonacularId: spRecipeId,
+      lineCount: ingr.length,
+      lines: ingr.slice(0, 12)
+    });
 
     if (!ingr.length) {
       logNutritionOutcome({
@@ -199,7 +249,7 @@
       title: recipe.name || 'Recipe',
       ingr: ingr,
       reported: reported,
-      spoonacularRecipeId: recipe.spoonacularId || recipe.recipeId || recipe.id || null
+      spoonacularRecipeId: spRecipeId
     }).then(function (res) {
       if (!res.ok || !res.json) {
         if (Trace) Trace.logFallback('category_targets', 'pipeline_unavailable');
@@ -315,6 +365,8 @@
     verifyRecipe: verifyRecipe,
     verifyRecipes: verifyRecipes,
     ingredientLines: ingredientLines,
+    joinQtyAndName: joinQtyAndName,
+    spoonacularRecipeIdFor: spoonacularRecipeIdFor,
     hasUsableMacros: hasUsableMacros,
     logNutritionOutcome: logNutritionOutcome
   };
