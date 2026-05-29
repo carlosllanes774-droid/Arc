@@ -48,6 +48,8 @@ describe('Arc frontend contract adapter', () => {
       ing: ['Rice'],
       steps: [{ phase: 'Cook', instruction: 'Boil rice.' }],
       nutritionConfidence: 'high',
+      nutritionVerified: true,
+      nutritionSource: 'edamam+usda',
       servings: 2,
       tags: ['Quick']
     };
@@ -56,6 +58,8 @@ describe('Arc frontend contract adapter', () => {
     assert.equal(out.p, 40);
     assert.equal(out.cat, 'Dinner');
     assert.equal(out.nutritionConfidence, 'high');
+    assert.equal(out.nutritionVerified, true);
+    assert.equal(out.nutritionSource, 'edamam+usda');
     assert.equal(out.servings, 2);
   });
 
