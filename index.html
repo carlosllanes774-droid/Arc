@@ -7006,6 +7006,9 @@ function categoryTargetsFor(cat, mt) {
   return mt.Lunch;
 }
 
+/** Contract placeholder from arc-frontend-contract.js — treated as missing instructions. */
+var ARC_PLACEHOLDER_INSTRUCTION = 'Prepare ingredients and cook until done.';
+
 /** Normalize AI steps to { phase, instruction }[] for UI and caching (accepts legacy string[]). */
 function normalizeRecipeSteps(steps) {
   if (!Array.isArray(steps) || !steps.length) return [];
@@ -7029,6 +7032,54 @@ function normalizeRecipeSteps(steps) {
     }
   }
   return out;
+}
+
+function isArcPlaceholderInstruction(text) {
+  return String(text || '').trim().toLowerCase() === ARC_PLACEHOLDER_INSTRUCTION.toLowerCase();
+}
+
+/** True when steps are empty or only the single contract placeholder. */
+function recipeStepsNeedEnhancement(steps) {
+  var norm = normalizeRecipeSteps(Array.isArray(steps) ? steps : []);
+  if (!norm.length) return true;
+  if (norm.length === 1 && isArcPlaceholderInstruction(norm[0].instruction)) return true;
+  return false;
+}
+
+/** True when stored steps are sufficient to skip OpenAI (legacy or Spoonacular). */
+function recipeHasSufficientInstructions(steps) {
+  var norm = normalizeRecipeSteps(Array.isArray(steps) ? steps : []);
+  return norm.length > 2;
+}
+
+function instructionSourceForRecipe(r, steps) {
+  if (recipeStepsNeedEnhancement(steps)) return 'placeholder';
+  if (r && r.instructionSource === 'openai') return 'openai';
+  if (r && r.instructionSource === 'spoonacular') return 'spoonacular';
+  if (r && Array.isArray(r.instructions) && r.instructions.length > 2) return 'spoonacular';
+  return null;
+}
+
+function arcLogInstructions(source, recipeId, stepCount) {
+  console.log('[ARC INSTRUCTIONS]', { source: source, recipeId: recipeId, stepCount: stepCount });
+}
+
+function persistRecipeSteps(id, steps, source) {
+  steps = normalizeRecipeSteps(steps);
+  stepCache[id] = steps;
+  for (var i = 0; i < recipes.length; i++) {
+    if (recipes[i].id === id) {
+      recipes[i].steps = steps;
+      if (source) recipes[i].instructionSource = source;
+      break;
+    }
+  }
+  if (curRecipe && curRecipe.id === id) {
+    curRecipe.steps = steps;
+    if (source) curRecipe.instructionSource = source;
+  }
+  arcLogInstructions(source, id, steps.length);
+  saveSessionState();
 }
 
 function normalizeGeneratedRecipe(r, i, mt) {
@@ -7678,13 +7729,14 @@ function openTodayMealPeek(day, slot) {
     stW.style.display = '';
     el('tm-peek-ing').innerHTML = buildIngredientsPeek(r);
     todayPeekContext = { rid: r.id, day: day, slot: slot };
-    if (stepCache[r.id] || (r.steps && r.steps.length > 2)) {
-      el('tm-peek-steps').innerHTML = buildStepsTab(stepCache[r.id] || r.steps);
-    } else if (r.steps && r.steps.length > 0) {
-      el('tm-peek-steps').innerHTML = buildStepsTab(r.steps);
-    } else {
+    if (stepCache[r.id] || recipeHasSufficientInstructions(r.steps)) {
+      var peekSteps = stepCache[r.id] || normalizeRecipeSteps(r.steps);
+      el('tm-peek-steps').innerHTML = buildStepsTab(peekSteps);
+    } else if (recipeStepsNeedEnhancement(r.steps)) {
       el('tm-peek-steps').innerHTML = '<div style="text-align:center;padding:20px 0;color:var(--arc-subtext)"><div class="ai-spinner" style="margin:0 auto 12px"></div><span style="font-size:13px">Preparing steps…</span></div>';
       fetchSteps(r.id);
+    } else {
+      el('tm-peek-steps').innerHTML = buildStepsTab(r.steps);
     }
   } else {
     todayPeekContext = { rid: null, day: day, slot: slot };
@@ -11390,13 +11442,17 @@ function openRM(id) {
   for (var t = 0; t < tagArr.length; t++) tagHtml += '<span class="rm-tag">' + tagArr[t] + '</span>';
   el('rm-tags').innerHTML = tagHtml;
 
-  // Pre-cache steps from the recipe object
-  if (curRecipe.steps && curRecipe.steps.length > 0) stepCache[id] = normalizeRecipeSteps(curRecipe.steps);
+  var needsInstructionFetch = recipeStepsNeedEnhancement(curRecipe.steps);
+  if (!needsInstructionFetch) {
+    stepCache[id] = normalizeRecipeSteps(curRecipe.steps);
+    var stepSrc = instructionSourceForRecipe(curRecipe, curRecipe.steps);
+    if (stepSrc) arcLogInstructions(stepSrc, id, stepCache[id].length);
+  }
 
   el('tab-ing').innerHTML   = buildIngredientsTab(curRecipe);
-  el('tab-steps').innerHTML = stepCache[id]
-    ? buildStepsTab(stepCache[id])
-    : '<div style="text-align:center;padding:32px;color:#9ca3af"><div class="ai-spinner" style="margin:0 auto 14px"></div><div style="font-size:14px">Generating instructions...</div></div>';
+  el('tab-steps').innerHTML = needsInstructionFetch
+    ? '<div style="text-align:center;padding:32px;color:#9ca3af"><div class="ai-spinner" style="margin:0 auto 14px"></div><div style="font-size:14px">Generating instructions...</div></div>'
+    : buildStepsTab(stepCache[id]);
   el('tab-nut').innerHTML   = buildNutTab(curRecipe);
 
   renderRMServings(curRecipe);
@@ -11417,7 +11473,10 @@ function openRM(id) {
 
   openMotion('rm-bg');
 
-  if (!stepCache[id]) fetchSteps(id);
+  if (needsInstructionFetch) {
+    arcLogInstructions('placeholder', id, normalizeRecipeSteps(curRecipe.steps || []).length);
+    fetchSteps(id);
+  }
 }
 
 function syncTodayPeekStepsIfOpen(id, steps) {
@@ -11431,12 +11490,15 @@ function fetchSteps(id) {
   for (var i = 0; i < recipes.length; i++) { if (recipes[i].id === id) { r = recipes[i]; break; } }
   if (!r) return;
 
-  if (r.steps && r.steps.length > 2) {
-    stepCache[id] = normalizeRecipeSteps(r.steps);
+  if (recipeHasSufficientInstructions(r.steps)) {
+    var storedSteps = normalizeRecipeSteps(r.steps);
+    stepCache[id] = storedSteps;
+    var storedSrc = instructionSourceForRecipe(r, r.steps);
+    if (storedSrc) arcLogInstructions(storedSrc, id, storedSteps.length);
     if (curRecipe && curRecipe.id === id && el('rm-bg').style.display === 'flex') {
-      el('tab-steps').innerHTML = buildStepsTab(stepCache[id]);
+      el('tab-steps').innerHTML = buildStepsTab(storedSteps);
     }
-    syncTodayPeekStepsIfOpen(id, stepCache[id]);
+    syncTodayPeekStepsIfOpen(id, storedSteps);
     return;
   }
 
@@ -11459,16 +11521,25 @@ function fetchSteps(id) {
   userMsg    += 'Example: [{"phase":"Prep","instruction":"Dice the onion and mince the garlic."},{"phase":"Cook","instruction":"Sauté the onion in oil over medium heat until translucent, about 4 minutes."},{"phase":"Serve","instruction":"Divide between bowls and top with fresh herbs."}]';
 
   callAIWithRetry(sysMsg, userMsg, 380, function(err, raw) {
-    var steps = normalizeRecipeSteps([
+    var fallbackSteps = normalizeRecipeSteps([
       { phase: 'Prep', instruction: 'Gather and prepare all listed ingredients.' },
       { phase: 'Cook', instruction: 'Cook using a standard method appropriate for this dish until done in the center.' },
       { phase: 'Serve', instruction: 'Season to taste and serve immediately.' }
     ]);
+    var steps = fallbackSteps;
+    var enhanced = false;
     if (!err && raw) {
       var parsed = parseJSON(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) steps = normalizeRecipeSteps(parsed);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        steps = normalizeRecipeSteps(parsed);
+        enhanced = true;
+      }
     }
-    stepCache[id] = steps;
+    if (enhanced) {
+      persistRecipeSteps(id, steps, 'openai');
+    } else {
+      stepCache[id] = steps;
+    }
     if (curRecipe && curRecipe.id === id && el('rm-bg').style.display === 'flex') {
       el('tab-steps').innerHTML = buildStepsTab(steps);
     }
