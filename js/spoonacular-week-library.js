@@ -79,12 +79,94 @@
     return undefined;
   }
 
+  function safeRound(v) {
+    var n = Number(v);
+    return isFinite(n) ? Math.round(n) : 0;
+  }
+
+  function categoryTargetsFor(cat, mt) {
+    mt = mt || {};
+    if (cat === 'Breakfast') return mt.Breakfast || mt.perSlot || {};
+    if (cat === 'Dinner') return mt.Dinner || mt.perSlot || {};
+    if (cat === 'Snack') return mt.Snack || mt.perSlot || {};
+    return mt.Lunch || mt.perSlot || {};
+  }
+
+  function macrosFromSpoonacularBulkItem(sp) {
+    sp = sp || {};
+    if (sp.nutrition && typeof sp.nutrition === 'object') {
+      return {
+        cal: sp.nutrition.calories,
+        p: sp.nutrition.protein,
+        c: sp.nutrition.carbs,
+        f: sp.nutrition.fat
+      };
+    }
+    return {
+      cal: sp.calories,
+      p: sp.protein,
+      c: sp.carbs,
+      f: sp.fat
+    };
+  }
+
+  function hasPositiveMacros(cal, p, c, f) {
+    return Number(cal) > 0 && Number(p) > 0 && Number(c) > 0 && Number(f) > 0;
+  }
+
+  /**
+   * @param {object} recipe — week-library recipe (mutated)
+   * @param {object} sp — bulk recipe row
+   * @param {object} [mealTargets] — built.mt from week generation
+   */
+  function applyNutritionToWeekLibraryRecipe(recipe, sp, mealTargets) {
+    var raw = macrosFromSpoonacularBulkItem(sp);
+    var cal = safeRound(raw.cal);
+    var p = safeRound(raw.p);
+    var c = safeRound(raw.c);
+    var f = safeRound(raw.f);
+
+    if (hasPositiveMacros(cal, p, c, f)) {
+      recipe.cal = cal;
+      recipe.p = p;
+      recipe.c = c;
+      recipe.f = f;
+      recipe.nutritionSource = 'spoonacular';
+      recipe.nutritionVerified = false;
+      recipe.nutritionConfidence = 'low';
+      console.log('[ARC SPOONACULAR] nutrition mapped', {
+        name: recipe.name,
+        spoonacularId: recipe.spoonacularId,
+        cal: cal,
+        p: p
+      });
+      return;
+    }
+
+    var t = categoryTargetsFor(recipe.cat, mealTargets);
+    recipe.cal = safeRound(t.cal);
+    recipe.p = safeRound(t.p);
+    recipe.c = safeRound(t.c);
+    recipe.f = safeRound(t.f);
+    recipe.nutritionSource = 'category_targets';
+    recipe.nutritionVerified = false;
+    recipe.nutritionConfidence = 'low';
+    console.log('[ARC SPOONACULAR] category target nutrition fallback', {
+      name: recipe.name,
+      cat: recipe.cat,
+      spoonacularId: recipe.spoonacularId,
+      cal: recipe.cal,
+      p: recipe.p
+    });
+  }
+
   /**
    * @param {object} bulk — BFF /api/spoonacular/bulk response
    * @param {object} categoryBySpoonacularId — spoonacular id → meal category
+   * @param {object} [mealTargets] — built.mt for category fallback when nutrition missing
    * @returns {{ recipes: object[] }}
    */
-  function mapSpoonacularBulkToWeekLibrary(bulk, categoryBySpoonacularId) {
+  function mapSpoonacularBulkToWeekLibrary(bulk, categoryBySpoonacularId, mealTargets) {
     categoryBySpoonacularId = categoryBySpoonacularId || {};
     var list = bulk && Array.isArray(bulk.recipes) ? bulk.recipes : [];
     var recipes = [];
@@ -127,7 +209,7 @@
 
       localId += 1;
       console.log('[ARC SPOONACULAR] recipeId mapping', { localId: localId, spoonacularId: spId });
-      recipes.push({
+      var recipe = {
         id: localId,
         spoonacularId: spId,
         name: String(sp.title || sp.name || '').trim(),
@@ -143,7 +225,9 @@
         image: sp.image || null,
         tags: Array.isArray(sp.tags) ? sp.tags.slice() : [],
         price: 6.0
-      });
+      };
+      applyNutritionToWeekLibraryRecipe(recipe, sp, mealTargets);
+      recipes.push(recipe);
     }
 
     return { recipes: recipes };
@@ -269,12 +353,16 @@
         }
         return postJson('/api/spoonacular/bulk', {
           ids: merged.ids,
-          includeNutrition: false
+          includeNutrition: true
         }).then(function (bulkRes) {
           if (!bulkRes.ok) {
             throw new Error('Spoonacular bulk failed: ' + bulkRes.status);
           }
-          var mapped = mapSpoonacularBulkToWeekLibrary(bulkRes.json, merged.categoryBySpoonacularId);
+          var mapped = mapSpoonacularBulkToWeekLibrary(
+            bulkRes.json,
+            merged.categoryBySpoonacularId,
+            built.mt
+          );
           var validation = validateSpoonacularWeekLibrary(mapped.recipes);
           if (!validation.ok) {
             callback({
@@ -297,6 +385,8 @@
     edamamLineFromIngredient: edamamLineFromIngredient,
     ingredientStableKey: ingredientStableKey,
     mapSpoonacularBulkToWeekLibrary: mapSpoonacularBulkToWeekLibrary,
+    applyNutritionToWeekLibraryRecipe: applyNutritionToWeekLibraryRecipe,
+    macrosFromSpoonacularBulkItem: macrosFromSpoonacularBulkItem,
     validateSpoonacularWeekLibrary: validateSpoonacularWeekLibrary,
     mapRestrictionsToSpoonacularDiet: mapRestrictionsToSpoonacularDiet,
     fetchSpoonacularWeekLibrary: fetchSpoonacularWeekLibrary
