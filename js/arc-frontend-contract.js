@@ -117,6 +117,8 @@
       steps: steps,
       tags: Array.isArray(r.tags) ? r.tags.slice() : [],
       nutritionConfidence: r.nutritionConfidence || 'medium',
+      nutritionVerified: r.nutritionVerified === true,
+      nutritionSource: r.nutritionSource ? String(r.nutritionSource) : '',
       servings: Math.max(1, Math.round(safeNum(r.servings, 1))),
       image: r.image || r.imageUrl || r.photo || null,
       time: r.time || '20 min',
