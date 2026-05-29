@@ -124,7 +124,25 @@ describe('mapSpoonacularBulkToWeekLibrary', () => {
     assert.equal(mapped.recipes[0].ing.length, 1);
     assert.equal(mapped.recipes[0].ing[0], 'beef');
     assert.equal(mapped.recipes[0].ingQty.beef, '8 oz');
+    assert.equal(JSON.stringify(mapped.recipes[0].ingEdamam), JSON.stringify(['8 oz beef']));
     assert.equal(mapped.recipes[0].steps.length, 2);
+  });
+
+  test('stores ingEdamam from original without duplicating names', () => {
+    const bulk = {
+      recipes: [{
+        id: 1,
+        title: 'Omelette',
+        extendedIngredients: [
+          { name: 'eggs', original: '3 eggs' },
+          { name: 'salt', original: 'salt to taste' }
+        ],
+        instructions: []
+      }]
+    };
+    const mapped = Lib.mapSpoonacularBulkToWeekLibrary(bulk, { '1': 'Breakfast' }).recipes[0];
+    assert.equal(JSON.stringify(mapped.ingEdamam), JSON.stringify(['3 eggs', 'salt to taste']));
+    assert.equal(mapped.ingQty.eggs, '3 eggs');
   });
 
   test('mapped single recipe fails validation until library has 4 entries', () => {
