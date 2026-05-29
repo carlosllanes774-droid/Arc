@@ -124,7 +124,10 @@
       time: r.time || '20 min',
       difficulty: r.difficulty || 'Easy',
       price: safeNum(r.price, 6),
-      ingQty: isPlainObject(r.ingQty) ? r.ingQty : {}
+      ingQty: isPlainObject(r.ingQty) ? r.ingQty : {},
+      spoonacularId: r.spoonacularId != null && r.spoonacularId !== '' ? r.spoonacularId : null,
+      ingEdamam: Array.isArray(r.ingEdamam) ? r.ingEdamam.slice() : [],
+      ingKeys: Array.isArray(r.ingKeys) ? r.ingKeys.slice() : []
     };
 
     if (verboseMapped && opts.log !== false) {
