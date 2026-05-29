@@ -38,6 +38,36 @@
    * @param {string[]} [restrictions]
    * @returns {string|undefined}
    */
+  /**
+   * Canonical Edamam line — prefer Spoonacular original NLP text.
+   * @param {object} x extendedIngredients entry
+   * @returns {string}
+   */
+  function edamamLineFromIngredient(x) {
+    x = x || {};
+    var original = String(x.original || '').trim();
+    if (original) return original;
+    var name = String(x.name || '').trim();
+    var qtyParts = [x.amount, x.unit].filter(function (v) {
+      return v != null && v !== '';
+    });
+    if (qtyParts.length && name) return qtyParts.join(' ').trim() + ' ' + name;
+    if (qtyParts.length) return qtyParts.join(' ').trim();
+    return name;
+  }
+
+  /**
+   * Stable key for ingQty when duplicate display names exist.
+   * @param {number|string} spId
+   * @param {number} index
+   * @param {object} x
+   * @returns {string}
+   */
+  function ingredientStableKey(spId, index, x) {
+    if (x && x.id != null && x.id !== '') return 'sp_' + spId + '_' + x.id;
+    return 'sp_' + spId + '_' + index;
+  }
+
   function mapRestrictionsToSpoonacularDiet(restrictions) {
     if (!Array.isArray(restrictions)) return undefined;
     var lower = restrictions.map(function (r) { return String(r || '').toLowerCase(); });
@@ -68,16 +98,27 @@
 
       var ingRaw = sp.extendedIngredients || sp.ingredients || [];
       var ingNames = [];
+      var ingKeys = [];
       var ingQty = {};
+      var ingEdamam = [];
       for (var j = 0; j < ingRaw.length; j++) {
         var x = ingRaw[j] || {};
         var name = String(x.name || x.original || '').trim();
         if (!name) continue;
-        ingNames.push(name);
+        var ingKey = ingredientStableKey(spId, j, x);
         var qtyParts = [x.amount, x.unit].filter(function (v) {
           return v != null && v !== '';
         });
-        ingQty[name] = qtyParts.length ? qtyParts.join(' ').trim() : String(x.original || name);
+        var qtyDisplay = qtyParts.length ? qtyParts.join(' ').trim() : '';
+        var edamamLine = edamamLineFromIngredient(x);
+
+        ingNames.push(name);
+        ingKeys.push(ingKey);
+        ingEdamam.push(edamamLine);
+        ingQty[ingKey] = qtyDisplay;
+        if (!Object.prototype.hasOwnProperty.call(ingQty, name)) {
+          ingQty[name] = qtyDisplay || String(x.original || '').trim();
+        }
       }
 
       var steps = (sp.instructions || []).map(function (txt) {
@@ -85,12 +126,15 @@
       });
 
       localId += 1;
+      console.log('[ARC SPOONACULAR] recipeId mapping', { localId: localId, spoonacularId: spId });
       recipes.push({
         id: localId,
         spoonacularId: spId,
         name: String(sp.title || sp.name || '').trim(),
         cat: cat,
         ing: ingNames,
+        ingKeys: ingKeys,
+        ingEdamam: ingEdamam,
         ingQty: ingQty,
         steps: steps,
         instructionSource: steps.length > 0 ? 'spoonacular' : undefined,
@@ -250,6 +294,8 @@
   global.ArcSpoonacularWeekLibrary = {
     MIN_RECIPES: MIN_RECIPES,
     VALID_CATS: VALID_CATS.slice(),
+    edamamLineFromIngredient: edamamLineFromIngredient,
+    ingredientStableKey: ingredientStableKey,
     mapSpoonacularBulkToWeekLibrary: mapSpoonacularBulkToWeekLibrary,
     validateSpoonacularWeekLibrary: validateSpoonacularWeekLibrary,
     mapRestrictionsToSpoonacularDiet: mapRestrictionsToSpoonacularDiet,
