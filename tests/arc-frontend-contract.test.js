@@ -37,6 +37,21 @@ describe('Arc frontend contract adapter', () => {
     assert.equal(out.name, 'Test Chicken Bowl');
   });
 
+  test('preserves spoonacularId and ingEdamam passthrough fields', () => {
+    const out = AFC.adaptRecipeToFrontendContract({
+      name: 'Sp Bowl',
+      cal: 500,
+      cat: 'Lunch',
+      ing: ['rice'],
+      spoonacularId: 716429,
+      ingEdamam: ['1 cup rice'],
+      ingKeys: ['sp_716429_0']
+    });
+    assert.equal(out.spoonacularId, 716429);
+    assert.deepEqual(out.ingEdamam, ['1 cup rice']);
+    assert.deepEqual(out.ingKeys, ['sp_716429_0']);
+  });
+
   test('preserves canonical fields when already compact', () => {
     const canonical = {
       name: 'Bowl',
