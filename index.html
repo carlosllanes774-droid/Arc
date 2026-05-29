@@ -7022,6 +7022,20 @@ function categoryTargetsFor(cat, mt) {
   return mt.Lunch;
 }
 
+/** Spoonacular week library: skip Edamam/USDA verify when macros were mapped at bulk time. */
+function shouldSkipSpoonacularWeekNutritionVerify(recipes, libraryMeta) {
+  if (!libraryMeta || String(libraryMeta.source || '') !== 'spoonacular') return false;
+  if (!Array.isArray(recipes) || !recipes.length) return false;
+  for (var i = 0; i < recipes.length; i++) {
+    var r = recipes[i];
+    if (!r) return false;
+    var src = String(r.nutritionSource || '');
+    if (src !== 'spoonacular' && src !== 'category_targets') return false;
+    if (!(Number(r.cal) > 0 && Number(r.p) > 0 && Number(r.c) > 0 && Number(r.f) > 0)) return false;
+  }
+  return true;
+}
+
 /** Contract placeholder from arc-frontend-contract.js — treated as missing instructions. */
 var ARC_PLACEHOLDER_INSTRUCTION = 'Prepare ingredients and cook until done.';
 
@@ -7125,6 +7139,8 @@ function normalizeGeneratedRecipe(r, i, mt) {
     ingQty:     (r.ingQty && typeof r.ingQty === 'object') ? r.ingQty : {},
     steps:      normalizeRecipeSteps(r.steps || []),
     nutritionConfidence: String(r.nutritionConfidence || 'medium'),
+    nutritionVerified: r.nutritionVerified === true,
+    nutritionSource: r.nutritionSource ? String(r.nutritionSource) : '',
     servings:   Math.max(1, parseInt(r.servings, 10) || 1),
     image:      r.image || null
   };
@@ -10697,6 +10713,7 @@ function generateWeeklyPlan(intent) {
 
   var built = buildWeekRecipeLibraryPrompt(intent);
   var weekLibraryRecipes = null;
+  var weekLibraryMeta = null;
   nutriDebug('Week step 1 library prompt (' + built.userMsg.length + ' chars)', built.userMsg.length > 12000 ? built.userMsg.slice(0, 12000) + '\n…' : built.userMsg);
   setGenPhase('recipes');
 
@@ -10724,6 +10741,7 @@ function generateWeeklyPlan(intent) {
 
   function applyLibrary(err, raw, meta) {
     if (myGen !== recipeGenId) return;
+    weekLibraryMeta = meta || null;
     var libResult = parseAiObject(err, raw, meta);
     if (libResult.err || !libResult.parsed || !Array.isArray(libResult.parsed.recipes) || !libResult.parsed.recipes.length) {
       failWeekGeneration(libResult.err ? (libResult.err.message || String(libResult.err)) : 'Recipe library missing', raw);
@@ -10899,7 +10917,15 @@ function generateWeeklyPlan(intent) {
     }
 
     setGenPhase('balancing');
-    if (typeof ArcNutritionPipeline !== 'undefined' && ArcNutritionPipeline.verifyRecipes) {
+    if (shouldSkipSpoonacularWeekNutritionVerify(recipes, weekLibraryMeta)) {
+      console.log('[ARC PIPELINE] Spoonacular week nutrition — skipping Edamam verify', {
+        recipeCount: recipes.length,
+        sources: recipes.map(function (r) {
+          return { name: r.name, nutritionSource: r.nutritionSource, cal: r.cal, p: r.p };
+        })
+      });
+      finishWeekPlanAfterNutrition();
+    } else if (typeof ArcNutritionPipeline !== 'undefined' && ArcNutritionPipeline.verifyRecipes) {
       console.log('[ARC TRACE] ArcNutritionPipeline.verifyRecipes starting', { recipeCount: recipes.length });
       ArcNutritionPipeline.verifyRecipes(recipes, built.mt, 3).then(function(verified) {
         if (myGen !== recipeGenId) {
