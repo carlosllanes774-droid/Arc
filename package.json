@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "npm run test:arc-engine && npm run test:arc-api && npm run test:arc-nutrition-pipeline && npm run test:arc-frontend-contract && npm run test:frontend-week-render && npm run test:week-generation-dispatch && npm run test:week-meal-assignment-validation",
+    "test": "npm run test:arc-engine && npm run test:arc-api && npm run test:arc-nutrition-pipeline && npm run test:arc-frontend-contract && npm run test:spoonacular-week-library && npm run test:frontend-week-render && npm run test:week-generation-dispatch && npm run test:week-meal-assignment-validation",
+    "test:spoonacular-week-library": "node --test tests/spoonacular-week-library.test.js",
     "test:arc-nutrition-pipeline": "node --test tests/arc-nutrition-pipeline.test.js",
     "test:week-meal-assignment-validation": "node --test tests/week-meal-assignment-validation.test.js",
     "test:week-generation-dispatch": "node --test tests/week-generation-dispatch.test.js",
