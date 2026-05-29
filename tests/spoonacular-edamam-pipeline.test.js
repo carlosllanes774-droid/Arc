@@ -1,5 +1,5 @@
 /**
- * Spoonacular → Edamam ingredient line and spoonacularId preservation.
+ * Spoonacular week library mapper + validation (pre-applyLibrary gate).
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -9,133 +9,302 @@ import path from 'node:path';
 import vm from 'node:vm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.join(__dirname, '..');
+const LIB_JS = path.join(__dirname, '..', 'js', 'spoonacular-week-library.js');
 
-function loadPipeline() {
-  const edSandbox = vm.createContext({ console, ArcApi: {} });
-  vm.runInContext(readFileSync(path.join(ROOT, 'js/arc-api/edamamHelpers.js'), 'utf8'), edSandbox);
-  const Edamam = edSandbox.ArcApi.Edamam;
-
-  const libSandbox = vm.createContext({ console, ArcRuntime: null, ArcSpoonacularWeekLibrary: null });
-  vm.runInContext(readFileSync(path.join(ROOT, 'js/spoonacular-week-library.js'), 'utf8'), libSandbox);
-  const Lib = libSandbox.ArcSpoonacularWeekLibrary;
-
-  const pipeSandbox = vm.createContext({
-    console,
-    ArcRuntime: { apiUrl: (p) => p },
-    ArcApi: { Edamam },
-    ArcNutritionPipeline: null
-  });
-  vm.runInContext(readFileSync(path.join(ROOT, 'js/arc-nutrition-pipeline.js'), 'utf8'), pipeSandbox);
-
-  return {
-    Lib,
-    Pipeline: pipeSandbox.ArcNutritionPipeline,
-    Edamam
-  };
+function loadLib(sandboxExtras) {
+  const sandbox = Object.assign(
+    { console, ArcRuntime: null, ArcSpoonacularWeekLibrary: null },
+    sandboxExtras || {}
+  );
+  const ctx = vm.createContext(sandbox);
+  vm.runInContext(readFileSync(LIB_JS, 'utf8'), ctx, { filename: 'spoonacular-week-library.js' });
+  return sandbox.ArcSpoonacularWeekLibrary;
 }
 
-function linesEqual(a, b) {
-  return JSON.stringify(a) === JSON.stringify(b);
+function validRecipe(overrides) {
+  return Object.assign({
+    id: 1,
+    spoonacularId: 1001,
+    name: 'Test Bowl',
+    cat: 'Lunch',
+    ing: ['chicken', 'rice'],
+    ingQty: { chicken: '8 oz', rice: '1 cup' }
+  }, overrides || {});
 }
 
-function hasDuplicatedIngredientName(line) {
-  const parts = String(line || '').toLowerCase().trim().split(/\s+/);
-  if (parts.length < 2) return false;
-  const last = parts[parts.length - 1];
-  const prev = parts[parts.length - 2];
-  return last === prev;
-}
+describe('validateSpoonacularWeekLibrary', () => {
+  const Lib = loadLib();
 
-describe('Spoonacular Edamam ingredient lines', () => {
-  const { Lib, Pipeline } = loadPipeline();
-
-  test('uses original text for Edamam — no duplicated names', () => {
-    const bulk = {
-      recipes: [{
-        id: 716429,
-        title: 'Omelette',
-        extendedIngredients: [
-          { name: 'eggs', original: '3 eggs' },
-          { name: 'salt', original: 'salt to taste' },
-          { name: 'beef', amount: 8, unit: 'oz', original: '8 oz beef' }
-        ],
-        instructions: []
-      }]
-    };
-    const mapped = Lib.mapSpoonacularBulkToWeekLibrary(bulk, { '716429': 'Breakfast' }).recipes[0];
-    assert.ok(linesEqual(mapped.ingEdamam, ['3 eggs', 'salt to taste', '8 oz beef']));
-    assert.equal(mapped.spoonacularId, 716429);
-
-    const lines = Pipeline.ingredientLines(mapped);
-    assert.ok(linesEqual(lines, ['3 eggs', 'salt to taste', '8 oz beef']));
-    lines.forEach((line) => {
-      assert.equal(hasDuplicatedIngredientName(line), false, 'duplicated name in: ' + line);
-    });
+  test('accepts a valid library of 4+ recipes', () => {
+    const recipes = [
+      validRecipe({ id: 1, spoonacularId: 1, cat: 'Breakfast' }),
+      validRecipe({ id: 2, spoonacularId: 2, cat: 'Lunch' }),
+      validRecipe({ id: 3, spoonacularId: 3, cat: 'Dinner' }),
+      validRecipe({ id: 4, spoonacularId: 4, cat: 'Snack' })
+    ];
+    const result = Lib.validateSpoonacularWeekLibrary(recipes);
+    assert.equal(result.ok, true);
+    assert.equal(result.errors.length, 0);
   });
 
-  test('duplicate display names keep separate stable ingQty keys', () => {
-    const bulk = {
-      recipes: [{
-        id: 99,
-        title: 'Cake',
-        extendedIngredients: [
-          { id: 1, name: 'flour', amount: 1, unit: 'cup', original: '1 cup flour' },
-          { id: 2, name: 'flour', amount: 2, unit: 'tbsp', original: '2 tbsp flour for dusting' }
-        ],
-        instructions: []
-      }]
-    };
-    const mapped = Lib.mapSpoonacularBulkToWeekLibrary(bulk, { '99': 'Snack' }).recipes[0];
-    assert.equal(mapped.ing.length, 2);
-    assert.equal(mapped.ingKeys.length, 2);
-    assert.notEqual(mapped.ingKeys[0], mapped.ingKeys[1]);
-    assert.equal(mapped.ingQty[mapped.ingKeys[0]], '1 cup');
-    assert.equal(mapped.ingQty[mapped.ingKeys[1]], '2 tbsp');
-    assert.ok(linesEqual(mapped.ingEdamam, ['1 cup flour', '2 tbsp flour for dusting']));
-
-    const lines = Pipeline.ingredientLines(mapped);
-    assert.equal(lines.length, 2);
+  test('rejects fewer than 4 recipes', () => {
+    const result = Lib.validateSpoonacularWeekLibrary([
+      validRecipe({ id: 1 }),
+      validRecipe({ id: 2 }),
+      validRecipe({ id: 3 })
+    ]);
+    assert.equal(result.ok, false);
+    assert.ok(result.errors.some(function (e) { return e.indexOf('recipe_count_below_minimum') === 0; }));
   });
 
-  test('spoonacularRecipeIdFor ignores local id', () => {
-    const { Pipeline } = loadPipeline();
-    assert.equal(Pipeline.spoonacularRecipeIdFor({ id: 1, spoonacularId: 716429 }), 716429);
-    assert.equal(Pipeline.spoonacularRecipeIdFor({ id: 1 }), null);
+  test('rejects missing or invalid cat', () => {
+    const result = Lib.validateSpoonacularWeekLibrary([
+      validRecipe({ id: 1, cat: 'Breakfast' }),
+      validRecipe({ id: 2, cat: 'Lunch' }),
+      validRecipe({ id: 3, cat: 'Dinner' }),
+      validRecipe({ id: 4, cat: '' })
+    ]);
+    assert.equal(result.ok, false);
+    assert.ok(result.errors.some(function (e) { return e.indexOf('invalid_or_missing_cat') > 0; }));
   });
 
-  test('OpenAI-style recipes still join qty without duplicating', () => {
-    const lines = Pipeline.ingredientLines({
-      ing: ['eggs'],
-      ingQty: { eggs: '3 eggs' }
-    });
-    assert.ok(linesEqual(lines, ['3 eggs']));
-    assert.equal(hasDuplicatedIngredientName(lines[0]), false);
+  test('rejects non-canonical cat values', () => {
+    const result = Lib.validateSpoonacularWeekLibrary([
+      validRecipe({ id: 1, cat: 'Breakfast' }),
+      validRecipe({ id: 2, cat: 'Lunch' }),
+      validRecipe({ id: 3, cat: 'Dinner' }),
+      validRecipe({ id: 4, cat: 'Brunch' })
+    ]);
+    assert.equal(result.ok, false);
+    assert.ok(result.errors.some(function (e) { return e.indexOf('invalid_or_missing_cat') > 0; }));
+  });
+
+  test('rejects missing name, ing, or spoonacularId', () => {
+    const base = [
+      validRecipe({ id: 1, cat: 'Breakfast' }),
+      validRecipe({ id: 2, cat: 'Lunch' }),
+      validRecipe({ id: 3, cat: 'Dinner' })
+    ];
+    const noName = Lib.validateSpoonacularWeekLibrary(base.concat([validRecipe({ id: 4, name: '' })]));
+    assert.equal(noName.ok, false);
+    assert.ok(noName.errors.some(function (e) { return e.indexOf('missing_name') > 0; }));
+
+    const noIng = Lib.validateSpoonacularWeekLibrary(base.concat([validRecipe({ id: 4, ing: [] })]));
+    assert.equal(noIng.ok, false);
+    assert.ok(noIng.errors.some(function (e) { return e.indexOf('missing_ing') > 0; }));
+
+    const noSpId = Lib.validateSpoonacularWeekLibrary(base.concat([validRecipe({ id: 4, spoonacularId: null })]));
+    assert.equal(noSpId.ok, false);
+    assert.ok(noSpId.errors.some(function (e) { return e.indexOf('missing_spoonacularId') > 0; }));
   });
 });
 
-describe('normalizeGeneratedRecipe spoonacularId passthrough (simulated)', () => {
-  test('fields survive minimal normalizer shape', () => {
-    const mapped = {
-      spoonacularId: 716429,
-      ingEdamam: ['3 eggs'],
-      ingKeys: ['sp_716429_0'],
-      ing: ['eggs'],
-      ingQty: { eggs: '3 eggs' },
-      name: 'Omelette',
-      cat: 'Breakfast'
+describe('mapSpoonacularBulkToWeekLibrary', () => {
+  const Lib = loadLib();
+
+  test('maps bulk payload with category bucket and ingredients', () => {
+    const bulk = {
+      recipes: [{
+        id: 716429,
+        recipeId: 716429,
+        title: 'Beef Stir-Fry',
+        servings: 4,
+        readyInMinutes: 25,
+        calories: 520,
+        protein: 42,
+        carbs: 28,
+        fat: 18,
+        extendedIngredients: [
+          { name: 'beef', amount: 8, unit: 'oz', original: '8 oz beef' }
+        ],
+        instructions: ['Slice beef.', 'Stir fry.']
+      }]
     };
-    const norm = {
-      id: 1,
-      spoonacularId: mapped.spoonacularId != null ? mapped.spoonacularId : null,
-      ingEdamam: Array.isArray(mapped.ingEdamam) ? mapped.ingEdamam.slice() : [],
-      ingKeys: Array.isArray(mapped.ingKeys) ? mapped.ingKeys.slice() : [],
-      ing: mapped.ing.slice(),
-      ingQty: mapped.ingQty
+    const mapped = Lib.mapSpoonacularBulkToWeekLibrary(bulk, { '716429': 'Dinner' });
+    assert.equal(mapped.recipes.length, 1);
+    assert.equal(mapped.recipes[0].name, 'Beef Stir-Fry');
+    assert.equal(mapped.recipes[0].cat, 'Dinner');
+    assert.equal(mapped.recipes[0].spoonacularId, 716429);
+    assert.equal(mapped.recipes[0].cal, 520);
+    assert.equal(mapped.recipes[0].p, 42);
+    assert.equal(mapped.recipes[0].c, 28);
+    assert.equal(mapped.recipes[0].f, 18);
+    assert.equal(mapped.recipes[0].nutritionSource, 'spoonacular');
+    assert.equal(mapped.recipes[0].nutritionVerified, false);
+    assert.equal(mapped.recipes[0].nutritionConfidence, 'low');
+    assert.equal(mapped.recipes[0].ing.length, 1);
+    assert.equal(mapped.recipes[0].ing[0], 'beef');
+    assert.equal(mapped.recipes[0].ingQty.beef, '8 oz');
+    assert.equal(JSON.stringify(mapped.recipes[0].ingEdamam), JSON.stringify(['8 oz beef']));
+    assert.equal(mapped.recipes[0].steps.length, 2);
+  });
+
+  test('maps nutrition from nutrition object when top-level macros absent', () => {
+    const bulk = {
+      recipes: [{
+        id: 2,
+        title: 'Salad',
+        extendedIngredients: [{ name: 'lettuce', original: '2 cups lettuce' }],
+        instructions: [],
+        nutrition: { calories: 180, protein: 8, carbs: 12, fat: 10 }
+      }]
     };
-    const { Pipeline } = loadPipeline();
-    assert.equal(norm.spoonacularId, 716429);
-    assert.equal(Pipeline.spoonacularRecipeIdFor(norm), 716429);
-    assert.ok(linesEqual(Pipeline.ingredientLines(norm), ['3 eggs']));
+    const mapped = Lib.mapSpoonacularBulkToWeekLibrary(bulk, { '2': 'Lunch' }).recipes[0];
+    assert.equal(mapped.cal, 180);
+    assert.equal(mapped.p, 8);
+    assert.equal(mapped.nutritionSource, 'spoonacular');
+  });
+
+  test('uses category target fallback when Spoonacular nutrition missing', () => {
+    const bulk = {
+      recipes: [{
+        id: 3,
+        title: 'Plain Bowl',
+        extendedIngredients: [{ name: 'rice', original: '1 cup rice' }],
+        instructions: ['Cook']
+      }]
+    };
+    const mt = {
+      Lunch: { cal: 600, p: 45, c: 55, f: 18 },
+      perSlot: { cal: 600, p: 45, c: 55, f: 18 }
+    };
+    const mapped = Lib.mapSpoonacularBulkToWeekLibrary(bulk, { '3': 'Lunch' }, mt).recipes[0];
+    assert.equal(mapped.cal, 600);
+    assert.equal(mapped.p, 45);
+    assert.equal(mapped.nutritionSource, 'category_targets');
+    assert.equal(mapped.nutritionVerified, false);
+  });
+
+  test('stores ingEdamam from original without duplicating names', () => {
+    const bulk = {
+      recipes: [{
+        id: 1,
+        title: 'Omelette',
+        extendedIngredients: [
+          { name: 'eggs', original: '3 eggs' },
+          { name: 'salt', original: 'salt to taste' }
+        ],
+        instructions: []
+      }]
+    };
+    const mapped = Lib.mapSpoonacularBulkToWeekLibrary(bulk, { '1': 'Breakfast' }).recipes[0];
+    assert.equal(JSON.stringify(mapped.ingEdamam), JSON.stringify(['3 eggs', 'salt to taste']));
+    assert.equal(mapped.ingQty.eggs, '3 eggs');
+  });
+
+  test('mapped single recipe fails validation until library has 4 entries', () => {
+    const bulk = {
+      recipes: [{
+        id: 1,
+        title: 'Omelette',
+        extendedIngredients: [{ name: 'eggs', original: '3 eggs' }],
+        instructions: ['Cook']
+      }]
+    };
+    const mapped = Lib.mapSpoonacularBulkToWeekLibrary(bulk, { '1': 'Breakfast' });
+    const validation = Lib.validateSpoonacularWeekLibrary(mapped.recipes);
+    assert.equal(validation.ok, false);
+    assert.ok(validation.errors.some(function (e) { return e.indexOf('recipe_count_below_minimum') === 0; }));
+  });
+});
+
+describe('fetchSpoonacularWeekLibrary validation gate', () => {
+  test('does not call success callback when validation fails after map', async () => {
+    const Lib = loadLib({
+      fetch: function (url) {
+        const path = String(url);
+        if (path.indexOf('/bulk') >= 0) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({
+              recipes: [{
+                id: 99,
+                title: 'Solo',
+                calories: 400,
+                protein: 20,
+                carbs: 40,
+                fat: 12,
+                extendedIngredients: [{ name: 'rice', original: '1 cup rice' }],
+                instructions: ['Cook']
+              }]
+            })
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ results: [{ id: 99, recipeId: 99 }] })
+        });
+      }
+    });
+
+    const result = await new Promise((resolve) => {
+      Lib.fetchSpoonacularWeekLibrary(
+        { libraryTargets: { perCat: { Lunch: 2 }, total: 2 }, mt: { perSlot: { cal: 500 } }, restrictions: [] },
+        function (err, payload) {
+          resolve({ err, payload });
+        }
+      );
+    });
+
+    assert.ok(result.err && result.err.type === 'validation_failed');
+    assert.equal(result.payload, null);
+  });
+
+  test('requests bulk with includeNutrition true', async () => {
+    let bulkBody = null;
+    const Lib = loadLib({
+      fetch: function (url, opts) {
+        const path = String(url);
+        if (path.indexOf('/bulk') >= 0) {
+          bulkBody = JSON.parse(opts.body);
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({
+              recipes: [
+                { id: 1, title: 'A', calories: 400, protein: 30, carbs: 35, fat: 12, extendedIngredients: [{ name: 'a', original: '1 a' }], instructions: ['x'] },
+                { id: 2, title: 'B', calories: 500, protein: 35, carbs: 40, fat: 14, extendedIngredients: [{ name: 'b', original: '1 b' }], instructions: ['y'] },
+                { id: 3, title: 'C', calories: 450, protein: 32, carbs: 38, fat: 13, extendedIngredients: [{ name: 'c', original: '1 c' }], instructions: ['z'] },
+                { id: 4, title: 'D', calories: 420, protein: 28, carbs: 36, fat: 11, extendedIngredients: [{ name: 'd', original: '1 d' }], instructions: ['w'] }
+              ]
+            })
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({
+            results: [
+              { id: 1, recipeId: 1 },
+              { id: 2, recipeId: 2 },
+              { id: 3, recipeId: 3 },
+              { id: 4, recipeId: 4 }
+            ]
+          })
+        });
+      }
+    });
+
+    const result = await new Promise((resolve) => {
+      Lib.fetchSpoonacularWeekLibrary(
+        {
+          libraryTargets: { perCat: { Lunch: 2 }, total: 2 },
+          mt: { perSlot: { cal: 500, p: 40, c: 50, f: 15 }, Lunch: { cal: 500, p: 40, c: 50, f: 15 } },
+          restrictions: []
+        },
+        function (err, payload) {
+          resolve({ err, payload });
+        }
+      );
+    });
+
+    assert.equal(bulkBody && bulkBody.includeNutrition, true);
+    assert.equal(result.err, null);
+    assert.ok(result.payload && result.payload.recipes.length >= 4);
+    assert.ok(result.payload.recipes.every(function (r) {
+      return r.nutritionSource === 'spoonacular' && r.cal > 0 && r.p > 0;
+    }));
   });
 });
