@@ -1,5 +1,5 @@
 /**
- * Week meal assignment must reference only library recipe names.
+ * Deterministic week meal assignment from AI-generated library.
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,89 +19,80 @@ function sliceIndexLines(start, end) {
 function loadSandbox() {
   const sandbox = {
     console,
-    UP: { meals: '3' },
+    UP: { meals: '4' },
     DAYS: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-    SLOT_SETS: { '3': ['Breakfast', 'Lunch', 'Dinner'] }
+    SLOT_SETS: {
+      '3': ['Breakfast', 'Lunch', 'Dinner'],
+      '4': ['Breakfast', 'Lunch', 'Afternoon snack', 'Dinner']
+    },
+    getSlots() {
+      return this.SLOT_SETS[String(this.UP.meals || '3')] || this.SLOT_SETS['3'];
+    }
   };
   const ctx = vm.createContext(sandbox);
   const chunks = [
-    sliceIndexLines(2761, 2763),
-    sliceIndexLines(2801, 2819),
-    sliceIndexLines(2922, 3064)
+    sliceIndexLines(2922, 2985)
   ];
   for (const src of chunks) vm.runInContext(src, ctx);
   return sandbox;
 }
 
 const library = [
-  { id: 1, name: 'Protein-Packed Omelette', cat: 'Breakfast' },
+  { id: 1, name: 'Mexican Scramble', cat: 'Breakfast' },
   { id: 2, name: 'Chicken Burrito Bowl', cat: 'Lunch' },
-  { id: 3, name: 'Beef Stir-Fry', cat: 'Dinner' },
-  { id: 4, name: 'Greek Yogurt Parfait', cat: 'Snack' }
+  { id: 3, name: 'Teriyaki Salmon with Quinoa', cat: 'Dinner' },
+  { id: 4, name: 'Peanut Butter Banana Smoothie', cat: 'Snack' }
 ];
 
-describe('week meal assignment library validation', () => {
-  test('accepts assignment that uses exact library names', () => {
+describe('deterministic week meal assignment', () => {
+  test('assigns first recipe per category on Monday (4-meal day)', () => {
     const sandbox = loadSandbox();
-    const assignment = {
-      meal_plan: {
-        Mon: {
-          Breakfast: 'Protein-Packed Omelette',
-          Lunch: 'Chicken Burrito Bowl',
-          Dinner: 'Beef Stir-Fry'
-        }
-      }
-    };
-    const result = sandbox.validateWeekMealAssignmentAgainstLibrary(library, assignment, ['Breakfast', 'Lunch', 'Dinner']);
-    assert.equal(result.ok, true);
-    assert.equal(result.unknownRecipes.length, 0);
+    const slots = ['Breakfast', 'Lunch', 'Afternoon snack', 'Dinner'];
+    const out = sandbox.buildDeterministicWeekMealPlan(library, slots);
+    assert.ok(out);
+    assert.equal(out.recipes.length, 4);
+    assert.equal(out.plan.Mon.Breakfast, 1);
+    assert.equal(out.plan.Mon.Lunch, 2);
+    assert.equal(out.plan.Mon['Afternoon snack'], 4);
+    assert.equal(out.plan.Mon.Dinner, 3);
   });
 
-  test('rejects invented recipe names and lists available library names', () => {
+  test('rotates within category when multiple recipes exist', () => {
     const sandbox = loadSandbox();
-    const logs = [];
-    sandbox.console = {
-      log(tag, extra) {
-        logs.push({ tag, extra });
-      }
-    };
-    const assignment = {
-      meal_plan: {
-        Mon: {
-          Breakfast: 'Protein Pancakes',
-          Lunch: 'Chicken Fajita Bowl',
-          Dinner: 'Beef Stir-Fry with Vegetables'
-        }
-      }
-    };
-    const result = sandbox.validateWeekMealAssignmentAgainstLibrary(library, assignment, ['Breakfast', 'Lunch', 'Dinner']);
-    assert.equal(result.ok, false);
-    assert.equal(result.reason, 'unknown_recipes');
-    assert.deepEqual(result.availableNames, library.map((r) => r.name));
-    assert.ok(result.message.includes('Protein Pancakes'));
-    assert.ok(result.message.includes('Chicken Fajita Bowl'));
-    assert.ok(result.message.includes('Beef Stir-Fry with Vegetables'));
-    assert.ok(result.message.includes('Protein-Packed Omelette'));
-    const unknownLogs = logs.filter((l) => l.tag === '[ARC PIPELINE] Assignment references unknown recipe');
-    assert.equal(unknownLogs.length, 3);
-    assert.deepEqual(unknownLogs[0].extra.availableRecipeNames, library.map((r) => r.name));
+    const lib = library.concat([
+      { id: 5, name: 'Greek Yogurt Bowl', cat: 'Breakfast' }
+    ]);
+    const slots = ['Breakfast', 'Lunch', 'Dinner'];
+    const out = sandbox.buildDeterministicWeekMealPlan(lib, slots);
+    assert.equal(out.plan.Mon.Breakfast, 1);
+    assert.equal(out.plan.Tue.Breakfast, 5);
+    assert.equal(out.plan.Wed.Breakfast, 1);
   });
 
-  test('buildWeekMealAssignmentPrompt embeds exact allowed names JSON', () => {
+  test('fills all seven days with library recipe ids only', () => {
     const sandbox = loadSandbox();
-    sandbox.buildNutritionEngine = function () {
-      return {
-        slots: ['Breakfast', 'Lunch', 'Dinner'],
-        calT: 2000,
-        mealTargets: {},
-        macros: {}
-      };
-    };
-    sandbox.appendWeekUserContextBlock = function (u) { return u; };
-    const built = sandbox.buildWeekMealAssignmentPrompt({}, library);
-    assert.ok(built.userMsg.includes('ALLOWED_RECIPE_NAMES'));
-    assert.ok(built.userMsg.includes(JSON.stringify(library.map((r) => r.name))));
-    assert.ok(built.sysMsg.includes('ALLOWED_RECIPE_NAMES'));
-    assert.ok(built.userMsg.includes('Do NOT output any recipe name outside ALLOWED_RECIPE_NAMES'));
+    const slots = ['Breakfast', 'Lunch', 'Dinner'];
+    const out = sandbox.buildDeterministicWeekMealPlan(library, slots);
+    const allowedIds = new Set(library.map((r) => r.id));
+    for (const day of sandbox.DAYS) {
+      assert.ok(out.plan[day]);
+      for (const slot of slots) {
+        assert.ok(allowedIds.has(out.plan[day][slot]), `${day} ${slot} must be a library id`);
+      }
+    }
+  });
+
+  test('groups recipes by normalized category', () => {
+    const sandbox = loadSandbox();
+    const grouped = sandbox.groupLibraryRecipesByCategory([
+      { id: 1, name: 'A', cat: 'breakfast' },
+      { id: 2, name: 'B', cat: 'Lunch' },
+      { id: 3, name: 'C', cat: 'DINNER' },
+      { id: 4, name: 'D', cat: 'Morning Snack' }
+    ]);
+    assert.equal(grouped.Breakfast.length, 1);
+    assert.equal(grouped.Lunch.length, 1);
+    assert.equal(grouped.Dinner.length, 1);
+    assert.equal(grouped.Snack.length, 1);
   });
 });
