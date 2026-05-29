@@ -7108,6 +7108,7 @@ function normalizeGeneratedRecipe(r, i, mt) {
   }
   return {
     id:         i + 1,
+    spoonacularId: (r.spoonacularId != null && r.spoonacularId !== '') ? r.spoonacularId : null,
     name:       r.name || r.title || ('Recipe ' + (i + 1)),
     cal:        Math.round(num(r.cal, t.cal)),
     p:          Math.round(num(r.p, t.p)),
@@ -7119,6 +7120,8 @@ function normalizeGeneratedRecipe(r, i, mt) {
     cat:        cat,
     tags:       Array.isArray(r.tags) ? r.tags.slice() : [],
     ing:        Array.isArray(r.ing) ? r.ing.slice() : [],
+    ingKeys:    Array.isArray(r.ingKeys) ? r.ingKeys.slice() : [],
+    ingEdamam:  Array.isArray(r.ingEdamam) ? r.ingEdamam.slice() : [],
     ingQty:     (r.ingQty && typeof r.ingQty === 'object') ? r.ingQty : {},
     steps:      normalizeRecipeSteps(r.steps || []),
     nutritionConfidence: String(r.nutritionConfidence || 'medium'),
@@ -10664,6 +10667,16 @@ function dispatchWeekLibraryFetch(built, applyLibraryFn) {
     if (err || !payload || !Array.isArray(payload.recipes) || !payload.recipes.length) {
       openAiLibraryFallback(err ? (err.message || String(err)) : 'empty_spoonacular_payload');
       return;
+    }
+    if (payload && Array.isArray(payload.recipes)) {
+      payload.recipes.forEach(function (r) {
+        if (r && r.spoonacularId != null) {
+          console.log('[ARC SPOONACULAR] recipeId mapping', {
+            localId: r.id,
+            spoonacularId: r.spoonacularId
+          });
+        }
+      });
     }
     applyLibraryFn(null, payload, meta || { source: 'spoonacular' });
   });
