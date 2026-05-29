@@ -2919,160 +2919,69 @@ function buildWeekRecipeLibraryPrompt(intent) {
   };
 }
 
-function getLibraryRecipeNameList(libraryRecipes) {
-  return (libraryRecipes || []).map(function (r) {
-    return String(r && r.name ? r.name : '').trim();
-  }).filter(function (name) { return name.length > 0; });
+function normalizeLibraryRecipeCategory(cat) {
+  var s = String(cat || '').trim().toLowerCase();
+  if (/breakfast/.test(s)) return 'Breakfast';
+  if (/dinner/.test(s)) return 'Dinner';
+  if (/snack/.test(s)) return 'Snack';
+  if (/lunch/.test(s)) return 'Lunch';
+  return 'Lunch';
 }
 
-function buildLibraryRecipeNameSet(libraryRecipes) {
-  var set = {};
-  getLibraryRecipeNameList(libraryRecipes).forEach(function (name) {
-    set[name.toLowerCase()] = name;
-  });
-  return set;
+function slotNameToMealCategory(slot) {
+  var s = String(slot || '').trim().toLowerCase();
+  if (/breakfast/.test(s)) return 'Breakfast';
+  if (/dinner/.test(s)) return 'Dinner';
+  if (/snack/.test(s)) return 'Snack';
+  if (/lunch/.test(s)) return 'Lunch';
+  return 'Lunch';
 }
 
-function extractAssignmentMealPlan(assignmentParsed) {
-  if (!assignmentParsed) return null;
-  if (isPlainObject(assignmentParsed.meal_plan)) {
-    return normalizeMealPlanDayKeys(assignmentParsed.meal_plan);
-  }
-  if (isPlainObject(assignmentParsed.plan)) {
-    return assignmentParsed.plan;
-  }
-  return null;
-}
-
-function validateWeekMealAssignmentAgainstLibrary(libraryRecipes, assignmentParsed, slots) {
-  var availableNames = getLibraryRecipeNameList(libraryRecipes);
-  var nameSet = buildLibraryRecipeNameSet(libraryRecipes);
-  var idSet = {};
+function groupLibraryRecipesByCategory(libraryRecipes) {
+  var grouped = { Breakfast: [], Lunch: [], Dinner: [], Snack: [] };
   (libraryRecipes || []).forEach(function (r) {
-    var rid = parseInt(r && r.id, 10);
-    if (rid > 0) idSet[rid] = true;
+    if (!r) return;
+    var cat = normalizeLibraryRecipeCategory(r.cat);
+    grouped[cat].push(r);
   });
-  var mealPlan = extractAssignmentMealPlan(assignmentParsed);
-  var unknownRecipes = [];
-  var unknownKeys = {};
+  return grouped;
+}
 
-  if (!mealPlan || !Object.keys(mealPlan).length) {
-    return {
-      ok: false,
-      reason: 'missing_meal_plan',
-      availableNames: availableNames,
-      unknownRecipes: [],
-      message: 'Assignment payload missing meal_plan.'
-    };
-  }
+/** Build a full week plan from the AI library — no OpenAI, no invented names. */
+function buildDeterministicWeekMealPlan(libraryRecipes, slots) {
+  if (!Array.isArray(libraryRecipes) || !libraryRecipes.length) return null;
+  slots = Array.isArray(slots) && slots.length ? slots : getSlots();
+  var byCat = groupLibraryRecipesByCategory(libraryRecipes);
+  var plan = {};
+  var sampleDay = null;
 
-  var activeSlots = Array.isArray(slots) && slots.length ? slots : SLOT_SETS[String(UP.meals)] || SLOT_SETS['3'];
   for (var d = 0; d < DAYS.length; d++) {
     var day = DAYS[d];
-    var dayPlan = isPlainObject(mealPlan[day]) ? mealPlan[day] : {};
-    for (var s = 0; s < activeSlots.length; s++) {
-      var slot = activeSlots[s];
-      var slotVal = dayPlan[slot];
-      if (slotVal == null || slotVal === '') continue;
-      var rid = parseInt(slotVal, 10);
-      if (rid > 0 && String(rid) === String(slotVal).trim()) {
-        if (!idSet[rid]) {
-          var idKey = 'id:' + rid;
-          if (!unknownKeys[idKey]) {
-            unknownKeys[idKey] = true;
-            unknownRecipes.push({ value: String(rid), type: 'id', day: day, slot: slot });
-            console.log('[ARC PIPELINE] Assignment references unknown recipe', {
-              recipe: String(rid),
-              type: 'id',
-              day: day,
-              slot: slot,
-              availableRecipeNames: availableNames
-            });
-          }
-        }
-        continue;
-      }
-      if (typeof slotVal === 'string') {
-        var trimmed = String(slotVal).trim();
-        if (!trimmed) continue;
-        if (!nameSet[trimmed.toLowerCase()]) {
-          var nameKey = trimmed.toLowerCase();
-          if (!unknownKeys[nameKey]) {
-            unknownKeys[nameKey] = true;
-            unknownRecipes.push({ value: trimmed, type: 'name', day: day, slot: slot });
-            console.log('[ARC PIPELINE] Assignment references unknown recipe', {
-              recipe: trimmed,
-              availableRecipeNames: availableNames
-            });
-          }
-        }
-      }
+    plan[day] = {};
+    for (var s = 0; s < slots.length; s++) {
+      var slot = slots[s];
+      var cat = slotNameToMealCategory(slot);
+      var pool = byCat[cat] || [];
+      if (!pool.length) pool = libraryRecipes.slice();
+      var recipe = pool[d % pool.length];
+      plan[day][slot] = recipe.id;
     }
+    if (d === 0) sampleDay = plan[day];
   }
 
-  if (unknownRecipes.length) {
-    var unknownList = unknownRecipes.map(function (u) { return u.value; }).join(', ');
-    return {
-      ok: false,
-      reason: 'unknown_recipes',
-      availableNames: availableNames,
-      unknownRecipes: unknownRecipes,
-      message: 'Assignment references recipe(s) not in the library: ' + unknownList +
-        '. Available library names: ' + availableNames.join(' | ')
-    };
-  }
-
-  return { ok: true, availableNames: availableNames, unknownRecipes: [] };
-}
-
-function buildWeekMealAssignmentPrompt(intent, libraryRecipes) {
-  var ne = buildNutritionEngine();
-  var slots = ne.slots;
-  var totalSlots = DAYS.length * slots.length;
-  var exactNames = getLibraryRecipeNameList(libraryRecipes);
-  var namesJson = JSON.stringify(exactNames);
-  var catalog = (libraryRecipes || []).map(function (r) {
-    return '- "' + String(r.name || '').replace(/"/g, '') + '" (' + (r.cat || 'Lunch') + ', id ' + r.id + ')';
-  }).join('\n');
-  var exampleName = exactNames[0] || 'Recipe Name';
-
-  console.log('[ARC PIPELINE] Assignment library recipe names', { names: exactNames });
-
-  var sysMsg = 'You are an Arc meal-planning strategist. Respond with ONLY valid JSON. No markdown. ' +
-    'Assign recipes from the library to every day/slot. Each slot value MUST be copied EXACTLY from ALLOWED_RECIPE_NAMES — ' +
-    'character-for-character. Do NOT invent, rename, paraphrase, abbreviate, or extend recipe names. ' +
-    'Repeat recipes freely — prioritize adherence, grocery overlap, prep efficiency, and daily calorie target — NOT novelty.';
-
-  var u = 'STEP 2 — WEEKLY ASSIGNMENT ONLY (use library below).\n';
-  u = appendWeekUserContextBlock(u, intent, ne);
-  u += '\nALLOWED_RECIPE_NAMES (every slot value MUST be one of these strings exactly):\n' + namesJson + '\n\n';
-  u += 'RECIPE LIBRARY DETAILS:\n' + catalog + '\n\n';
-  u += 'Fill ALL ' + totalSlots + ' slots across Mon..Sun.\n';
-  u += 'Daily calories ~' + ne.calT + ' kcal (±200). Match slot category to recipe cat.\n';
-  u += 'Do NOT output any recipe name outside ALLOWED_RECIPE_NAMES.\n';
-  u += 'OUTPUT JSON ONLY:\n';
-  u += '{"meal_plan":{"Mon":{' + slots.map(function (s) { return '"' + s + '":"' + exampleName.replace(/"/g, '') + '"'; }).join(',') + '},"Tue":{...},"Wed":{...},"Thu":{...},"Fri":{...},"Sat":{...},"Sun":{...}}}\n';
-
-  console.log('[ARC PIPELINE] Week assignment prompt estimate', {
-    taskType: 'week_meal_assignment',
+  console.log('[ARC PIPELINE] Deterministic week assignment built', {
     librarySize: libraryRecipes.length,
-    allowedRecipeNames: exactNames,
-    totalSlots: totalSlots
+    slots: slots,
+    byCategory: {
+      Breakfast: byCat.Breakfast.length,
+      Lunch: byCat.Lunch.length,
+      Dinner: byCat.Dinner.length,
+      Snack: byCat.Snack.length
+    },
+    sampleMonday: sampleDay
   });
 
-  return { sysMsg: sysMsg, userMsg: u, mt: ne.mealTargets, slots: slots, calT: ne.calT, macros: ne.macros };
-}
-
-function mergeWeekLibraryAndAssignment(libraryRecipes, assignmentParsed, slots) {
-  if (!Array.isArray(libraryRecipes) || !libraryRecipes.length) return null;
-  var mealPlan = null;
-  if (assignmentParsed && isPlainObject(assignmentParsed.meal_plan)) {
-    mealPlan = normalizeMealPlanDayKeys(assignmentParsed.meal_plan);
-  } else if (assignmentParsed && isPlainObject(assignmentParsed.plan)) {
-    mealPlan = assignmentParsed.plan;
-  }
-  if (!mealPlan || !Object.keys(mealPlan).length) return null;
-  return { recipes: libraryRecipes, plan: mealPlan };
+  return { recipes: libraryRecipes, plan: plan };
 }
 
 function normalizeWeekPayloadContract(parsed, slots) {
@@ -10457,47 +10366,27 @@ function generateWeeklyPlan(intent) {
     }
     console.log('[ARC PIPELINE] Week recipe library ready', { count: weekLibraryRecipes.length });
     setGenPhase('balancing');
-    var assignBuilt = buildWeekMealAssignmentPrompt(intent, weekLibraryRecipes);
-    nutriDebug('Week step 2 assignment prompt (' + assignBuilt.userMsg.length + ' chars)', assignBuilt.userMsg);
-    callAIWithRetry(assignBuilt.sysMsg, assignBuilt.userMsg, 1200, applyWeek, 2, 'week_meal_assignment');
+    var weekPayload = buildDeterministicWeekMealPlan(weekLibraryRecipes, built.slots);
+    if (!weekPayload) {
+      failWeekGeneration('Could not build week assignment from library', raw);
+      return;
+    }
+    applyWeek(weekPayload);
   }
 
-  function applyWeek(err, raw, meta) {
-    console.log('[ARC TRACE] applyWeek entered', { myGen: myGen, recipeGenId: recipeGenId, hasErr: !!err, hasRaw: !!raw });
+  function applyWeek(weekPayload) {
+    console.log('[ARC TRACE] applyWeek entered', { myGen: myGen, recipeGenId: recipeGenId, hasPayload: !!weekPayload });
     if (myGen !== recipeGenId) {
       console.log('[ARC TRACE] early return', { reason: 'stale_generation', myGen: myGen, recipeGenId: recipeGenId });
       return;
     }
 
-    console.log('[ARC PIPELINE] Raw backend payload', {
-      hasError: !!err,
-      rawType: typeof raw,
-      rawPreview: raw ? String(raw).slice(0, 500) : null
+    var parsed = weekPayload;
+    console.log('[ARC PIPELINE] Deterministic week assignment applied', {
+      recipes: parsed && parsed.recipes ? parsed.recipes.length : 0,
+      days: parsed && parsed.plan ? Object.keys(parsed.plan).length : 0
     });
 
-    var assignResult = parseAiObject(err, raw, meta);
-    err = assignResult.err;
-    var parsed = assignResult.parsed;
-    var payloadSource = assignResult.payloadSource || 'unknown';
-    console.log('[ARC PIPELINE] Parser source check', { expected: 'week_meal_assignment', received: payloadSource });
-    if (!err && weekLibraryRecipes && parsed) {
-      var assignValidation = validateWeekMealAssignmentAgainstLibrary(weekLibraryRecipes, parsed, built.slots);
-      if (!assignValidation.ok) {
-        err = new Error(assignValidation.message || 'Assignment references recipes not in library');
-        console.log('[ARC PIPELINE] Assignment validation failed before merge', {
-          reason: assignValidation.reason,
-          unknownRecipes: assignValidation.unknownRecipes,
-          availableRecipeNames: assignValidation.availableNames
-        });
-        parsed = null;
-      } else {
-        parsed = mergeWeekLibraryAndAssignment(weekLibraryRecipes, parsed, built.slots);
-        console.log('[ARC PIPELINE] Week library + assignment merged', {
-          recipes: parsed && parsed.recipes ? parsed.recipes.length : 0,
-          hasPlan: !!(parsed && parsed.plan)
-        });
-      }
-    }
     var normalized = normalizeWeekPayloadContract(parsed, built.slots);
     if (normalized) {
       console.log('[ARC TRACE] normalization success', { recipeCount: normalized.recipes ? normalized.recipes.length : 0, fallbackApplied: !!normalized.fallbackApplied });
@@ -10529,34 +10418,30 @@ function generateWeeklyPlan(intent) {
         return;
       }
       var traceFailReason = 'validation_failed';
-      if (err) traceFailReason = 'callback_err';
-      else if (!raw) traceFailReason = 'no_response_body';
+      if (!weekPayload) traceFailReason = 'no_week_payload';
       else if (!parsed) traceFailReason = 'parseJSON_returned_null';
       else if (!validRecipes && !validPlan) traceFailReason = 'invalid_recipes_and_invalid_plan';
       else if (!validRecipes) traceFailReason = 'invalid_recipes';
       else if (!validPlan) traceFailReason = 'invalid_plan';
       console.log('[ARC TRACE] early return', {
         reason: traceFailReason,
-        payloadSource: payloadSource,
         validRecipes: !!validRecipes,
         validPlan: !!validPlan,
         hasParsed: !!parsed,
         recipesIsArray: !!(parsed && Array.isArray(parsed.recipes)),
         recipesLength: parsed && Array.isArray(parsed.recipes) ? parsed.recipes.length : 0,
         planExists: !!(parsed && parsed.plan),
-        planType: parsed && parsed.plan ? typeof parsed.plan : 'n/a',
-        errMessage: err ? (err.message || String(err)) : null
+        planType: parsed && parsed.plan ? typeof parsed.plan : 'n/a'
       });
       stopGenLoadingUI();
       var detail = '';
-      if (err) detail = err.message || String(err);
-      else if (!raw) detail = 'No response body from the planning service.';
+      if (!weekPayload) detail = 'Could not build week assignment from library.';
       else if (!parsed) {
         detail = 'Arc could not read that response. Try generating again.';
         console.log('[ARC PIPELINE] Parser failure point', { reason: 'parseJSON_returned_null' });
       }
       else detail = 'That response was missing recipes or your plan.';
-      nutriDebug('Week-direct generation failed', { detail: detail, rawPreview: raw ? String(raw).slice(0, 600) : null });
+      nutriDebug('Week-direct generation failed', { detail: detail });
       tab('plan');
       showToast(ARC_COPY.toast.weekBuildAdjusted);
       return;
