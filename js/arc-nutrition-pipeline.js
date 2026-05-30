@@ -1,5 +1,5 @@
 /**
- * Recipe nutrition pipeline — Edamam → USDA verify → Arc Validation → display.
+ * Recipe nutrition pipeline — Spoonacular (when spoonacularId) or Edamam → USDA → Arc Validation.
  * OpenAI proposes meal structure; verified macros replace AI estimates before display.
  */
 (function (global) {
@@ -68,10 +68,30 @@
     console.log('[ARC EDAMAM] ' + message);
   }
 
+  /**
+   * True only when a Spoonacular catalog id is stored (never local recipe.id).
+   * @param {object} recipe
+   * @returns {boolean}
+   */
+  function hasSpoonacularSourceId(recipe) {
+    recipe = recipe || {};
+    return recipe.spoonacularId != null && recipe.spoonacularId !== '';
+  }
+
+  /** @deprecated Use hasSpoonacularSourceId for routing; returns Spoonacular id only. */
   function spoonacularRecipeIdFor(recipe) {
-    if (recipe.spoonacularId != null && recipe.spoonacularId !== '') return recipe.spoonacularId;
-    if (recipe.recipeId != null && recipe.recipeId !== '') return recipe.recipeId;
+    if (hasSpoonacularSourceId(recipe)) return recipe.spoonacularId;
     return null;
+  }
+
+  function logSpoonacularNutritionPath(message, detail) {
+    detail = detail || {};
+    console.log('[ARC NUTRITION]', Object.assign({
+      path: 'spoonacular',
+      skipEdamam: true,
+      skipUsda: true,
+      reason: detail.reason || 'spoonacular_id_present'
+    }, detail));
   }
 
   function postJson(path, body) {
@@ -123,20 +143,42 @@
     };
   }
 
+  function macrosFromRecipeFields(recipe) {
+    return {
+      calories: Math.round(Number(recipe.cal) || 0),
+      protein: Math.round(Number(recipe.p) || 0),
+      carbs: Math.round(Number(recipe.c) || 0),
+      fat: Math.round(Number(recipe.f) || 0)
+    };
+  }
+
   function hasUsableMacros(macros) {
     return !!(macros && isFinite(Number(macros.calories)) && Number(macros.calories) > 0);
   }
 
+  function hasFullRecipeMacros(recipe) {
+    return (
+      Number(recipe.cal) > 0 &&
+      Number(recipe.p) > 0 &&
+      Number(recipe.c) > 0 &&
+      Number(recipe.f) > 0
+    );
+  }
+
   /**
-   * @param {{ source?: string, verified?: boolean, confidence?: string, fallbackUsed?: boolean }} meta
+   * @param {{ source?: string, verified?: boolean, confidence?: string, fallbackUsed?: boolean, path?: string }} meta
    */
   function logNutritionOutcome(meta) {
     meta = meta || {};
     console.log('[ARC NUTRITION]', {
+      path: meta.path != null ? meta.path : null,
       source: meta.source != null ? meta.source : null,
       verified: !!meta.verified,
       confidence: meta.confidence != null ? meta.confidence : null,
-      fallbackUsed: !!meta.fallbackUsed
+      fallbackUsed: !!meta.fallbackUsed,
+      skipEdamam: meta.skipEdamam === true,
+      skipUsda: meta.skipUsda === true,
+      skipReason: meta.skipReason || null
     });
   }
 
@@ -195,7 +237,11 @@
       source: data.source || 'unverified',
       verified: false,
       confidence: recipe.nutritionConfidence,
-      fallbackUsed: !!data.fallback
+      fallbackUsed: !!data.fallback,
+      path: data.source === 'spoonacular' ? 'spoonacular' : 'edamam',
+      skipEdamam: data.source === 'spoonacular',
+      skipUsda: data.source === 'spoonacular',
+      skipReason: data.skipReason
     });
     return Promise.resolve({
       recipe: recipe,
@@ -205,8 +251,200 @@
     });
   }
 
+  function runClientArcValidation(macros) {
+    var V = global.ArcApi && global.ArcApi.Validation;
+    if (!V) return { safe: true };
+    if (typeof V.runNutritionSanityChecks === 'function') {
+      var sanity = V.runNutritionSanityChecks(macros);
+      if (!sanity.valid) return { safe: false, reason: 'sanity_check_failed', sanity: sanity };
+    }
+    if (typeof V.detectImpossibleNutrition === 'function') {
+      var check = V.detectImpossibleNutrition(Object.assign({}, macros, { context: 'meal' }));
+      if (!check.safe) return { safe: false, reason: 'impossible_nutrition', check: check };
+    }
+    return { safe: true };
+  }
+
   /**
-   * Run Edamam → USDA → Validation for one recipe.
+   * Apply Spoonacular macros already on the recipe (bulk week path) with local Arc checks only.
+   */
+  function verifyRecipeFromLocalSpoonacularMacros(recipe, opts) {
+    opts = opts || {};
+    var fallback = opts.fallbackTargets || null;
+    var macros = macrosFromRecipeFields(recipe);
+    var spId = spoonacularRecipeIdFor(recipe);
+
+    logSpoonacularNutritionPath('local Spoonacular macros — skipping Edamam/USDA HTTP', {
+      recipe: recipe.name || 'Recipe',
+      spoonacularId: spId,
+      localId: recipe.id != null ? recipe.id : null,
+      reason: 'spoonacular_macros_already_mapped'
+    });
+
+    if (!hasUsableMacros(macros)) {
+      return applyCategorySlotFallback(recipe, fallback, 'missing_spoonacular_macros');
+    }
+
+    var validation = runClientArcValidation(macros);
+    if (!validation.safe) {
+      recipe.nutritionSource = 'spoonacular';
+      recipe.nutritionVerified = false;
+      recipe.nutritionConfidence = 'medium';
+      logNutritionOutcome({
+        path: 'spoonacular',
+        source: 'spoonacular',
+        verified: false,
+        confidence: 'medium',
+        fallbackUsed: false,
+        skipEdamam: true,
+        skipUsda: true,
+        skipReason: 'spoonacular_macros_already_mapped'
+      });
+      return Promise.resolve({
+        recipe: recipe,
+        verified: false,
+        source: 'spoonacular',
+        validation: { safe: false, reason: validation.reason }
+      });
+    }
+
+    applyPipelineMacros(recipe, {
+      macros: macros,
+      source: 'spoonacular',
+      nutritionConfidence: 'high',
+      skipReason: 'spoonacular_macros_already_mapped'
+    }, true);
+
+    logNutritionOutcome({
+      path: 'spoonacular',
+      source: 'spoonacular',
+      verified: true,
+      confidence: 'high',
+      fallbackUsed: false,
+      skipEdamam: true,
+      skipUsda: true,
+      skipReason: 'spoonacular_macros_already_mapped'
+    });
+
+    return Promise.resolve({
+      recipe: recipe,
+      verified: true,
+      source: 'spoonacular',
+      validation: { safe: true }
+    });
+  }
+
+  /**
+   * POST /api/nutrition/spoonacular-verify — Spoonacular fetch + Arc validation only.
+   */
+  function verifyRecipeWithSpoonacular(recipe, opts) {
+    opts = opts || {};
+    recipe = recipe || {};
+    var fallback = opts.fallbackTargets || null;
+    var spId = spoonacularRecipeIdFor(recipe);
+    var reported = reportedFromRecipe(recipe);
+    var localMacros = macrosFromRecipeFields(recipe);
+
+    logSpoonacularNutritionPath('Spoonacular verify request — skipping Edamam/USDA', {
+      recipe: recipe.name || 'Recipe',
+      spoonacularId: spId,
+      localId: recipe.id != null ? recipe.id : null,
+      reason: 'spoonacular_id_present'
+    });
+
+    var Trace = global.ArcApi && global.ArcApi.Trace;
+    if (Trace) Trace.logOrchestrator('spoonacular recipe verify started');
+
+    return postJson('/api/nutrition/spoonacular-verify', {
+      spoonacularRecipeId: spId,
+      reported: reported,
+      macros: hasFullRecipeMacros(recipe) ? localMacros : undefined,
+      tags: recipe.tags || [],
+      fiber: recipe.fiber
+    }).then(function (res) {
+      if (!res.ok || !res.json) {
+        if (hasFullRecipeMacros(recipe) && String(recipe.nutritionSource || '') === 'spoonacular') {
+          return verifyRecipeFromLocalSpoonacularMacros(recipe, opts);
+        }
+        if (Trace) Trace.logFallback('category_targets', 'spoonacular_verify_unavailable');
+        return applyCategorySlotFallback(recipe, fallback, 'spoonacular_verify_unavailable');
+      }
+
+      var data = res.json;
+
+      if (!data.verified) {
+        if (hasUsableMacros(data.macros)) {
+          return applyUnverifiedPipelineMacros(recipe, {
+            macros: data.macros,
+            source: 'spoonacular',
+            nutritionConfidence: data.nutritionConfidence || 'medium',
+            fallback: false,
+            skipReason: data.skipReason || 'spoonacular_id_present',
+            validation: data.validation
+          }, data.reason || 'validation_failed');
+        }
+        if (Trace) Trace.logFallback('category_targets', data.reason || 'spoonacular_failed');
+        return applyCategorySlotFallback(recipe, fallback, data.reason || 'spoonacular_failed');
+      }
+
+      if (!hasUsableMacros(data.macros)) {
+        if (Trace) Trace.logFallback('category_targets', 'missing_calories');
+        return applyCategorySlotFallback(recipe, fallback, 'missing_calories');
+      }
+
+      applyPipelineMacros(recipe, data, true);
+      logNutritionOutcome({
+        path: 'spoonacular',
+        source: 'spoonacular',
+        verified: true,
+        confidence: recipe.nutritionConfidence,
+        fallbackUsed: false,
+        skipEdamam: true,
+        skipUsda: true,
+        skipReason: data.skipReason || 'spoonacular_id_present'
+      });
+
+      if (Trace) Trace.logMessage('Spoonacular nutrition verified — Edamam/USDA skipped');
+
+      return {
+        recipe: recipe,
+        verified: true,
+        source: 'spoonacular',
+        validation: data.validation || null
+      };
+    }).catch(function () {
+      if (hasFullRecipeMacros(recipe) && String(recipe.nutritionSource || '') === 'spoonacular') {
+        return verifyRecipeFromLocalSpoonacularMacros(recipe, opts);
+      }
+      var TraceErr = global.ArcApi && global.ArcApi.Trace;
+      if (TraceErr) TraceErr.logFallback('category_targets', 'network_error');
+      return applyCategorySlotFallback(recipe, fallback, 'network_error');
+    });
+  }
+
+  /**
+   * Batch-finalize Spoonacular week recipes (local validation, no Edamam/USDA).
+   * @param {Array<object>} recipes
+   * @returns {Promise<Array<object>>}
+   */
+  function finalizeSpoonacularWeekRecipes(recipes) {
+    recipes = recipes || [];
+    var tasks = recipes.map(function (r) {
+      if (!hasSpoonacularSourceId(r)) return Promise.resolve(r);
+      if (hasFullRecipeMacros(r) && String(r.nutritionSource || '') === 'spoonacular') {
+        return verifyRecipeFromLocalSpoonacularMacros(r, {}).then(function (result) {
+          return result.recipe;
+        });
+      }
+      return verifyRecipeWithSpoonacular(r, {}).then(function (result) {
+        return result.recipe;
+      });
+    });
+    return Promise.all(tasks);
+  }
+
+  /**
+   * Edamam → USDA → Validation when no spoonacularId; Spoonacular path otherwise.
    * @param {object} recipe
    * @param {object} [opts]
    * @returns {Promise<{ recipe: object, verified: boolean, source: string|null, validation: object|null }>}
@@ -214,21 +452,34 @@
   function verifyRecipe(recipe, opts) {
     opts = opts || {};
     recipe = recipe || {};
+    var fallback = opts.fallbackTargets || null;
+    var spId = spoonacularRecipeIdFor(recipe);
+
+    if (hasSpoonacularSourceId(recipe)) {
+      if (
+        hasFullRecipeMacros(recipe) &&
+        String(recipe.nutritionSource || '') === 'spoonacular' &&
+        opts.preferLocalSpoonacularMacros
+      ) {
+        return verifyRecipeFromLocalSpoonacularMacros(recipe, opts);
+      }
+      return verifyRecipeWithSpoonacular(recipe, opts);
+    }
+
     var ingr = ingredientLines(recipe);
     var reported = reportedFromRecipe(recipe);
-    var fallback = opts.fallbackTargets || null;
-    var spRecipeId = spoonacularRecipeIdFor(recipe);
 
-    logEdamamDiagnostic('ingredient lines sent', {
+    logEdamamDiagnostic('ingredient lines sent (Edamam/USDA path)', {
       recipe: recipe.name || 'Recipe',
       localId: recipe.id != null ? recipe.id : null,
-      spoonacularId: spRecipeId,
+      spoonacularId: spId,
       lineCount: ingr.length,
       lines: ingr.slice(0, 12)
     });
 
     if (!ingr.length) {
       logNutritionOutcome({
+        path: 'edamam',
         source: 'openai',
         verified: false,
         confidence: recipe.nutritionConfidence || 'medium',
@@ -243,13 +494,13 @@
     }
 
     var Trace = global.ArcApi && global.ArcApi.Trace;
-    if (Trace) Trace.logOrchestrator('recipe verify started');
+    if (Trace) Trace.logOrchestrator('recipe verify started (Edamam/USDA)');
 
     return postJson('/api/nutrition/pipeline', {
       title: recipe.name || 'Recipe',
       ingr: ingr,
       reported: reported,
-      spoonacularRecipeId: spRecipeId
+      spoonacularRecipeId: spId
     }).then(function (res) {
       if (!res.ok || !res.json) {
         if (Trace) Trace.logFallback('category_targets', 'pipeline_unavailable');
@@ -262,6 +513,7 @@
         applyPipelineMacros(recipe, data, false);
         if (Trace) Trace.logFallback(data.source || 'usda', 'edamam_failed');
         logNutritionOutcome({
+          path: 'edamam',
           source: data.source || 'fallback',
           verified: false,
           confidence: recipe.nutritionConfidence,
@@ -308,6 +560,7 @@
 
       applyPipelineMacros(recipe, data, true);
       logNutritionOutcome({
+        path: 'edamam',
         source: data.source || 'verified',
         verified: true,
         confidence: recipe.nutritionConfidence,
@@ -350,7 +603,14 @@
       var i = idx++;
       if (i >= out.length) return Promise.resolve();
       var catFb = categoryFallback(out[i]);
-      return verifyRecipe(out[i], { fallbackTargets: catFb }).then(function (result) {
+      var preferLocal =
+        hasSpoonacularSourceId(out[i]) &&
+        hasFullRecipeMacros(out[i]) &&
+        String(out[i].nutritionSource || '') === 'spoonacular';
+      return verifyRecipe(out[i], {
+        fallbackTargets: catFb,
+        preferLocalSpoonacularMacros: preferLocal
+      }).then(function (result) {
         out[i] = result.recipe;
         return worker();
       });
@@ -364,6 +624,10 @@
   global.ArcNutritionPipeline = {
     verifyRecipe: verifyRecipe,
     verifyRecipes: verifyRecipes,
+    finalizeSpoonacularWeekRecipes: finalizeSpoonacularWeekRecipes,
+    verifyRecipeWithSpoonacular: verifyRecipeWithSpoonacular,
+    verifyRecipeFromLocalSpoonacularMacros: verifyRecipeFromLocalSpoonacularMacros,
+    hasSpoonacularSourceId: hasSpoonacularSourceId,
     ingredientLines: ingredientLines,
     joinQtyAndName: joinQtyAndName,
     spoonacularRecipeIdFor: spoonacularRecipeIdFor,
