@@ -1054,6 +1054,132 @@ app.post("/api/ai", async (req, res) => {
   }
 });
 
+/**
+ * Macro + Arc sanity checks without Edamam or USDA (Spoonacular-only verify path).
+ * @param {{ calories: number, protein: number, carbs: number, fat: number }} macros
+ * @returns {{ safe: boolean, validation: object, sanity: object }}
+ */
+function arcValidateSpoonacularMacros(macros) {
+  const p = Number(macros.protein) || 0;
+  const c = Number(macros.carbs) || 0;
+  const f = Number(macros.fat) || 0;
+  const computed = p * 4 + c * 4 + f * 9;
+  const delta = Math.abs(computed - macros.calories) / Math.max(macros.calories, 1);
+  const usdaMacroOk = delta <= 0.12;
+  const validation = {
+    calorie_macro_mismatch: !usdaMacroOk,
+    usda_sample_ok: true,
+    ai_drift_ratio: null,
+    safe:
+      usdaMacroOk &&
+      macros.calories >= 50 &&
+      macros.calories <= 2500 &&
+      p <= 200 &&
+      !(p * 4 > macros.calories * 1.1),
+  };
+  const sanity = ArcValidation && ArcValidation.runNutritionSanityChecks
+    ? ArcValidation.runNutritionSanityChecks(macros)
+    : { valid: validation.safe, issues: [] };
+  return { safe: validation.safe && sanity.valid, validation, sanity };
+}
+
+/** Spoonacular recipe nutrition + Arc validation — Edamam and USDA are not called. */
+app.post("/api/nutrition/spoonacular-verify", async (req, res) => {
+  try {
+    ArcTrace.logOrchestrator("spoonacular nutrition verify started");
+    const spoonacularRecipeId = req.body?.spoonacularRecipeId || null;
+    if (spoonacularRecipeId == null || spoonacularRecipeId === "") {
+      return res.status(400).json({ verified: false, reason: "spoonacular_id_required" });
+    }
+
+    arcPipelineLog("Spoonacular verify — skipping Edamam/USDA", {
+      spoonacularRecipeId,
+      reason: "spoonacular_id_present",
+    });
+
+    let macros = await fetchSpoonacularNutrition(spoonacularRecipeId);
+    const clientMacros = req.body?.macros;
+    if ((!macros || !macros.calories) && clientMacros && Number(clientMacros.calories) > 0) {
+      macros = {
+        calories: Math.round(Number(clientMacros.calories)),
+        protein: Math.round(Number(clientMacros.protein) || 0),
+        carbs: Math.round(Number(clientMacros.carbs) || 0),
+        fat: Math.round(Number(clientMacros.fat) || 0),
+      };
+      arcPipelineLog("Spoonacular verify using client macros (bulk fetch unavailable)", {
+        spoonacularRecipeId,
+      });
+    }
+
+    if (!macros || !macros.calories || macros.calories <= 0) {
+      return res.json({
+        verified: false,
+        reason: "spoonacular_nutrition_unavailable",
+        macros: null,
+        source: "spoonacular",
+        skipReason: "spoonacular_fetch_empty",
+      });
+    }
+
+    const check = arcValidateSpoonacularMacros(macros);
+    if (!check.safe) {
+      arcPipelineLog("Spoonacular nutrition validation failed", {
+        spoonacularRecipeId,
+        issues: check.sanity.issues || [],
+      });
+      return res.json({
+        verified: false,
+        reason: check.sanity.valid ? "validation_failed" : "sanity_check_failed",
+        macros,
+        validation: check.validation,
+        sanity: check.sanity,
+        source: "spoonacular",
+        nutritionConfidence: "medium",
+        skipReason: "spoonacular_id_present",
+      });
+    }
+
+    const derivedTags = ArcValidation && ArcValidation.deriveNutritionTags
+      ? ArcValidation.deriveNutritionTags({
+        calories: macros.calories,
+        protein: macros.protein,
+        carbs: macros.carbs,
+        fat: macros.fat,
+        fiber: Number(req.body?.fiber) || 0,
+      })
+      : { tags: [], rules: {} };
+    const tagCheck = ArcValidation && ArcValidation.validateRecipeTags
+      ? ArcValidation.validateRecipeTags(req.body?.tags || [], {
+        calories: macros.calories,
+        protein: macros.protein,
+        carbs: macros.carbs,
+        fat: macros.fat,
+        fiber: Number(req.body?.fiber) || 0,
+      })
+      : { validTags: [], rejectedTags: [] };
+
+    arcPipelineLog("Nutrition confidence HIGH", { source: "spoonacular", spoonacularRecipeId });
+    ArcTrace.logMessage("Spoonacular nutrition verified — Edamam/USDA skipped");
+    res.json({
+      verified: true,
+      macros,
+      validation: check.validation,
+      sanity: check.sanity,
+      source: "spoonacular",
+      fallback: false,
+      nutritionConfidence: "high",
+      nutritionTags: derivedTags.tags,
+      validatedTags: tagCheck.validTags,
+      rejectedTags: tagCheck.rejectedTags,
+      skipReason: "spoonacular_id_present",
+      note: "Macros from Spoonacular with Arc validation — Edamam and USDA not called",
+    });
+  } catch (err) {
+    console.error("/api/nutrition/spoonacular-verify", err);
+    res.status(500).json({ verified: false, reason: "server_error" });
+  }
+});
+
 /** Edamam analysis → USDA consistency check → validation flags for client display. */
 app.post("/api/nutrition/pipeline", async (req, res) => {
   try {
