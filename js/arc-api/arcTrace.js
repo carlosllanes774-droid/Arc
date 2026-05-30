@@ -20,6 +20,7 @@
 
   var PATH_ROUTES = [
     ['/api/spoonacular', 'spoonacular'],
+    ['/api/nutrition/spoonacular-verify', 'spoonacular'],
     ['/api/edamam', 'edamam'],
     ['/api/nutrition/pipeline', 'edamam'],
     ['/api/nutrition', 'edamam'],
