@@ -22,13 +22,15 @@ function loadPipeline(fetchImpl) {
         normalizeIngredientLines: (lines) => lines.filter(Boolean)
       },
       Validation: {
-        detectImpossibleNutrition: () => ({ safe: true })
+        detectImpossibleNutrition: () => ({ safe: true }),
+        runNutritionSanityChecks: () => ({ valid: true, issues: [] })
       },
       Trace: {
         logOrchestrator: () => {},
         logFallback: () => {},
         logMessage: () => {},
-        pathToProvider: () => 'edamam',
+        pathToProvider: (p) =>
+          String(p).indexOf('spoonacular-verify') >= 0 ? 'spoonacular' : 'edamam',
         pathOperation: () => 'pipeline',
         nowIso: () => new Date().toISOString(),
         timeStart: () => 0,
@@ -173,5 +175,76 @@ describe('ArcNutritionPipeline.verifyRecipe', () => {
     const result = await Pipeline.verifyRecipe({ ...baseRecipe }, { fallbackTargets: mealTargets.Lunch });
     assert.equal(result.recipe.cal, 650);
     assert.equal(result.recipe.nutritionSource, 'category_targets');
+  });
+
+  test('spoonacularId routes to spoonacular-verify — not Edamam pipeline', async () => {
+    let calledPath = '';
+    const Pipeline = loadPipeline((url) => {
+      calledPath = url;
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            verified: true,
+            source: 'spoonacular',
+            nutritionConfidence: 'high',
+            skipReason: 'spoonacular_id_present',
+            macros: { calories: 520, protein: 40, carbs: 48, fat: 18 }
+          })
+      });
+    });
+
+    const result = await Pipeline.verifyRecipe({
+      ...baseRecipe,
+      spoonacularId: 716429,
+      cal: 520,
+      p: 40,
+      c: 48,
+      f: 18,
+      nutritionSource: 'spoonacular'
+    });
+    assert.equal(calledPath, '/api/nutrition/spoonacular-verify');
+    assert.equal(result.recipe.nutritionVerified, true);
+    assert.equal(result.recipe.nutritionSource, 'spoonacular');
+    const nutLog = logs.find((l) => l && l.source === 'spoonacular');
+    assert.ok(nutLog, 'expected spoonacular nutrition outcome log');
+    assert.equal(nutLog.skipEdamam, true);
+    assert.equal(nutLog.skipUsda, true);
+  });
+
+  test('local Spoonacular week macros skip Edamam HTTP', async () => {
+    let fetchCalls = 0;
+    const Pipeline = loadPipeline(() => {
+      fetchCalls += 1;
+      return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) });
+    });
+
+    const result = await Pipeline.verifyRecipe(
+      {
+        ...baseRecipe,
+        spoonacularId: 716429,
+        cal: 480,
+        p: 35,
+        c: 42,
+        f: 16,
+        nutritionSource: 'spoonacular'
+      },
+      { preferLocalSpoonacularMacros: true }
+    );
+    assert.equal(fetchCalls, 0);
+    assert.equal(result.verified, true);
+    assert.equal(result.recipe.nutritionSource, 'spoonacular');
+    const nutLog = logs.find((l) => l && l.skipReason === 'spoonacular_macros_already_mapped');
+    assert.ok(nutLog, 'expected local spoonacular skip log');
+    assert.equal(nutLog.skipEdamam, true);
+    assert.equal(nutLog.skipUsda, true);
+  });
+
+  test('hasSpoonacularSourceId ignores local recipe id', () => {
+    const Pipeline = loadPipeline(() => Promise.resolve({ ok: true, json: () => Promise.resolve({}) }));
+    assert.equal(Pipeline.hasSpoonacularSourceId({ id: 1 }), false);
+    assert.equal(Pipeline.hasSpoonacularSourceId({ id: 1, spoonacularId: 99 }), true);
+    assert.equal(Pipeline.spoonacularRecipeIdFor({ id: 1 }), null);
+    assert.equal(Pipeline.spoonacularRecipeIdFor({ spoonacularId: 99 }), 99);
   });
 });
