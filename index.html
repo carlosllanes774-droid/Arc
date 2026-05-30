@@ -5406,13 +5406,25 @@ function buildNutritionEngine() {
   return { calT: calT, macros: macros, slots: slots, mealTargets: mealTargets };
 }
 
-/** Edamam → USDA → Arc Validation before persisting or displaying recipe macros. */
+/** Spoonacular when spoonacularId exists; otherwise Edamam → USDA → Arc Validation. */
 function arcVerifyRecipesBeforeSave(list, mt, done) {
   if (!list || !list.length) { done(list); return; }
   if (typeof ArcNutritionPipeline === 'undefined' || !ArcNutritionPipeline.verifyRecipes) {
     done(list);
     return;
   }
+  var withSp = 0;
+  var withoutSp = 0;
+  for (var vi = 0; vi < list.length; vi++) {
+    if (ArcNutritionPipeline.hasSpoonacularSourceId && ArcNutritionPipeline.hasSpoonacularSourceId(list[vi])) withSp++;
+    else withoutSp++;
+  }
+  console.log('[ARC PIPELINE] arcVerifyRecipesBeforeSave', {
+    total: list.length,
+    spoonacularPath: withSp,
+    edamamUsdaPath: withoutSp,
+    skipEdamamUsdaWhen: 'spoonacular_id_present'
+  });
   ArcNutritionPipeline.verifyRecipes(list, mt, 3).then(function(verified) {
     done(verified);
   }).catch(function() {
@@ -10955,15 +10967,39 @@ function generateWeeklyPlan(intent) {
 
     setGenPhase('balancing');
     if (shouldSkipSpoonacularWeekNutritionVerify(recipes, weekLibraryMeta)) {
-      console.log('[ARC PIPELINE] Spoonacular week nutrition — skipping Edamam verify', {
+      console.log('[ARC PIPELINE] Spoonacular week nutrition — skipping Edamam/USDA', {
         recipeCount: recipes.length,
+        reason: 'spoonacular_week_macros_mapped',
         sources: recipes.map(function (r) {
-          return { name: r.name, nutritionSource: r.nutritionSource, cal: r.cal, p: r.p };
+          return {
+            name: r.name,
+            spoonacularId: r.spoonacularId,
+            nutritionSource: r.nutritionSource,
+            nutritionVerified: r.nutritionVerified,
+            cal: r.cal,
+            p: r.p
+          };
         })
       });
-      finishWeekPlanAfterNutrition();
+      var finalizeSp = typeof ArcNutritionPipeline !== 'undefined' && ArcNutritionPipeline.finalizeSpoonacularWeekRecipes;
+      if (finalizeSp) {
+        ArcNutritionPipeline.finalizeSpoonacularWeekRecipes(recipes).then(function(finalized) {
+          if (myGen !== recipeGenId) return;
+          recipes = finalized;
+          finishWeekPlanAfterNutrition();
+        }).catch(function() {
+          if (myGen !== recipeGenId) return;
+          finishWeekPlanAfterNutrition();
+        });
+      } else {
+        finishWeekPlanAfterNutrition();
+      }
     } else if (typeof ArcNutritionPipeline !== 'undefined' && ArcNutritionPipeline.verifyRecipes) {
-      console.log('[ARC TRACE] ArcNutritionPipeline.verifyRecipes starting', { recipeCount: recipes.length });
+      console.log('[ARC TRACE] ArcNutritionPipeline.verifyRecipes starting', {
+        recipeCount: recipes.length,
+        weekLibrarySource: weekLibraryMeta && weekLibraryMeta.source ? weekLibraryMeta.source : null,
+        note: 'Recipes with spoonacularId use Spoonacular verify; others use Edamam/USDA'
+      });
       ArcNutritionPipeline.verifyRecipes(recipes, built.mt, 3).then(function(verified) {
         if (myGen !== recipeGenId) {
           console.log('[ARC TRACE] early return', { reason: 'stale_generation_after_nutrition_verify', myGen: myGen, recipeGenId: recipeGenId });
@@ -11508,9 +11544,9 @@ function resolveNutritionTransparency(recipe) {
   if (src === 'spoonacular') {
     return {
       tone: 'estimate',
-      headline: '≈ Estimated from Ingredient Analysis',
+      headline: '≈ Estimated from Spoonacular',
       sourceLabel: 'Spoonacular',
-      compact: '≈ Ingredient Analysis',
+      compact: '≈ Spoonacular',
       confidence: confidence
     };
   }
@@ -11536,6 +11572,7 @@ function resolveNutritionTransparency(recipe) {
 
 function formatNutritionSourceLabel(src, verified) {
   src = String(src || '').toLowerCase();
+  if (verified && src === 'spoonacular') return 'Spoonacular';
   if (verified && (src === 'edamam+usda' || src.indexOf('edamam') >= 0)) return 'Edamam';
   if (src === 'usda' || src.indexOf('usda') >= 0) return 'USDA';
   if (src === 'spoonacular') return 'Spoonacular';
