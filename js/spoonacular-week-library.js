@@ -273,6 +273,152 @@
     return { ok: ok, errors: errors, recipes: recipes };
   }
 
+  function ingredientKey(name) {
+    return String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  function ingredientKeySet(recipe) {
+    var keys = {};
+    (recipe.ing || []).forEach(function (n) {
+      var k = ingredientKey(n);
+      if (k) keys[k] = 1;
+    });
+    return keys;
+  }
+
+  /** Jaccard overlap on canonical ingredient keys (0–1). */
+  function ingredientOverlapScore(recipeA, recipeB) {
+    if (!recipeA || !recipeB) return 0;
+    var a = ingredientKeySet(recipeA);
+    var b = ingredientKeySet(recipeB);
+    var inter = 0;
+    var union = 0;
+    var k;
+    for (k in a) {
+      union++;
+      if (b[k]) inter++;
+    }
+    for (k in b) {
+      if (!a[k]) union++;
+    }
+    return union ? inter / union : 0;
+  }
+
+  function avgOverlapWithSelected(recipe, selected) {
+    if (!selected.length) return 0;
+    var sum = 0;
+    for (var i = 0; i < selected.length; i++) {
+      sum += ingredientOverlapScore(recipe, selected[i]);
+    }
+    return sum / selected.length;
+  }
+
+  function uniqueIngredientCount(recipes) {
+    var keys = {};
+    (recipes || []).forEach(function (r) {
+      (r.ing || []).forEach(function (n) {
+        var k = ingredientKey(n);
+        if (k) keys[k] = 1;
+      });
+    });
+    return Object.keys(keys).length;
+  }
+
+  function computeLibraryOverlapSummary(recipes) {
+    recipes = recipes || [];
+    var pairSum = 0;
+    var pairCount = 0;
+    for (var i = 0; i < recipes.length; i++) {
+      for (var j = i + 1; j < recipes.length; j++) {
+        pairSum += ingredientOverlapScore(recipes[i], recipes[j]);
+        pairCount++;
+      }
+    }
+    return {
+      weekAverage: pairCount ? Math.round((pairSum / pairCount) * 1000) / 1000 : 0,
+      pairCount: pairCount
+    };
+  }
+
+  function groupRecipesByCategory(recipes) {
+    var grouped = { Breakfast: [], Lunch: [], Dinner: [], Snack: [] };
+    (recipes || []).forEach(function (r) {
+      var cat = r && r.cat && VALID_CAT_SET[r.cat] ? r.cat : 'Lunch';
+      grouped[cat].push(r);
+    });
+    return grouped;
+  }
+
+  /**
+   * Greedy subset selection — prefer ingredient overlap and fewer unique items (budget).
+   * @param {object[]} recipes — full candidate pool after bulk map
+   * @param {object} perCat — category → count
+   * @param {{ isBudget?: boolean, preferOverlap?: boolean }} [opts]
+   * @returns {{ recipes: object[], overlap: object, uniqueIngredients: number }}
+   */
+  function selectOverlapOptimizedLibrary(recipes, perCat, opts) {
+    opts = opts || {};
+    var preferOverlap = opts.preferOverlap !== false;
+    var isBudget = !!opts.isBudget;
+    var wOverlap = preferOverlap ? 6.0 : 2.0;
+    var wSimplicity = isBudget ? 2.5 : 0.75;
+    var grouped = groupRecipesByCategory(recipes);
+    var selected = [];
+    var pickedIds = {};
+    var categoryOrder = ['Dinner', 'Lunch', 'Breakfast', 'Snack'];
+
+    categoryOrder.forEach(function (cat) {
+      var need = perCat && perCat[cat] ? parseInt(perCat[cat], 10) : 0;
+      if (!(need > 0)) return;
+      var pool = (grouped[cat] || []).slice();
+      var catSelected = [];
+
+      for (var n = 0; n < need; n++) {
+        var best = null;
+        var bestScore = -Infinity;
+        for (var pi = 0; pi < pool.length; pi++) {
+          var candidate = pool[pi];
+          var spKey = candidate.spoonacularId != null ? String(candidate.spoonacularId) : '';
+          if (spKey && pickedIds[spKey]) continue;
+
+          var overlap = avgOverlapWithSelected(candidate, selected.concat(catSelected));
+          var ingCount = (candidate.ing || []).length;
+          var simplicity = Math.max(0, 10 - ingCount) / 10;
+          var score = wOverlap * overlap + wSimplicity * simplicity;
+
+          if (score > bestScore || (score === bestScore && best && candidate.spoonacularId < best.spoonacularId)) {
+            best = candidate;
+            bestScore = score;
+          } else if (!best) {
+            best = candidate;
+            bestScore = score;
+          }
+        }
+
+        if (!best) break;
+        catSelected.push(best);
+        if (best.spoonacularId != null) pickedIds[String(best.spoonacularId)] = true;
+      }
+
+      selected = selected.concat(catSelected);
+    });
+
+    selected.forEach(function (r, idx) {
+      r.id = idx + 1;
+    });
+
+    return {
+      recipes: selected,
+      overlap: computeLibraryOverlapSummary(selected),
+      uniqueIngredients: uniqueIngredientCount(selected)
+    };
+  }
+
+  function searchCandidatePoolSize(perCatCount) {
+    var base = Math.max(parseInt(perCatCount, 10) || 2, 2);
+    return Math.min(Math.max(base * 3, 6), 12);
+  }
+
   function mergeCategoryMaps(groups) {
     var categoryBySpoonacularId = {};
     var ids = [];
@@ -296,13 +442,13 @@
     var mt = built && built.mt ? built.mt : {};
     var perSlot = mt.perSlot || { cal: 600 };
     var diet = mapRestrictionsToSpoonacularDiet(built && built.restrictions);
-    var number = Math.max(parseInt(count, 10) || 2, 2);
+    var poolSize = searchCandidatePoolSize(count);
 
     return postJson('/api/spoonacular/search', {
       query: CATEGORY_QUERIES[cat] || String(cat).toLowerCase(),
       diet: diet,
       maxCalories: Math.round((Number(perSlot.cal) || 600) * 1.15),
-      number: number + 1
+      number: poolSize
     }).then(function (res) {
       var categoryBySpoonacularId = {};
       var ids = [];
@@ -363,7 +509,25 @@
             merged.categoryBySpoonacularId,
             built.mt
           );
-          var validation = validateSpoonacularWeekLibrary(mapped.recipes);
+          var targets = built.libraryTargets || {};
+          var selectionOpts = {
+            isBudget: targets.profile === 'budget',
+            preferOverlap: !targets.varietyMode
+          };
+          var preOverlap = computeLibraryOverlapSummary(mapped.recipes);
+          var preUnique = uniqueIngredientCount(mapped.recipes);
+          var selection = selectOverlapOptimizedLibrary(mapped.recipes, perCat, selectionOpts);
+          console.log('[ARC SPOONACULAR] library overlap selection', {
+            profile: targets.profile || 'standard',
+            budgetProfile: targets.budgetProfile || null,
+            candidateCount: mapped.recipes.length,
+            selectedCount: selection.recipes.length,
+            uniqueIngredientsBefore: preUnique,
+            uniqueIngredientsAfter: selection.uniqueIngredients,
+            overlapBefore: preOverlap.weekAverage,
+            overlapAfter: selection.overlap.weekAverage
+          });
+          var validation = validateSpoonacularWeekLibrary(selection.recipes);
           if (!validation.ok) {
             callback({
               type: 'validation_failed',
@@ -371,7 +535,17 @@
             }, null, { source: 'spoonacular', validationErrors: validation.errors });
             return;
           }
-          callback(null, { recipes: mapped.recipes }, { source: 'spoonacular' });
+          callback(null, { recipes: selection.recipes }, {
+            source: 'spoonacular',
+            librarySelection: {
+              candidateCount: mapped.recipes.length,
+              uniqueIngredientsBefore: preUnique,
+              uniqueIngredientsAfter: selection.uniqueIngredients,
+              overlapBefore: preOverlap.weekAverage,
+              overlapAfter: selection.overlap.weekAverage,
+              profile: targets.profile || 'standard'
+            }
+          });
         });
       })
       .catch(function (err) {
@@ -384,6 +558,10 @@
     VALID_CATS: VALID_CATS.slice(),
     edamamLineFromIngredient: edamamLineFromIngredient,
     ingredientStableKey: ingredientStableKey,
+    ingredientOverlapScore: ingredientOverlapScore,
+    selectOverlapOptimizedLibrary: selectOverlapOptimizedLibrary,
+    computeLibraryOverlapSummary: computeLibraryOverlapSummary,
+    uniqueIngredientCount: uniqueIngredientCount,
     mapSpoonacularBulkToWeekLibrary: mapSpoonacularBulkToWeekLibrary,
     applyNutritionToWeekLibraryRecipe: applyNutritionToWeekLibraryRecipe,
     macrosFromSpoonacularBulkItem: macrosFromSpoonacularBulkItem,
