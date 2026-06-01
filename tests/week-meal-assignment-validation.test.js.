@@ -35,7 +35,7 @@ function loadSandbox(extraUp = {}) {
   };
   const ctx = vm.createContext(sandbox);
   const chunks = [
-    sliceIndexLines(2922, 3238)
+    sliceIndexLines(2942, 3257)
   ];
   for (const src of chunks) vm.runInContext(src, ctx);
   return sandbox;
