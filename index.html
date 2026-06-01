@@ -2626,6 +2626,7 @@ button:not(:disabled):active,
 <script src="js/arc-nutrition-pipeline.js"></script>
 <script src="js/arc-backend.js"></script>
 <script src="js/arc-frontend-contract.js"></script>
+<script src="js/week-library-targets.js"></script>
 <script src="js/spoonacular-week-library.js"></script>
 <script>
   // ✅ MUST be inside script
@@ -2834,9 +2835,13 @@ function normalizeMealPlanDayKeys(mealPlan) {
   return out;
 }
 
-function computeWeekCoreLibraryTargets(slots) {
-  slots = slots || getSlots();
+function computeWeekCoreLibraryTargets(slots, opts) {
+  if (typeof ArcWeekLibraryTargets !== 'undefined' && ArcWeekLibraryTargets.computeWeekCoreLibraryTargets) {
+    return ArcWeekLibraryTargets.computeWeekCoreLibraryTargets(slots, opts);
+  }
+  opts = opts || {};
   var perCat = {};
+  slots = slots || getSlots();
   for (var i = 0; i < slots.length; i++) {
     var s = String(slots[i]).toLowerCase();
     if (/breakfast/.test(s)) perCat.Breakfast = 2;
@@ -2844,20 +2849,10 @@ function computeWeekCoreLibraryTargets(slots) {
     else if (/dinner/.test(s)) perCat.Dinner = 2;
     else if (/snack/.test(s)) perCat.Snack = 2;
   }
-  var keys = Object.keys(perCat);
-  if (!keys.length) perCat.Lunch = 2;
+  if (!Object.keys(perCat).length) perCat.Lunch = 2;
   var total = 0;
-  keys.forEach(function (k) { total += perCat[k]; });
-  if (total < 4) {
-    keys.forEach(function (k) { perCat[k] = Math.max(perCat[k], 2); });
-    total = 0;
-    keys.forEach(function (k) { total += perCat[k]; });
-  }
-  if (total > 8) {
-    keys.forEach(function (k) { perCat[k] = 1; });
-    total = keys.length;
-  }
-  return { perCat: perCat, total: total };
+  Object.keys(perCat).forEach(function (k) { total += perCat[k]; });
+  return { perCat: perCat, total: total, profile: 'standard', varietyMode: false };
 }
 
 function appendWeekUserContextBlock(u, intent, ne) {
@@ -2897,14 +2892,23 @@ function appendWeekUserContextBlock(u, intent, ne) {
 
 function buildWeekRecipeLibraryPrompt(intent) {
   var ne = buildNutritionEngine();
-  var targets = computeWeekCoreLibraryTargets(ne.slots);
+  var weeklyBudget = normalizeBudgetValue((intent && intent.weeklyBudget) || UP.weeklyBudget || UP.budget);
+  var targets = computeWeekCoreLibraryTargets(ne.slots, {
+    budgetProfile: weeklyBudget,
+    varietyMode: !!(UP && UP.arcWeekVarietyMode)
+  });
   var perCat = targets.perCat;
+  var totalCapNote = targets.varietyMode
+    ? ('up to ' + targets.maxTotal + ' recipes (variety mode)')
+    : (targets.profile === 'budget'
+      ? ('between ' + targets.minTotal + ' and ' + targets.maxTotal)
+      : ('between ' + targets.minTotal + ' and ' + targets.maxTotal));
   var catLines = Object.keys(perCat).map(function (cat) {
     return '- ' + cat + ': exactly ' + perCat[cat] + ' core recipes';
   }).join('\n');
 
   var sysMsg = 'You are an expert nutritionist. Respond with ONLY valid JSON. No markdown. Start with { end with }. ' +
-    'Build a SMALL core recipe library (4-8 recipes total) for one week. ' +
+    'Build a SMALL core recipe library (' + totalCapNote + ') for one week. ' +
     'Each recipe: name, cat, cal, p, c, f, servings, ing (max 6 items), optional ingQty, price (USD/serving). ' +
     'Do NOT include steps or long instructions. Do NOT assign days. ' +
     'Macros must align with ingredients. Comply with MANDATORY DIETARY COMPLIANCE.';
@@ -2912,8 +2916,8 @@ function buildWeekRecipeLibraryPrompt(intent) {
   var u = 'STEP 1 — CORE RECIPE LIBRARY ONLY.\n';
   u = appendWeekUserContextBlock(u, intent, ne);
   u += '\nGenerate exactly these category counts:\n' + catLines + '\n';
-  u += 'Total recipes: ' + targets.total + ' (between 4 and 8).\n';
-  u += 'Share ingredients across recipes where possible (fewer grocery items).\n';
+  u += 'Total recipes: ' + targets.total + ' (' + totalCapNote + ').\n';
+  u += 'Share ingredients across recipes where possible (fewer grocery items). Prefer overlap over variety.\n';
   u += 'Each recipe servings = expected weekly uses (typically 2-4 for batch-friendly meals).\n\n';
   u += 'OUTPUT JSON ONLY:\n';
   u += '{"recipes":[{"id":1,"name":"Italian Omelette","cat":"Breakfast","cal":380,"p":28,"c":12,"f":22,"servings":2,"ing":["Eggs","Spinach","Cheese"],"ingQty":{"Eggs":"3 large"},"price":4.5}]}\n';
