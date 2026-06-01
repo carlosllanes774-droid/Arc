@@ -208,6 +208,59 @@ describe('mapSpoonacularBulkToWeekLibrary', () => {
   });
 });
 
+describe('selectOverlapOptimizedLibrary', () => {
+  const Lib = loadLib();
+
+  test('prefers higher ingredient overlap over variety', () => {
+    var shared = {
+      spoonacularId: 1,
+      cat: 'Dinner',
+      ing: ['chicken', 'rice', 'broccoli']
+    };
+    var distinct = {
+      spoonacularId: 2,
+      cat: 'Dinner',
+      ing: ['salmon', 'quinoa', 'asparagus', 'lemon', 'dill']
+    };
+    var overlapBuddy = {
+      spoonacularId: 3,
+      cat: 'Dinner',
+      ing: ['chicken', 'rice', 'spinach']
+    };
+    var selection = Lib.selectOverlapOptimizedLibrary(
+      [distinct, overlapBuddy, shared],
+      { Dinner: 2 },
+      { isBudget: true, preferOverlap: true }
+    );
+    assert.equal(selection.recipes.length, 2);
+    var ids = selection.recipes.map(function (r) { return Number(r.spoonacularId); });
+    assert.ok(ids.indexOf(1) >= 0 && ids.indexOf(3) >= 0);
+    assert.equal(ids.indexOf(2), -1);
+    assert.ok(selection.overlap.weekAverage > 0.2);
+    assert.ok(selection.uniqueIngredients <= 4);
+  });
+
+  test('budget profile favors fewer unique ingredients', () => {
+    var simple = {
+      spoonacularId: 10,
+      cat: 'Lunch',
+      ing: ['eggs', 'toast']
+    };
+    var complex = {
+      spoonacularId: 11,
+      cat: 'Lunch',
+      ing: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+    };
+    var selection = Lib.selectOverlapOptimizedLibrary(
+      [complex, simple],
+      { Lunch: 1 },
+      { isBudget: true, preferOverlap: true }
+    );
+    assert.equal(selection.recipes[0].spoonacularId, 10);
+    assert.equal(selection.uniqueIngredients, 2);
+  });
+});
+
 describe('fetchSpoonacularWeekLibrary validation gate', () => {
   test('does not call success callback when validation fails after map', async () => {
     const Lib = loadLib({
@@ -252,7 +305,7 @@ describe('fetchSpoonacularWeekLibrary validation gate', () => {
     assert.equal(result.payload, null);
   });
 
-  test('requests bulk with includeNutrition true', async () => {
+  test('requests bulk with includeNutrition true and selects overlap-optimized subset', async () => {
     let bulkBody = null;
     const Lib = loadLib({
       fetch: function (url, opts) {
@@ -264,24 +317,25 @@ describe('fetchSpoonacularWeekLibrary validation gate', () => {
             status: 200,
             json: () => Promise.resolve({
               recipes: [
-                { id: 1, title: 'A', calories: 400, protein: 30, carbs: 35, fat: 12, extendedIngredients: [{ name: 'a', original: '1 a' }], instructions: ['x'] },
-                { id: 2, title: 'B', calories: 500, protein: 35, carbs: 40, fat: 14, extendedIngredients: [{ name: 'b', original: '1 b' }], instructions: ['y'] },
-                { id: 3, title: 'C', calories: 450, protein: 32, carbs: 38, fat: 13, extendedIngredients: [{ name: 'c', original: '1 c' }], instructions: ['z'] },
-                { id: 4, title: 'D', calories: 420, protein: 28, carbs: 36, fat: 11, extendedIngredients: [{ name: 'd', original: '1 d' }], instructions: ['w'] }
+                { id: 1, title: 'A', calories: 400, protein: 30, carbs: 35, fat: 12, extendedIngredients: [{ name: 'chicken', original: '8 oz chicken' }, { name: 'rice', original: '1 cup rice' }], instructions: ['x'] },
+                { id: 2, title: 'B', calories: 500, protein: 35, carbs: 40, fat: 14, extendedIngredients: [{ name: 'salmon', original: '6 oz salmon' }], instructions: ['y'] },
+                { id: 3, title: 'C', calories: 450, protein: 32, carbs: 38, fat: 13, extendedIngredients: [{ name: 'chicken', original: '8 oz chicken' }, { name: 'broccoli', original: '2 cups broccoli' }], instructions: ['z'] },
+                { id: 4, title: 'D', calories: 420, protein: 28, carbs: 36, fat: 11, extendedIngredients: [{ name: 'beef', original: '8 oz beef' }], instructions: ['w'] },
+                { id: 5, title: 'E', calories: 410, protein: 29, carbs: 34, fat: 10, extendedIngredients: [{ name: 'chicken', original: '8 oz chicken' }, { name: 'rice', original: '1 cup rice' }], instructions: ['v'] },
+                { id: 6, title: 'F', calories: 430, protein: 31, carbs: 37, fat: 12, extendedIngredients: [{ name: 'tofu', original: '8 oz tofu' }], instructions: ['u'] }
               ]
             })
           });
         }
+        var searchBody = opts && opts.body ? JSON.parse(opts.body) : {};
+        var isDinner = String(searchBody.query || '').indexOf('dinner') >= 0;
         return Promise.resolve({
           ok: true,
           status: 200,
           json: () => Promise.resolve({
-            results: [
-              { id: 1, recipeId: 1 },
-              { id: 2, recipeId: 2 },
-              { id: 3, recipeId: 3 },
-              { id: 4, recipeId: 4 }
-            ]
+            results: isDinner
+              ? [{ id: 4, recipeId: 4 }, { id: 5, recipeId: 5 }, { id: 6, recipeId: 6 }]
+              : [{ id: 1, recipeId: 1 }, { id: 2, recipeId: 2 }, { id: 3, recipeId: 3 }]
           })
         });
       }
@@ -290,19 +344,27 @@ describe('fetchSpoonacularWeekLibrary validation gate', () => {
     const result = await new Promise((resolve) => {
       Lib.fetchSpoonacularWeekLibrary(
         {
-          libraryTargets: { perCat: { Lunch: 2 }, total: 2 },
-          mt: { perSlot: { cal: 500, p: 40, c: 50, f: 15 }, Lunch: { cal: 500, p: 40, c: 50, f: 15 } },
+          libraryTargets: {
+            perCat: { Lunch: 3, Dinner: 3 },
+            total: 6,
+            profile: 'standard',
+            budgetProfile: 'Moderate',
+            varietyMode: false
+          },
+          mt: { perSlot: { cal: 500, p: 40, c: 50, f: 15 }, Lunch: { cal: 500, p: 40, c: 50, f: 15 }, Dinner: { cal: 500, p: 40, c: 50, f: 15 } },
           restrictions: []
         },
-        function (err, payload) {
-          resolve({ err, payload });
+        function (err, payload, meta) {
+          resolve({ err, payload, meta });
         }
       );
     });
 
     assert.equal(bulkBody && bulkBody.includeNutrition, true);
     assert.equal(result.err, null);
-    assert.ok(result.payload && result.payload.recipes.length >= 4);
+    assert.equal(result.payload.recipes.length, 6);
+    assert.ok(result.meta && result.meta.librarySelection);
+    assert.ok(result.meta.librarySelection.overlapAfter >= result.meta.librarySelection.overlapBefore || result.meta.librarySelection.uniqueIngredientsAfter <= result.meta.librarySelection.uniqueIngredientsBefore);
     assert.ok(result.payload.recipes.every(function (r) {
       return r.nutritionSource === 'spoonacular' && r.cal > 0 && r.p > 0;
     }));
