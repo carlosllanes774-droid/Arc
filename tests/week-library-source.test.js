@@ -1,87 +1,73 @@
 /**
- * Week library source selection — Spoonacular default, OpenAI fallback reasons.
+ * Week library target caps — budget vs standard profiles.
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import vm from 'node:vm';
 
-function shouldUseSpoonacularWeekLibrary(up, storageGet) {
-  try {
-    if (up && up.arcWeekLibrarySource === 'openai') return false;
-    if (storageGet && storageGet('arcWeekLibrarySource') === 'openai') return false;
-  } catch (e) { /* ignore */ }
-  return true;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const TARGETS_JS = path.join(__dirname, '..', 'js', 'week-library-targets.js');
+
+function loadTargets() {
+  const sandbox = { ArcWeekLibraryTargets: null };
+  const ctx = vm.createContext(sandbox);
+  vm.runInContext(readFileSync(TARGETS_JS, 'utf8'), ctx, { filename: 'week-library-targets.js' });
+  return sandbox.ArcWeekLibraryTargets;
 }
 
-function spoonacularFallbackReason(err, payload) {
-  if (err && err.type === 'validation_failed') {
-    const vErr = err.validation && err.validation.errors;
-    if (Array.isArray(vErr) && vErr.length) {
-      return 'spoonacular_validation_failed:' + vErr.join(';');
-    }
-    return 'spoonacular_validation_failed';
-  }
-  if (!err && (!payload || !Array.isArray(payload.recipes) || !payload.recipes.length)) {
-    return 'empty_spoonacular_payload';
-  }
-  if (!err) return 'empty_spoonacular_payload';
-  const msg = err.message || String(err);
-  if (err.status === 402 || /402/.test(msg)) return 'spoonacular_quota_exceeded';
-  if (err.status === 503 || /503/.test(msg) || /not configured/i.test(msg)) {
-    return 'spoonacular_not_configured';
-  }
-  if (/bulk failed/i.test(msg)) return 'spoonacular_bulk_failed:' + msg;
-  if (/search returned no recipe/i.test(msg)) return 'spoonacular_search_empty';
-  if (/network|fetch failed|failed to fetch/i.test(msg)) return 'spoonacular_network_error:' + msg;
-  return 'spoonacular_fetch_failed:' + msg;
-}
+describe('computeWeekCoreLibraryTargets', () => {
+  const T = loadTargets();
 
-describe('shouldUseSpoonacularWeekLibrary', () => {
-  test('defaults to Spoonacular when no override', () => {
-    assert.equal(shouldUseSpoonacularWeekLibrary({}, null), true);
-    assert.equal(shouldUseSpoonacularWeekLibrary(null, function () { return null; }), true);
+  test('standard profile caps 4-slot week at 8 recipes', () => {
+    const slots = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+    const result = T.computeWeekCoreLibraryTargets(slots, { budgetProfile: 'Moderate' });
+    assert.equal(result.total, 8);
+    assert.equal(result.maxTotal, 8);
+    assert.equal(result.profile, 'standard');
   });
 
-  test('legacy spoonacular localStorage flag is not required', () => {
-    assert.equal(shouldUseSpoonacularWeekLibrary({}, function () { return null; }), true);
+  test('budget profile caps 4-slot week at 6 recipes', () => {
+    const slots = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+    const result = T.computeWeekCoreLibraryTargets(slots, { budgetProfile: 'Budget' });
+    assert.equal(result.total, 6);
+    assert.equal(result.maxTotal, 6);
+    assert.equal(result.profile, 'budget');
   });
 
-  test('openai override via UP or localStorage', () => {
-    assert.equal(shouldUseSpoonacularWeekLibrary({ arcWeekLibrarySource: 'openai' }, null), false);
-    assert.equal(
-      shouldUseSpoonacularWeekLibrary({}, function (k) {
-        return k === 'arcWeekLibrarySource' ? 'openai' : null;
-      }),
-      false
-    );
-  });
-});
-
-describe('spoonacularFallbackReason', () => {
-  test('validation_failed includes error codes', () => {
-    const reason = spoonacularFallbackReason({
-      type: 'validation_failed',
-      validation: { errors: ['recipe_count_below_minimum:3', 'recipe[0]:missing_ing'] }
-    }, null);
-    assert.ok(reason.indexOf('spoonacular_validation_failed:') === 0);
-    assert.ok(reason.indexOf('recipe_count_below_minimum') > 0);
+  test('budget profile keeps 2-slot week at 4 recipes', () => {
+    const slots = ['Lunch', 'Dinner'];
+    const result = T.computeWeekCoreLibraryTargets(slots, { budgetProfile: 'Budget' });
+    assert.equal(result.total, 4);
+    assert.ok(result.total <= result.maxTotal);
   });
 
-  test('quota and bulk failures map to stable reason codes', () => {
-    assert.equal(
-      spoonacularFallbackReason(new Error('Spoonacular bulk failed: 402'), null),
-      'spoonacular_quota_exceeded'
-    );
-    assert.equal(
-      spoonacularFallbackReason(new Error('Spoonacular bulk failed: 500'), null),
-      'spoonacular_bulk_failed:Spoonacular bulk failed: 500'
-    );
-    assert.equal(
-      spoonacularFallbackReason(new Error('Spoonacular search returned no recipe ids'), null),
-      'spoonacular_search_empty'
-    );
+  test('standard profile grows 2-slot week toward 6 recipes', () => {
+    const slots = ['Lunch', 'Dinner'];
+    const result = T.computeWeekCoreLibraryTargets(slots, { budgetProfile: 'Flexible' });
+    assert.equal(result.total, 6);
+    assert.equal(result.perCat.Lunch, 3);
+    assert.equal(result.perCat.Dinner, 3);
   });
 
-  test('empty payload without err', () => {
-    assert.equal(spoonacularFallbackReason(null, { recipes: [] }), 'empty_spoonacular_payload');
+  test('variety mode allows totals above 8', () => {
+    const slots = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+    const result = T.computeWeekCoreLibraryTargets(slots, {
+      budgetProfile: 'Moderate',
+      varietyMode: true
+    });
+    assert.equal(result.total, 8);
+    assert.equal(result.maxTotal, 12);
+    assert.equal(result.varietyMode, true);
+  });
+
+  test('never exceeds 8 without variety mode', () => {
+    const slots = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+    ['Budget', 'Moderate', 'Flexible'].forEach(function (budget) {
+      const result = T.computeWeekCoreLibraryTargets(slots, { budgetProfile: budget });
+      assert.ok(result.total <= 8, budget + ' total ' + result.total);
+    });
   });
 });
