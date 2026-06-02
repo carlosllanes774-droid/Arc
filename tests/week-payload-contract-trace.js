@@ -9,7 +9,7 @@ import vm from 'node:vm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
-const INDEX = path.join(ROOT, 'Index1.html');
+const INDEX = path.join(ROOT, 'Index.html');
 const CONTRACT_JS = path.join(ROOT, 'js', 'arc-frontend-contract.js');
 const LOOSE = JSON.parse(readFileSync(path.join(__dirname, 'fixtures', 'canonical-week-loose.json'), 'utf8'));
 const CANONICAL = JSON.parse(readFileSync(path.join(__dirname, 'fixtures', 'canonical-week-frontend-contract.json'), 'utf8'));
@@ -27,9 +27,8 @@ function loadSandbox() {
   const ctx = vm.createContext(sandbox);
   vm.runInContext(readFileSync(CONTRACT_JS, 'utf8'), ctx, { filename: 'arc-frontend-contract.js' });
   const chunks = [
-    sliceLines(2616, 2686),
-    sliceLines(2761, 3061),
-    sliceLines(6478, 6537)
+    sliceLines(2921, 3561),
+    sliceLines(7245, 7374)
   ];
   for (const src of chunks) vm.runInContext(src, ctx);
   return sandbox;
