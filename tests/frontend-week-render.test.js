@@ -1,6 +1,6 @@
 /**
  * Isolated frontend week-render diagnostic (no production changes).
- * Loads real Index.html parsing/render helpers in a VM + minimal DOM mock,
+ * Loads real index.html parsing/render helpers in a VM + minimal DOM mock,
  * then simulates applyWeek with static canonical payloads.
  */
 import { test, describe } from 'node:test';
@@ -12,7 +12,7 @@ import vm from 'node:vm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
-const INDEX_HTML = path.join(ROOT, 'Index.html');
+const INDEX_HTML = path.join(ROOT, 'index.html');
 const CONTRACT_JS = path.join(ROOT, 'js', 'arc-frontend-contract.js');
 const FIXTURE_LOOSE = path.join(__dirname, 'fixtures', 'canonical-week-loose.json');
 const FIXTURE_CONTRACT = path.join(__dirname, 'fixtures', 'canonical-week-frontend-contract.json');
