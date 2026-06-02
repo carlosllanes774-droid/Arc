@@ -1,6 +1,6 @@
 /**
  * Isolated frontend week-render diagnostic (no production changes).
- * Loads real Index1.html parsing/render helpers in a VM + minimal DOM mock,
+ * Loads real Index.html parsing/render helpers in a VM + minimal DOM mock,
  * then simulates applyWeek with static canonical payloads.
  */
 import { test, describe } from 'node:test';
@@ -12,7 +12,7 @@ import vm from 'node:vm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
-const INDEX_HTML = path.join(ROOT, 'Index1.html');
+const INDEX_HTML = path.join(ROOT, 'Index.html');
 const CONTRACT_JS = path.join(ROOT, 'js', 'arc-frontend-contract.js');
 const FIXTURE_LOOSE = path.join(__dirname, 'fixtures', 'canonical-week-loose.json');
 const FIXTURE_CONTRACT = path.join(__dirname, 'fixtures', 'canonical-week-frontend-contract.json');
@@ -118,8 +118,8 @@ function loadFrontendWeekSandbox() {
   };
 
   const chunks = [
-    sliceIndexLines(2761, 3064),
-    sliceIndexLines(6750, 6809)
+    sliceIndexLines(2995, 3561),
+    sliceIndexLines(7245, 7374)
   ];
 
   loadArcFrontendContractInto(sandbox);
