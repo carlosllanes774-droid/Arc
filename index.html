@@ -188,7 +188,29 @@ body{
 }
 #splash-screen.is-exiting .splash-ambience,
 #splash-screen.is-exiting .splash-glow,
-#splash-screen.is-exiting .splash-vignette{opacity:0}
+#splash-screen.is-exiting .splash-vignette,
+#splash-screen.is-exiting .splash-brand{opacity:0}
+.splash-brand{
+  position:absolute;z-index:5;left:50%;top:50%;
+  transform:translate(-50%,-50%);
+  display:flex;flex-direction:column;align-items:center;
+  text-align:center;pointer-events:none;
+  opacity:0;
+  transition:opacity 1.15s var(--splash-ease),transform 820ms var(--splash-ease-out);
+}
+#splash-screen.is-loaded .splash-brand{opacity:1}
+#splash-screen.is-exiting .splash-brand{transform:translate(-50%,calc(-50% - 4px))}
+.splash-logo{
+  width:min(42vw,120px);height:auto;display:block;
+  mix-blend-mode:screen;
+  filter:drop-shadow(0 8px 28px rgba(0,0,0,.5));
+}
+.splash-tagline{
+  margin-top:14px;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  font-size:12px;font-weight:500;letter-spacing:.06em;
+  color:rgba(255,255,255,.75);line-height:1.4;
+}
 .splash-curtain{
   position:absolute;inset:0;z-index:0;
   background:#000;
@@ -313,6 +335,17 @@ body{
 .arc-auth-brand span{font-size:17px;font-weight:650;letter-spacing:-.3px;color:#fff}
 .ob-brand .arc-mark--ob{flex-shrink:0}
 
+#s-gen .gen-logo-wrap{
+  position:relative;
+  width:auto;height:auto;
+  margin:0 auto 22px;
+  flex-shrink:0;
+}
+#s-gen .gen-logo-img{
+  width:min(28vw,88px);height:auto;display:block;margin:0 auto;
+  mix-blend-mode:screen;
+  filter:drop-shadow(0 4px 18px rgba(0,0,0,.22));
+}
 .gen-logo-wrap{
   position:relative;
   width:72px;height:72px;
@@ -366,9 +399,11 @@ body{
 
 @media (prefers-reduced-motion:reduce){
   .splash-frame,.splash-ambience,.splash-glow,.splash-art,#splash-screen:not(.is-loaded) .splash-frame::after,.arc-mark--breathe,.arc-mark--float,.gen-logo-glow,.gen-logo-wrap .arc-mark--gen,.intro-brand{animation:none!important}
+  .splash-brand{transition:none!important}
   .splash-frame{transform:none!important}
   #splash-screen.is-loaded .splash-art{opacity:1;transform:none}
   #splash-screen.is-loaded .splash-glow{opacity:.65}
+  #splash-screen.is-loaded .splash-brand{opacity:1}
   #splash-screen.is-exiting .splash-art{filter:none;transform:none}
   .screen.arc-splash-handoff{filter:none;transform:none}
   .intro-brand{opacity:1;transform:none}
@@ -580,6 +615,14 @@ body{
 /* AUTH — cinematic continuation of onboarding (dark, soft, minimal) */
 #s-auth.screen{opacity:0;transform:none;background:#151210;color:rgba(255,255,255,.92)}
 #s-auth.screen.active{opacity:1}
+#s-auth .arc-auth-screen{position:relative;flex:1;display:flex;flex-direction:column;min-height:780px;overflow:hidden;padding:22px 22px calc(28px + env(safe-area-inset-bottom,0px))}
+#s-auth .arc-auth-brand{display:none}
+#s-auth .arc-auth-logo-wrap{display:flex;justify-content:center;margin:0 0 28px}
+#s-auth .arc-auth-logo{width:min(36vw,104px);height:auto;display:block;mix-blend-mode:screen;filter:drop-shadow(0 4px 20px rgba(0,0,0,.35))}
+#s-auth .arc-auth-context{margin-bottom:14px}
+#s-auth .arc-auth-card{margin-top:min(10vh,72px);margin-bottom:auto;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.16)}
+#s-auth .arc-auth-h{margin-bottom:10px}
+#s-auth .arc-auth-sub{margin-bottom:18px}
 .arc-auth-screen{position:relative;flex:1;display:flex;flex-direction:column;min-height:780px;overflow:hidden;padding:28px 22px calc(32px + env(safe-area-inset-bottom,0px))}
 .arc-auth-ambience{position:absolute;inset:0;pointer-events:none;background:
   radial-gradient(120% 80% at 50% -8%,rgba(227,90,54,.32) 0%,transparent 55%),
@@ -813,6 +856,25 @@ body{
 .gen-ring-bar{fill:none;stroke:rgba(255,255,255,.92);stroke-width:3.25;stroke-linecap:round;opacity:.95;filter:drop-shadow(0 0 12px rgba(255,255,255,.15))}
 .gen-title{font-size:24px;font-weight:700;color:#fff;font-family:Georgia,serif;letter-spacing:-.45px;margin-bottom:6px;line-height:1.2}
 .gen-kicker{font-size:12px;font-weight:600;color:rgba(255,255,255,.42);letter-spacing:.14em;text-transform:uppercase;margin-bottom:22px}
+#s-gen .gen-kicker{
+  font-size:14px;font-weight:450;color:rgba(255,255,255,.58);
+  letter-spacing:-.01em;text-transform:none;line-height:1.55;
+  max-width:300px;margin:0 auto 16px;
+}
+#s-gen .gen-phase-dots{display:flex;justify-content:center;align-items:center;gap:8px;margin:0 auto 18px}
+#s-gen .gen-phase-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:rgba(255,255,255,.25);
+  transition:background 320ms var(--ease-standard),box-shadow 320ms var(--ease-standard),transform 320ms var(--ease-standard);
+}
+#s-gen .gen-phase-dot.is-active{
+  background:#fff;
+  box-shadow:0 0 10px rgba(255,255,255,.45);
+  transform:scale(1.08);
+}
+#s-gen .gen-stage-stack{min-height:3.25em;margin-bottom:0}
+#s-gen .gen-stage{font-size:17px;font-weight:600}
+#s-gen .gen-insight{display:none}
 .gen-stage-stack{min-height:4.75em;display:flex;align-items:center;justify-content:center;padding:0 8px;margin-bottom:20px;max-width:320px;margin-left:auto;margin-right:auto}
 .gen-stage{font-size:16px;font-weight:500;color:rgba(255,255,255,.94);letter-spacing:-.02em;line-height:1.45;text-align:center;margin:0}
 .gen-stage.gen-stage--exit{opacity:0;transform:translateY(-7px);transition:opacity 240ms var(--ease-standard),transform 240ms var(--ease-standard)}
@@ -823,6 +885,7 @@ body{
 @media (prefers-reduced-motion:reduce){
   .gen-ring-svg{animation:none}
   .gen-stage.gen-stage--enter{animation:none}
+  #s-gen .gen-phase-dot{transition:none}
 }
 .gen-live{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
 
@@ -1722,6 +1785,10 @@ button:not(:disabled):active,
     <img class="splash-art" id="splash-art" src="assets/branding/splash.png" alt="" width="1081" height="1921" decoding="async" fetchpriority="high"/>
   </div>
   <div class="splash-vignette" aria-hidden="true"></div>
+  <div class="splash-brand" aria-hidden="true">
+    <img class="splash-logo" src="assets/branding/Arc_Logo.png" alt="" width="512" height="512" decoding="async"/>
+    <p class="splash-tagline">Nutrition, structured.</p>
+  </div>
 </div>
 
 <div class="app" id="app">
@@ -1943,6 +2010,9 @@ button:not(:disabled):active,
     <div class="arc-auth-card" id="arc-auth-card">
       <div class="arc-auth-card-glow" aria-hidden="true"></div>
       <div class="arc-auth-panel arc-auth-panel--form" id="arc-auth-form-panel">
+        <div class="arc-auth-logo-wrap" aria-hidden="true">
+          <img class="arc-auth-logo" src="assets/branding/Arc_Logo.png" alt="" width="512" height="512" decoding="async"/>
+        </div>
         <h1 class="arc-auth-h" id="arc-auth-h1">Your Arc system is ready.</h1>
         <p class="arc-auth-sub" id="arc-auth-lead">Save your profile to build your personalized week.</p>
         <div class="arc-auth-google">
@@ -2028,8 +2098,7 @@ button:not(:disabled):active,
 <!-- GENERATING -->
 <div class="screen s-gen" id="s-gen">
   <div class="gen-logo-wrap" aria-hidden="true">
-    <div class="gen-logo-glow"></div>
-    <span class="arc-mark arc-mark--gen arc-mark--on-dark arc-mark--breathe arc-mark--float" aria-hidden="true"></span>
+    <img class="gen-logo-img" src="assets/branding/Arc_Logo.png" alt="" width="512" height="512" decoding="async"/>
   </div>
   <div class="gen-ring-wrap" aria-hidden="true">
     <svg class="gen-ring-svg" viewBox="0 0 100 100">
@@ -2037,12 +2106,18 @@ button:not(:disabled):active,
       <circle class="gen-ring-bar" id="gen-ring-bar" cx="50" cy="50" r="43" stroke-dasharray="270.177" stroke-dashoffset="270.177"/>
     </svg>
   </div>
-  <div class="gen-title">Setting things up</div>
-  <div class="gen-kicker">Almost there</div>
-  <div class="gen-stage-stack">
-    <p class="gen-stage" id="gen-stage" aria-live="polite">Building your nutrition profile…</p>
+  <div class="gen-title">Building your week</div>
+  <div class="gen-kicker">Arc is organizing meals, groceries, and flexibility around your goals.</div>
+  <div class="gen-phase-dots" id="gen-phase-dots" aria-hidden="true">
+    <span class="gen-phase-dot is-active"></span>
+    <span class="gen-phase-dot"></span>
+    <span class="gen-phase-dot"></span>
+    <span class="gen-phase-dot"></span>
   </div>
-  <p class="gen-insight" id="gen-insight" aria-live="polite"></p>
+  <div class="gen-stage-stack">
+    <p class="gen-stage" id="gen-stage" aria-live="polite">Reducing food noise</p>
+  </div>
+  <p class="gen-insight" id="gen-insight" aria-live="polite" hidden></p>
 </div>
 
 <!-- TODAY -->
@@ -3549,40 +3624,32 @@ var ARC_COPY = {
     }
   },
   gen: {
-    title: 'Setting things up',
-    kicker: 'Almost there',
-    stageDefault: 'Learning how you eat…',
+    title: 'Building your week',
+    kicker: 'Arc is organizing meals, groceries, and flexibility around your goals.',
+    stageDefault: 'Reducing food noise',
     phases: {
-      profile: 'Learning how you eat…',
-      balancing: 'Balancing your day…',
-      recipes: 'Shaping meals for your week…',
-      grocery: 'Getting your grocery view ready…',
-      finalize: 'Finishing up…'
+      profile: 'Reducing food noise',
+      balancing: 'Creating flexibility for busy days',
+      recipes: 'Balancing nutrition and real life',
+      grocery: 'Building your grocery plan',
+      finalize: 'Balancing nutrition and real life'
     },
-    insights: [
-      'Your plan softens as you cook and log.',
-      'Steady protein often makes the week feel easier.',
-      'Small planning wins add up by Friday.',
-      'Store prices are estimates—your receipt is the truth.'
-    ]
+    phaseDots: { profile: 0, grocery: 1, balancing: 2, recipes: 3, finalize: 3 },
+    insights: []
   },
   genPostOnboarding: {
-    title: 'Building your week.',
-    kicker: 'Arc is preparing your system',
-    stageDefault: 'Shaping meals around you…',
+    title: 'Building your week',
+    kicker: 'Arc is organizing meals, groceries, and flexibility around your goals.',
+    stageDefault: 'Reducing food noise',
     phases: {
-      profile: 'Learning how you eat…',
-      balancing: 'Balancing your day…',
-      recipes: 'Shaping meals for your week…',
-      grocery: 'Organizing groceries with intent…',
-      finalize: 'Finishing touches…'
+      profile: 'Reducing food noise',
+      balancing: 'Creating flexibility for busy days',
+      recipes: 'Balancing nutrition and real life',
+      grocery: 'Building your grocery plan',
+      finalize: 'Balancing nutrition and real life'
     },
-    insights: [
-      'Your week takes shape around the rhythm you already shared.',
-      'Groceries and meals stay in quiet conversation.',
-      'Nothing here is rushed—only intentional.',
-      'When something shifts, Arc softens with you.'
-    ]
+    phaseDots: { profile: 0, grocery: 1, balancing: 2, recipes: 3, finalize: 3 },
+    insights: []
   },
   auth: {
     headlineSave: 'Your Arc system is ready.',
@@ -10162,6 +10229,16 @@ function getGenInsights() {
   return arcActiveGenPack().insights;
 }
 
+function setGenPhaseDot(phase) {
+  var pack = arcActiveGenPack();
+  var dotMap = (pack && pack.phaseDots) ? pack.phaseDots : { profile: 0, grocery: 1, balancing: 2, recipes: 3, finalize: 3 };
+  var idx = dotMap[phase] != null ? dotMap[phase] : 0;
+  var dots = document.querySelectorAll('#s-gen .gen-phase-dot');
+  for (var i = 0; i < dots.length; i++) {
+    dots[i].classList.toggle('is-active', i === idx);
+  }
+}
+
 function resetGenLoadingUI() {
   genLoadingActive = true;
   genRingLerp = 0;
@@ -10178,8 +10255,7 @@ function resetGenLoadingUI() {
     st.classList.remove('gen-stage--exit', 'gen-stage--enter');
     st.textContent = getGenPhaseCopy().profile;
   }
-  var ins = el('gen-insight');
-  if (ins) ins.textContent = getGenInsights()[0];
+  setGenPhaseDot('profile');
 }
 
 function stopGenLoadingUI() {
@@ -10222,21 +10298,12 @@ function setGenPhase(phase, insightPick) {
   var label = phases[phase] || phases.profile;
   var ambient = { profile: 0.12, balancing: 0.36, recipes: 0.58, grocery: 0.8, finalize: 0.92 };
   if (ambient[phase] != null) setGenRingAmbient(ambient[phase]);
+  setGenPhaseDot(phase);
 
   var st = el('gen-stage');
-  var ins = el('gen-insight');
   if (!st) return;
 
-  var insightByPhase = { profile: 0, balancing: 1, recipes: 2, grocery: 3, finalize: 1 };
-  var idx = (insightPick != null) ? insightPick : (insightByPhase[phase] != null ? insightByPhase[phase] : 0);
-  function applyInsight() {
-    if (ins) ins.textContent = getGenInsights()[idx % getGenInsights().length];
-  }
-
-  if (st.textContent === label) {
-    applyInsight();
-    return;
-  }
+  if (st.textContent === label) return;
 
   genPhaseSeq++;
   var ticket = genPhaseSeq;
@@ -10249,7 +10316,6 @@ function setGenPhase(phase, insightPick) {
     st.textContent = label;
     st.classList.remove('gen-stage--exit');
     st.classList.add('gen-stage--enter');
-    applyInsight();
     setTimeout(function() {
       if (ticket !== genPhaseSeq) return;
       st.classList.remove('gen-stage--enter');
