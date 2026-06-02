@@ -234,7 +234,7 @@ function requestPublicOrigin(req) {
   return `${proto}://${host}`;
 }
 
-/** Authoritative browser UI — tests and docs reference Index1.html (not index.html). */
+/** Authoritative browser UI — `index.html` at repo root. */
 const ARC_UI_HTML = path.join(ROOT, "index.html");
 if (!existsSync(ARC_UI_HTML)) {
   console.error("[Arc] Missing UI entry:", ARC_UI_HTML);
@@ -250,7 +250,8 @@ function sendArcUi(_req, res) {
 
 app.get("/", sendArcUi);
 app.get("/index.html", sendArcUi);
-app.get("/Index1.html", sendArcUi);
+app.get("/Index.html", sendArcUi);
+app.get("/Index1.html", sendArcUi); // legacy alias
 
 /** Public client config — anon key only (RLS-protected), no service role. */
 app.get("/api/config/public", (req, res) => {
