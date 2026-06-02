@@ -3078,10 +3078,12 @@ function appendWeekUserContextBlock(u, intent, ne) {
 
 function buildWeekRecipeLibraryPrompt(intent) {
   var ne = buildNutritionEngine();
+  intent = intent || {};
   var weeklyBudget = normalizeBudgetValue((intent && intent.weeklyBudget) || UP.weeklyBudget || UP.budget);
+  var varietyMode = intent.weekVibe === 'variety' || !!(UP && UP.arcWeekVarietyMode);
   var targets = computeWeekCoreLibraryTargets(ne.slots, {
     budgetProfile: weeklyBudget,
-    varietyMode: !!(UP && UP.arcWeekVarietyMode)
+    varietyMode: varietyMode
   });
   var perCat = targets.perCat;
   var totalCapNote = targets.varietyMode
@@ -3121,7 +3123,13 @@ function buildWeekRecipeLibraryPrompt(intent) {
     calT: ne.calT,
     macros: ne.macros,
     slots: ne.slots,
-    libraryTargets: targets
+    libraryTargets: targets,
+    weekMode: {
+      weekVibe: intent.weekVibe || null,
+      focus: intent.focus || null,
+      maxReadyTime: intent.focus === 'quick' ? 25 : undefined,
+      preferProtein: intent.focus === 'highProtein'
+    }
   };
 }
 
@@ -10966,6 +10974,7 @@ function bwSubmit() {
   var mapped = bwStyleFocusFromWeekVibe(bwState.weekVibe);
   UP.budget = normalizeBudgetValue(bwState.weeklyBudget);
   UP.weeklyBudget = normalizeBudgetValue(bwState.weeklyBudget);
+  UP.arcWeekVarietyMode = bwState.weekVibe === 'variety';
   // Persist intent so reloads during generation can recover.
   UP.weeklyPlanDraft = {
     weekVibe: bwState.weekVibe,
@@ -11052,6 +11061,7 @@ function dispatchWeekLibraryFetch(built, applyLibraryFn) {
 
   logWeekLibrarySource('spoonacular');
   built.restrictions = (UP && UP.restrictions) ? UP.restrictions.slice() : [];
+  built.dislikes = (UP && UP.dislikes != null) ? String(UP.dislikes) : '';
 
   ArcSpoonacularWeekLibrary.fetchSpoonacularWeekLibrary(built, function (err, payload, meta) {
     if (err && err.type === 'validation_failed') {
@@ -11141,7 +11151,7 @@ function generateWeeklyPlan(intent) {
     }
     console.log('[ARC PIPELINE] Week recipe library ready', { count: weekLibraryRecipes.length });
     setGenPhase('balancing');
-    UP.arcWeekPlanner = 'legacy'; // 'legacy' | 'scg' — one-line planner toggle
+    UP.arcWeekPlanner = (intent && intent.weekVibe === 'variety') ? 'scg' : 'legacy';
     var weekPayload = buildDeterministicWeekMealPlan(weekLibraryRecipes, built.slots, intent);
     if (!weekPayload) {
       failWeekGeneration('Could not build week assignment from library', raw);
