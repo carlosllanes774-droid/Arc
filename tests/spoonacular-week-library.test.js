@@ -261,6 +261,102 @@ describe('selectOverlapOptimizedLibrary', () => {
   });
 });
 
+describe('parseDislikes and recipeMatchesDislike', () => {
+  const Lib = loadLib();
+
+  test('parseDislikes splits comma and newline separated terms', () => {
+    assert.equal(JSON.stringify(Lib.parseDislikes('mushrooms, cilantro\nolives')), '["mushrooms","cilantro","olives"]');
+    assert.equal(Lib.parseDislikes('').length, 0);
+  });
+
+  test('recipeMatchesDislike checks title and ingredients', () => {
+    var recipe = validRecipe({ name: 'Mushroom Risotto', ing: ['rice', 'broth'] });
+    assert.equal(Lib.recipeMatchesDislike(recipe, ['mushroom']), 'mushroom');
+    assert.equal(Lib.recipeMatchesDislike(recipe, ['cilantro']), null);
+    var ingHit = validRecipe({ name: 'Garden Bowl', ing: ['spinach', 'cilantro', 'quinoa'] });
+    assert.equal(Lib.recipeMatchesDislike(ingHit, ['cilantro']), 'cilantro');
+  });
+});
+
+describe('validateRecipeDietCompliance', () => {
+  const Lib = loadLib();
+
+  test('vegan rejects chicken', () => {
+    var r = validRecipe({ name: 'Chicken Bowl', ing: ['chicken', 'rice'] });
+    var result = Lib.validateRecipeDietCompliance(r, ['Vegan']);
+    assert.equal(result.ok, false);
+    assert.ok(result.violations.some(function (v) { return v.indexOf('vegan:') === 0; }));
+  });
+
+  test('vegetarian allows eggs but rejects fish', () => {
+    var eggs = validRecipe({ name: 'Omelette', ing: ['eggs', 'spinach'] });
+    assert.equal(Lib.validateRecipeDietCompliance(eggs, ['Vegetarian']).ok, true);
+    var fish = validRecipe({ name: 'Salmon plate', ing: ['salmon', 'lemon'] });
+    assert.equal(Lib.validateRecipeDietCompliance(fish, ['Vegetarian']).ok, false);
+  });
+
+  test('dairy-free rejects cheese', () => {
+    var r = validRecipe({ name: 'Pasta', ing: ['pasta', 'parmesan'] });
+    assert.equal(Lib.validateRecipeDietCompliance(r, ['Dairy-free']).ok, false);
+  });
+
+  test('nut allergy rejects peanuts', () => {
+    var r = validRecipe({ name: 'Stir fry', ing: ['peanut sauce', 'vegetables'] });
+    assert.equal(Lib.validateRecipeDietCompliance(r, ['Nut allergy']).ok, false);
+  });
+
+  test('halal rejects pork and wine', () => {
+    assert.equal(Lib.validateRecipeDietCompliance(validRecipe({ ing: ['pork'] }), ['Halal']).ok, false);
+    assert.equal(Lib.validateRecipeDietCompliance(validRecipe({ ing: ['red wine'] }), ['Halal']).ok, false);
+  });
+
+  test('gluten-free rejects wheat flour', () => {
+    var r = validRecipe({ name: 'Bread bowl', ing: ['wheat flour', 'yeast'] });
+    assert.equal(Lib.validateRecipeDietCompliance(r, ['Gluten-free']).ok, false);
+  });
+});
+
+describe('filterCompliantCandidates', () => {
+  const Lib = loadLib();
+
+  test('filters dislikes and diet violations from pool', () => {
+    var pool = [
+      validRecipe({ spoonacularId: 1, name: 'Beef Stew', ing: ['beef', 'carrot'] }),
+      validRecipe({ spoonacularId: 2, name: 'Veg Bowl', ing: ['rice', 'broccoli'] }),
+      validRecipe({ spoonacularId: 3, name: 'Peanut Noodles', ing: ['noodles', 'peanut butter'] })
+    ];
+    var result = Lib.filterCompliantCandidates(pool, ['Vegan'], ['beef', 'peanut']);
+    assert.equal(result.compliant.length, 1);
+    assert.equal(result.compliant[0].spoonacularId, 2);
+    assert.equal(result.rejectedDislikes.length, 2);
+    assert.equal(result.rejectedDiet.length, 0);
+  });
+});
+
+describe('selectOverlapOptimizedLibrary weekly mode', () => {
+  const Lib = loadLib();
+
+  test('preferProtein favors higher protein density', () => {
+    var low = { spoonacularId: 1, cat: 'Dinner', cal: 500, p: 20, ing: ['a', 'b'] };
+    var high = { spoonacularId: 2, cat: 'Dinner', cal: 500, p: 45, ing: ['c', 'd'] };
+    var selection = Lib.selectOverlapOptimizedLibrary([low, high], { Dinner: 1 }, { preferProtein: true, preferOverlap: false });
+    assert.equal(selection.recipes[0].spoonacularId, 2);
+  });
+
+  test('varietyMode prefers lower ingredient overlap', () => {
+    var sharedA = { spoonacularId: 1, cat: 'Lunch', ing: ['chicken', 'rice', 'broccoli'] };
+    var sharedB = { spoonacularId: 2, cat: 'Lunch', ing: ['chicken', 'rice', 'spinach'] };
+    var distinct = { spoonacularId: 3, cat: 'Lunch', ing: ['salmon', 'quinoa', 'asparagus'] };
+    var varietyPick = Lib.selectOverlapOptimizedLibrary(
+      [sharedA, sharedB, distinct],
+      { Lunch: 2 },
+      { varietyMode: true, preferOverlap: false }
+    );
+    var ids = varietyPick.recipes.map(function (r) { return Number(r.spoonacularId); });
+    assert.ok(ids.indexOf(3) >= 0);
+  });
+});
+
 describe('fetchSpoonacularWeekLibrary validation gate', () => {
   test('does not call success callback when validation fails after map', async () => {
     const Lib = loadLib({
@@ -303,6 +399,139 @@ describe('fetchSpoonacularWeekLibrary validation gate', () => {
 
     assert.ok(result.err && result.err.type === 'validation_failed');
     assert.equal(result.payload, null);
+  });
+
+  test('passes maxReadyTime and minProtein for weekly mode search', async () => {
+    var searchBodies = [];
+    const Lib = loadLib({
+      fetch: function (url, opts) {
+        const path = String(url);
+        if (path.indexOf('/bulk') >= 0) {
+          var body = JSON.parse(opts.body);
+          var recipes = (body.ids || []).map(function (id, idx) {
+            return {
+              id: id,
+              title: 'Recipe ' + id,
+              calories: 400,
+              protein: 40,
+              carbs: 30,
+              fat: 12,
+              readyInMinutes: 20,
+              extendedIngredients: [{ name: 'tofu', original: '8 oz tofu' }],
+              instructions: ['Cook']
+            };
+          });
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ recipes: recipes })
+          });
+        }
+        searchBodies.push(JSON.parse(opts.body));
+        var isDinner = String(JSON.parse(opts.body).query || '').indexOf('dinner') >= 0;
+        var ids = isDinner ? [201, 202, 203, 204, 205, 206] : [101, 102, 103, 104, 105, 106];
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({
+            results: ids.map(function (id) { return { id: id, recipeId: id }; })
+          })
+        });
+      }
+    });
+
+    await new Promise((resolve) => {
+      Lib.fetchSpoonacularWeekLibrary(
+        {
+          libraryTargets: { perCat: { Lunch: 2, Dinner: 2 }, total: 4, profile: 'standard', varietyMode: false },
+          mt: { perSlot: { cal: 500, p: 40 }, Lunch: { cal: 500, p: 40 }, Dinner: { cal: 500, p: 40 } },
+          restrictions: ['Vegan'],
+          dislikes: 'mushroom',
+          weekMode: { focus: 'quick', maxReadyTime: 25, preferProtein: true }
+        },
+        function (err, payload) {
+          resolve({ err, payload, searchBodies });
+        }
+      );
+    }).then(function (result) {
+      assert.equal(result.err, null);
+      assert.ok(result.searchBodies.length >= 1);
+      assert.ok(result.searchBodies.every(function (b) { return b.maxReadyTime === 25; }));
+      assert.ok(result.searchBodies.some(function (b) { return b.minProtein > 0; }));
+      assert.ok(result.payload.recipes.every(function (r) {
+        return r.ing.indexOf('tofu') >= 0;
+      }));
+    });
+  });
+
+  test('filters disliked ingredients and fetches compliant replacements', async () => {
+    var searchCall = 0;
+    const Lib = loadLib({
+      fetch: function (url, opts) {
+        const path = String(url);
+        if (path.indexOf('/bulk') >= 0) {
+          var body = JSON.parse(opts.body);
+          var recipes = (body.ids || []).map(function (id) {
+            if (Number(id) === 1) {
+              return {
+                id: 1,
+                title: 'Mushroom Soup',
+                calories: 400,
+                protein: 30,
+                carbs: 35,
+                fat: 12,
+                extendedIngredients: [{ name: 'mushroom', original: '2 cups mushroom' }],
+                instructions: ['Simmer']
+              };
+            }
+            return {
+              id: id,
+              title: 'Clean Bowl ' + id,
+              calories: 420,
+              protein: 32,
+              carbs: 36,
+              fat: 11,
+              extendedIngredients: [{ name: 'tofu', original: '8 oz tofu' }],
+              instructions: ['Cook']
+            };
+          });
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ recipes: recipes })
+          });
+        }
+        searchCall += 1;
+        var ids = searchCall === 1 ? [1, 2, 3, 4, 5, 6] : [7, 8, 9, 10, 11, 12];
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({
+            results: ids.map(function (id) { return { id: id, recipeId: id }; })
+          })
+        });
+      }
+    });
+
+    const result = await new Promise((resolve) => {
+      Lib.fetchSpoonacularWeekLibrary(
+        {
+          libraryTargets: { perCat: { Lunch: 3, Dinner: 3 }, total: 6, profile: 'standard', varietyMode: false },
+          mt: { perSlot: { cal: 500, p: 40 }, Lunch: { cal: 500, p: 40 }, Dinner: { cal: 500, p: 40 } },
+          restrictions: [],
+          dislikes: 'mushroom'
+        },
+        function (err, payload) {
+          resolve({ err, payload, searchCall });
+        }
+      );
+    });
+
+    assert.equal(result.err, null);
+    assert.ok(result.searchCall >= 1);
+    assert.ok(result.payload.recipes.every(function (r) {
+      return String(r.name).toLowerCase().indexOf('mushroom') < 0;
+    }));
   });
 
   test('requests bulk with includeNutrition true and selects overlap-optimized subset', async () => {
