@@ -235,7 +235,7 @@ function requestPublicOrigin(req) {
 }
 
 /** Authoritative browser UI — tests and docs reference Index1.html (not index.html). */
-const ARC_UI_HTML = path.join(ROOT, "Index.html");
+const ARC_UI_HTML = path.join(ROOT, "index.html");
 if (!existsSync(ARC_UI_HTML)) {
   console.error("[Arc] Missing UI entry:", ARC_UI_HTML);
 }
@@ -249,7 +249,7 @@ function sendArcUi(_req, res) {
 }
 
 app.get("/", sendArcUi);
-app.get("/Index.html", sendArcUi);
+app.get("/index.html", sendArcUi);
 app.get("/Index1.html", sendArcUi);
 
 /** Public client config — anon key only (RLS-protected), no service role. */
