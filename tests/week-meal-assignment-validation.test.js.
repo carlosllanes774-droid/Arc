@@ -9,7 +9,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const INDEX_HTML = path.join(__dirname, '..', 'Index1.html');
+const INDEX_HTML = path.join(__dirname, '..', 'Index.html');
 
 function sliceIndexLines(start, end) {
   const lines = readFileSync(INDEX_HTML, 'utf8').split('\n');
@@ -35,7 +35,7 @@ function loadSandbox(extraUp = {}) {
   };
   const ctx = vm.createContext(sandbox);
   const chunks = [
-    sliceIndexLines(2942, 3257)
+    sliceIndexLines(3167, 3482)
   ];
   for (const src of chunks) vm.runInContext(src, ctx);
   return sandbox;
