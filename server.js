@@ -235,7 +235,7 @@ function requestPublicOrigin(req) {
 }
 
 /** Authoritative browser UI — tests and docs reference Index1.html (not index.html). */
-const ARC_UI_HTML = path.join(ROOT, "Index1.html");
+const ARC_UI_HTML = path.join(ROOT, "Index.html");
 if (!existsSync(ARC_UI_HTML)) {
   console.error("[Arc] Missing UI entry:", ARC_UI_HTML);
 }
