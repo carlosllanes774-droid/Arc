@@ -249,7 +249,7 @@ function sendArcUi(_req, res) {
 }
 
 app.get("/", sendArcUi);
-app.get("/index.html", sendArcUi);
+app.get("/Index.html", sendArcUi);
 app.get("/Index1.html", sendArcUi);
 
 /** Public client config — anon key only (RLS-protected), no service role. */
