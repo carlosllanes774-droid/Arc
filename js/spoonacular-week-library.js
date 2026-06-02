@@ -79,6 +79,223 @@
     return undefined;
   }
 
+  var DIET_MEAT_TERMS = [
+    'chicken', 'beef', 'pork', 'lamb', 'turkey', 'bacon', 'ham', 'sausage', 'steak', 'veal',
+    'duck', 'prosciutto', 'salami', 'pepperoni', 'chorizo', 'ground beef', 'ground turkey', 'meatball'
+  ];
+  var DIET_FISH_TERMS = [
+    'fish', 'salmon', 'tuna', 'shrimp', 'cod', 'tilapia', 'anchovy', 'sardine', 'crab', 'lobster',
+    'scallop', 'shellfish', 'seafood', 'trout', 'mackerel', 'prawn', 'clam', 'oyster', 'squid', 'calamari'
+  ];
+  var DIET_DAIRY_TERMS = [
+    'milk', 'butter', 'cheese', 'cream', 'whey', 'casein', 'yogurt', 'yoghurt', 'ghee', 'parmesan',
+    'mozzarella', 'cheddar', 'cream cheese', 'sour cream', 'ricotta', 'feta', 'lactose', 'half-and-half'
+  ];
+  var DIET_EGG_TERMS = ['egg', 'eggs', 'albumin', 'mayonnaise', 'mayo', 'meringue'];
+  var DIET_ANIMAL_TERMS = ['honey', 'gelatin', 'lard', 'tallow', 'rennet'];
+  var DIET_GLUTEN_TERMS = [
+    'wheat', 'barley', 'rye', 'flour', 'bread', 'pasta', 'noodle', 'soy sauce', 'seitan', 'bulgur',
+    'couscous', 'semolina', 'gluten', 'breadcrumbs', 'crouton', 'spaghetti', 'macaroni', 'tortilla', 'pita'
+  ];
+  var DIET_NUT_TERMS = [
+    'peanut', 'almond', 'walnut', 'cashew', 'pistachio', 'hazelnut', 'pecan', 'macadamia', 'pine nut',
+    'pesto', 'praline', 'marzipan', 'nut butter', 'nut milk', 'nut oil'
+  ];
+  var DIET_HALAL_TERMS = [
+    'pork', 'bacon', 'ham', 'prosciutto', 'lard', 'wine', 'beer', 'rum', 'vodka', 'whiskey', 'brandy',
+    'sherry', 'liqueur', 'alcohol', 'mirin', 'cooking wine'
+  ];
+  var DIET_KETO_BAN_TERMS = [
+    'sugar', 'rice', 'bread', 'pasta', 'potato', 'corn syrup', 'honey', 'maple syrup', 'oat', 'quinoa',
+    'bean', 'lentil', 'chickpea', 'flour', 'tortilla', 'noodle', 'cornstarch', 'molasses'
+  ];
+  var DIET_PALEO_BAN_TERMS = [
+    'grain', 'rice', 'bread', 'pasta', 'bean', 'lentil', 'chickpea', 'peanut', 'soy', 'tofu', 'milk',
+    'cheese', 'yogurt', 'cream', 'sugar', 'corn syrup', 'quinoa', 'barley', 'wheat'
+  ];
+
+  /**
+   * @param {string} raw
+   * @returns {string[]}
+   */
+  function parseDislikes(raw) {
+    if (raw == null || raw === '') return [];
+    return String(raw)
+      .split(/[,;\n]+/)
+      .map(function (s) { return s.trim().toLowerCase(); })
+      .filter(function (s) { return s.length >= 2; });
+  }
+
+  function recipeSearchableText(recipe) {
+    var parts = [String(recipe.name || '')];
+    (recipe.ing || []).forEach(function (n) { parts.push(String(n || '')); });
+    return parts.join(' ').toLowerCase();
+  }
+
+  function textContainsTerm(text, term) {
+    if (!term) return false;
+    var t = String(term).trim().toLowerCase();
+    if (!t) return false;
+    if (text.indexOf(t) >= 0) return true;
+    if (t.indexOf(' ') >= 0) return text.indexOf(t) >= 0;
+    var re = new RegExp('\\b' + t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b');
+    return re.test(text);
+  }
+
+  /**
+   * @param {object} recipe
+   * @param {string[]} dislikeTerms
+   * @returns {string|null} matched term
+   */
+  function recipeMatchesDislike(recipe, dislikeTerms) {
+    if (!dislikeTerms || !dislikeTerms.length) return null;
+    var title = String(recipe.name || '').toLowerCase();
+    for (var i = 0; i < dislikeTerms.length; i++) {
+      var term = dislikeTerms[i];
+      if (textContainsTerm(title, term)) return term;
+    }
+    for (var j = 0; j < (recipe.ing || []).length; j++) {
+      var ing = String(recipe.ing[j] || '').toLowerCase();
+      for (var k = 0; k < dislikeTerms.length; k++) {
+        if (textContainsTerm(ing, dislikeTerms[k])) return dislikeTerms[k];
+      }
+    }
+    return null;
+  }
+
+  function restrictionFlags(restrictions) {
+    var flags = {};
+    if (!Array.isArray(restrictions)) return flags;
+    restrictions.forEach(function (r) {
+      var key = String(r || '').trim();
+      if (key && key !== 'None') flags[key] = true;
+    });
+    return flags;
+  }
+
+  function firstBannedTerm(blob, terms) {
+    for (var i = 0; i < terms.length; i++) {
+      if (textContainsTerm(blob, terms[i])) return terms[i];
+    }
+    return null;
+  }
+
+  /**
+   * @param {object} recipe
+   * @param {string[]} [restrictions]
+   * @returns {{ ok: boolean, violations: string[] }}
+   */
+  function validateRecipeDietCompliance(recipe, restrictions) {
+    var flags = restrictionFlags(restrictions);
+    var blob = recipeSearchableText(recipe);
+    var violations = [];
+    var hit;
+
+    if (flags.Vegan) {
+      hit = firstBannedTerm(blob, DIET_MEAT_TERMS.concat(DIET_FISH_TERMS, DIET_DAIRY_TERMS, DIET_EGG_TERMS, DIET_ANIMAL_TERMS));
+      if (hit) violations.push('vegan:' + hit);
+    } else if (flags.Vegetarian) {
+      hit = firstBannedTerm(blob, DIET_MEAT_TERMS.concat(DIET_FISH_TERMS));
+      if (hit) violations.push('vegetarian:' + hit);
+    }
+
+    if (flags['Gluten-free']) {
+      hit = firstBannedTerm(blob, DIET_GLUTEN_TERMS);
+      if (hit) violations.push('gluten_free:' + hit);
+    }
+
+    if (flags['Dairy-free'] && !flags.Vegan) {
+      hit = firstBannedTerm(blob, DIET_DAIRY_TERMS);
+      if (hit) violations.push('dairy_free:' + hit);
+    }
+
+    if (flags['Nut allergy']) {
+      hit = firstBannedTerm(blob, DIET_NUT_TERMS);
+      if (hit) violations.push('nut_free:' + hit);
+    }
+
+    if (flags.Halal) {
+      hit = firstBannedTerm(blob, DIET_HALAL_TERMS);
+      if (hit) violations.push('halal:' + hit);
+    }
+
+    if (flags.Keto) {
+      hit = firstBannedTerm(blob, DIET_KETO_BAN_TERMS);
+      if (hit) violations.push('keto:' + hit);
+    }
+
+    if (flags.Paleo) {
+      hit = firstBannedTerm(blob, DIET_PALEO_BAN_TERMS);
+      if (hit) violations.push('paleo:' + hit);
+    }
+
+    return { ok: violations.length === 0, violations: violations };
+  }
+
+  /**
+   * @param {object[]} recipes
+   * @param {string[]} [restrictions]
+   * @param {string[]} [dislikeTerms]
+   * @returns {{ compliant: object[], rejectedDislikes: object[], rejectedDiet: object[] }}
+   */
+  function filterCompliantCandidates(recipes, restrictions, dislikeTerms) {
+    var compliant = [];
+    var rejectedDislikes = [];
+    var rejectedDiet = [];
+
+    (recipes || []).forEach(function (r) {
+      var dislikeHit = recipeMatchesDislike(r, dislikeTerms);
+      if (dislikeHit) {
+        rejectedDislikes.push({
+          spoonacularId: r.spoonacularId,
+          name: r.name,
+          term: dislikeHit
+        });
+        return;
+      }
+      var diet = validateRecipeDietCompliance(r, restrictions);
+      if (!diet.ok) {
+        rejectedDiet.push({
+          spoonacularId: r.spoonacularId,
+          name: r.name,
+          violations: diet.violations
+        });
+        return;
+      }
+      compliant.push(r);
+    });
+
+    if (rejectedDislikes.length) {
+      console.log('[ARC DISLIKES FILTER]', {
+        rejected: rejectedDislikes.length,
+        kept: compliant.length,
+        samples: rejectedDislikes.slice(0, 5)
+      });
+    }
+
+    if (rejectedDiet.length) {
+      console.log('[ARC DIET VALIDATION]', {
+        rejected: rejectedDiet.length,
+        kept: compliant.length,
+        samples: rejectedDiet.slice(0, 5)
+      });
+    }
+
+    return { compliant: compliant, rejectedDislikes: rejectedDislikes, rejectedDiet: rejectedDiet };
+  }
+
+  function perCatSelectionShortfall(selected, perCat) {
+    var grouped = groupRecipesByCategory(selected);
+    var short = {};
+    Object.keys(perCat || {}).forEach(function (cat) {
+      var need = parseInt(perCat[cat], 10) || 0;
+      if (!(need > 0)) return;
+      var have = (grouped[cat] || []).length;
+      if (have < need) short[cat] = need - have;
+    });
+    return short;
+  }
+
   function safeRound(v) {
     var n = Number(v);
     return isFinite(n) ? Math.round(n) : 0;
@@ -360,8 +577,11 @@
     opts = opts || {};
     var preferOverlap = opts.preferOverlap !== false;
     var isBudget = !!opts.isBudget;
+    var varietyMode = !!opts.varietyMode;
+    var preferProtein = !!opts.preferProtein;
     var wOverlap = preferOverlap ? 6.0 : 2.0;
     var wSimplicity = isBudget ? 2.5 : 0.75;
+    var wProtein = preferProtein ? 4.0 : 0;
     var grouped = groupRecipesByCategory(recipes);
     var selected = [];
     var pickedIds = {};
@@ -384,7 +604,20 @@
           var overlap = avgOverlapWithSelected(candidate, selected.concat(catSelected));
           var ingCount = (candidate.ing || []).length;
           var simplicity = Math.max(0, 10 - ingCount) / 10;
-          var score = wOverlap * overlap + wSimplicity * simplicity;
+          var score;
+          if (varietyMode) {
+            score = wSimplicity * simplicity - 4.0 * overlap;
+          } else {
+            score = wOverlap * overlap + wSimplicity * simplicity;
+          }
+
+          if (preferProtein) {
+            var cal = Number(candidate.cal) || 0;
+            if (cal > 0) {
+              var proteinDensity = (Number(candidate.p) || 0) / cal;
+              score += wProtein * proteinDensity;
+            }
+          }
 
           if (score > bestScore || (score === bestScore && best && candidate.spoonacularId < best.spoonacularId)) {
             best = candidate;
@@ -414,9 +647,17 @@
     };
   }
 
-  function searchCandidatePoolSize(perCatCount) {
+  function searchCandidatePoolSize(perCatCount, built) {
     var base = Math.max(parseInt(perCatCount, 10) || 2, 2);
-    return Math.min(Math.max(base * 3, 6), 12);
+    var mult = 3;
+    if (built && built.libraryTargets && built.libraryTargets.varietyMode) mult = 4;
+    if (built && built.dislikes && String(built.dislikes).trim()) mult = Math.max(mult, 5);
+    if (built && Array.isArray(built.restrictions) && built.restrictions.filter(function (r) {
+      return r && r !== 'None';
+    }).length) {
+      mult = Math.max(mult, 5);
+    }
+    return Math.min(Math.max(base * mult, 8), 24);
   }
 
   function mergeCategoryMaps(groups) {
@@ -438,20 +679,36 @@
     return { ids: ids, categoryBySpoonacularId: categoryBySpoonacularId };
   }
 
-  function searchCategory(cat, count, built) {
+  function searchCategory(cat, count, built, searchOpts) {
+    searchOpts = searchOpts || {};
     var mt = built && built.mt ? built.mt : {};
     var perSlot = mt.perSlot || { cal: 600 };
+    var weekMode = built && built.weekMode ? built.weekMode : {};
     var diet = mapRestrictionsToSpoonacularDiet(built && built.restrictions);
-    var poolSize = searchCandidatePoolSize(count);
+    var poolSize = searchCandidatePoolSize(count, built);
+    if (searchOpts.poolBoost) poolSize = Math.min(poolSize + searchOpts.poolBoost, 24);
 
-    return postJson('/api/spoonacular/search', {
+    var body = {
       query: CATEGORY_QUERIES[cat] || String(cat).toLowerCase(),
       diet: diet,
       maxCalories: Math.round((Number(perSlot.cal) || 600) * 1.15),
       number: poolSize
-    }).then(function (res) {
+    };
+
+    if (weekMode.maxReadyTime) body.maxReadyTime = weekMode.maxReadyTime;
+    if (weekMode.preferProtein) {
+      var slotTarget = categoryTargetsFor(cat, mt);
+      var minP = Math.round((Number(slotTarget.p) || 30) * 0.85);
+      if (minP > 0) body.minProtein = minP;
+      if (cat === 'Breakfast' || cat === 'Lunch' || cat === 'Dinner') {
+        body.query = (CATEGORY_QUERIES[cat] || cat) + ' high protein';
+      }
+    }
+
+    return postJson('/api/spoonacular/search', body).then(function (res) {
       var categoryBySpoonacularId = {};
       var ids = [];
+      var exclude = searchOpts.excludeIds || {};
       if (!res.ok) {
         return { cat: cat, ids: ids, categoryBySpoonacularId: categoryBySpoonacularId, status: res.status };
       }
@@ -460,11 +717,115 @@
         var id = x.recipeId != null ? x.recipeId : x.id;
         if (id == null) return;
         var key = String(id);
+        if (exclude[key]) return;
         ids.push(id);
         categoryBySpoonacularId[key] = cat;
       });
       return { cat: cat, ids: ids, categoryBySpoonacularId: categoryBySpoonacularId };
     });
+  }
+
+  function mergeRecipesBySpoonacularId(existing, incoming) {
+    var byId = {};
+    (existing || []).forEach(function (r) {
+      if (r && r.spoonacularId != null) byId[String(r.spoonacularId)] = r;
+    });
+    (incoming || []).forEach(function (r) {
+      if (r && r.spoonacularId != null) byId[String(r.spoonacularId)] = r;
+    });
+    return Object.keys(byId).map(function (k) { return byId[k]; });
+  }
+
+  /**
+   * Search, bulk-map, filter, select — with top-up passes when compliance filters shrink the pool.
+   * @param {object} built
+   * @param {object} perCat
+   * @returns {Promise<{ selection: object, mappedCount: number, attempts: number }>}
+   */
+  function buildCompliantWeekLibrary(built, perCat) {
+    var restrictions = built.restrictions || [];
+    var dislikeTerms = parseDislikes(built.dislikes);
+    var targets = built.libraryTargets || {};
+    var selectionOpts = {
+      isBudget: targets.profile === 'budget',
+      preferOverlap: !targets.varietyMode,
+      varietyMode: !!targets.varietyMode,
+      preferProtein: !!(built.weekMode && built.weekMode.preferProtein)
+    };
+    var triedIds = {};
+    var compliantPool = [];
+    var attempts = 0;
+    var maxAttempts = 4;
+
+    function markTried(ids) {
+      (ids || []).forEach(function (id) {
+        if (id != null) triedIds[String(id)] = true;
+      });
+    }
+
+    function runPass(poolBoost) {
+      attempts += 1;
+      var catsToSearch = Object.keys(perCat);
+      if (poolBoost > 0) {
+        var short = perCatSelectionShortfall(
+          selectOverlapOptimizedLibrary(compliantPool, perCat, selectionOpts).recipes,
+          perCat
+        );
+        catsToSearch = Object.keys(short).length ? Object.keys(short) : catsToSearch;
+      }
+
+      return Promise.all(catsToSearch.map(function (cat) {
+        return searchCategory(cat, perCat[cat], built, {
+          excludeIds: triedIds,
+          poolBoost: poolBoost
+        });
+      })).then(function (groups) {
+        var merged = mergeCategoryMaps(groups);
+        markTried(merged.ids);
+        if (!merged.ids.length) {
+          return { selection: selectOverlapOptimizedLibrary(compliantPool, perCat, selectionOpts), mappedCount: compliantPool.length };
+        }
+        return postJson('/api/spoonacular/bulk', {
+          ids: merged.ids,
+          includeNutrition: true
+        }).then(function (bulkRes) {
+          if (!bulkRes.ok) {
+            throw new Error('Spoonacular bulk failed: ' + bulkRes.status);
+          }
+          var mapped = mapSpoonacularBulkToWeekLibrary(
+            bulkRes.json,
+            merged.categoryBySpoonacularId,
+            built.mt
+          );
+          var filtered = filterCompliantCandidates(mapped.recipes, restrictions, dislikeTerms);
+          compliantPool = mergeRecipesBySpoonacularId(compliantPool, filtered.compliant);
+          var selection = selectOverlapOptimizedLibrary(compliantPool, perCat, selectionOpts);
+          return { selection: selection, mappedCount: compliantPool.length };
+        });
+      });
+    }
+
+    function loop(poolBoost) {
+      return runPass(poolBoost).then(function (result) {
+        var short = perCatSelectionShortfall(result.selection.recipes, perCat);
+        var shortKeys = Object.keys(short);
+        if (!shortKeys.length && result.selection.recipes.length >= MIN_RECIPES) {
+          return { selection: result.selection, mappedCount: result.mappedCount, attempts: attempts };
+        }
+        if (attempts >= maxAttempts) {
+          return { selection: result.selection, mappedCount: result.mappedCount, attempts: attempts };
+        }
+        console.log('[ARC DISLIKES FILTER]', {
+          action: 'fetch_replacements',
+          attempt: attempts,
+          shortfall: short,
+          poolSize: result.mappedCount
+        });
+        return loop((poolBoost || 0) + 4);
+      });
+    }
+
+    return loop(0);
   }
 
   /**
@@ -489,63 +850,59 @@
       return;
     }
 
-    Promise.all(categories.map(function (cat) {
-      return searchCategory(cat, perCat[cat], built);
-    }))
-      .then(function (groups) {
-        var merged = mergeCategoryMaps(groups);
-        if (!merged.ids.length) {
-          throw new Error('Spoonacular search returned no recipe ids');
-        }
-        return postJson('/api/spoonacular/bulk', {
-          ids: merged.ids,
-          includeNutrition: true
-        }).then(function (bulkRes) {
-          if (!bulkRes.ok) {
-            throw new Error('Spoonacular bulk failed: ' + bulkRes.status);
-          }
-          var mapped = mapSpoonacularBulkToWeekLibrary(
-            bulkRes.json,
-            merged.categoryBySpoonacularId,
-            built.mt
-          );
-          var targets = built.libraryTargets || {};
-          var selectionOpts = {
+    buildCompliantWeekLibrary(built, perCat)
+      .then(function (result) {
+        var selection = result.selection;
+        var targets = built.libraryTargets || {};
+        var restrictions = built.restrictions || [];
+        var dislikeTerms = parseDislikes(built.dislikes);
+
+        var finalFiltered = filterCompliantCandidates(selection.recipes, restrictions, dislikeTerms);
+        if (finalFiltered.rejectedDislikes.length || finalFiltered.rejectedDiet.length) {
+          selection = selectOverlapOptimizedLibrary(finalFiltered.compliant, perCat, {
             isBudget: targets.profile === 'budget',
-            preferOverlap: !targets.varietyMode
-          };
-          var preOverlap = computeLibraryOverlapSummary(mapped.recipes);
-          var preUnique = uniqueIngredientCount(mapped.recipes);
-          var selection = selectOverlapOptimizedLibrary(mapped.recipes, perCat, selectionOpts);
-          console.log('[ARC SPOONACULAR] library overlap selection', {
-            profile: targets.profile || 'standard',
-            budgetProfile: targets.budgetProfile || null,
-            candidateCount: mapped.recipes.length,
-            selectedCount: selection.recipes.length,
+            preferOverlap: !targets.varietyMode,
+            varietyMode: !!targets.varietyMode,
+            preferProtein: !!(built.weekMode && built.weekMode.preferProtein)
+          });
+        } else {
+          selection.recipes = finalFiltered.compliant;
+        }
+
+        var preOverlap = computeLibraryOverlapSummary(selection.recipes);
+        var preUnique = uniqueIngredientCount(selection.recipes);
+        console.log('[ARC SPOONACULAR] library overlap selection', {
+          profile: targets.profile || 'standard',
+          budgetProfile: targets.budgetProfile || null,
+          varietyMode: !!targets.varietyMode,
+          preferProtein: !!(built.weekMode && built.weekMode.preferProtein),
+          maxReadyTime: built.weekMode && built.weekMode.maxReadyTime,
+          candidateCount: result.mappedCount,
+          selectedCount: selection.recipes.length,
+          uniqueIngredients: preUnique,
+          overlap: preOverlap.weekAverage,
+          complianceAttempts: result.attempts
+        });
+
+        var validation = validateSpoonacularWeekLibrary(selection.recipes);
+        if (!validation.ok) {
+          callback({
+            type: 'validation_failed',
+            validation: validation
+          }, null, { source: 'spoonacular', validationErrors: validation.errors });
+          return;
+        }
+        callback(null, { recipes: selection.recipes }, {
+          source: 'spoonacular',
+          librarySelection: {
+            candidateCount: result.mappedCount,
             uniqueIngredientsBefore: preUnique,
-            uniqueIngredientsAfter: selection.uniqueIngredients,
+            uniqueIngredientsAfter: preUnique,
             overlapBefore: preOverlap.weekAverage,
-            overlapAfter: selection.overlap.weekAverage
-          });
-          var validation = validateSpoonacularWeekLibrary(selection.recipes);
-          if (!validation.ok) {
-            callback({
-              type: 'validation_failed',
-              validation: validation
-            }, null, { source: 'spoonacular', validationErrors: validation.errors });
-            return;
+            overlapAfter: selection.overlap.weekAverage,
+            profile: targets.profile || 'standard',
+            complianceAttempts: result.attempts
           }
-          callback(null, { recipes: selection.recipes }, {
-            source: 'spoonacular',
-            librarySelection: {
-              candidateCount: mapped.recipes.length,
-              uniqueIngredientsBefore: preUnique,
-              uniqueIngredientsAfter: selection.uniqueIngredients,
-              overlapBefore: preOverlap.weekAverage,
-              overlapAfter: selection.overlap.weekAverage,
-              profile: targets.profile || 'standard'
-            }
-          });
         });
       })
       .catch(function (err) {
@@ -567,6 +924,10 @@
     macrosFromSpoonacularBulkItem: macrosFromSpoonacularBulkItem,
     validateSpoonacularWeekLibrary: validateSpoonacularWeekLibrary,
     mapRestrictionsToSpoonacularDiet: mapRestrictionsToSpoonacularDiet,
+    parseDislikes: parseDislikes,
+    recipeMatchesDislike: recipeMatchesDislike,
+    validateRecipeDietCompliance: validateRecipeDietCompliance,
+    filterCompliantCandidates: filterCompliantCandidates,
     fetchSpoonacularWeekLibrary: fetchSpoonacularWeekLibrary
   };
 })(typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : this);
