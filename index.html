@@ -158,6 +158,7 @@ body{
 .arc-mark--auth{width:26px;height:26px;opacity:.94}
 .arc-mark--ob{width:26px;height:26px;opacity:.94}
 .arc-mark--gen{width:48px;height:48px;opacity:.98}
+.arc-mark--splash{width:52px;height:52px;opacity:.96}
 .arc-mark--hdr{width:20px;height:20px;opacity:.88}
 .arc-mark--account{width:40px;height:40px;opacity:.92}
 .arc-mark--breathe{animation:arcMarkBreathe 5.5s ease-in-out infinite}
@@ -193,20 +194,23 @@ body{
 .splash-brand{
   position:absolute;z-index:5;left:50%;top:50%;
   transform:translate(-50%,-50%);
-  display:flex;flex-direction:column;align-items:center;
+  display:flex;flex-direction:column;align-items:center;gap:12px;
   text-align:center;pointer-events:none;
   opacity:0;
   transition:opacity 1.15s var(--splash-ease),transform 820ms var(--splash-ease-out);
 }
 #splash-screen.is-loaded .splash-brand{opacity:1}
 #splash-screen.is-exiting .splash-brand{transform:translate(-50%,calc(-50% - 4px))}
-.splash-logo{
-  width:min(42vw,120px);height:auto;display:block;
-  mix-blend-mode:screen;
-  filter:drop-shadow(0 8px 28px rgba(0,0,0,.5));
+.splash-brand .arc-mark--splash{
+  filter:drop-shadow(0 6px 24px rgba(0,0,0,.45));
+}
+.splash-wordmark{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  font-size:22px;font-weight:650;letter-spacing:-.4px;
+  color:#fff;line-height:1;
 }
 .splash-tagline{
-  margin-top:14px;
+  margin:0;
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
   font-size:12px;font-weight:500;letter-spacing:.06em;
   color:rgba(255,255,255,.75);line-height:1.4;
@@ -1821,7 +1825,8 @@ button:not(:disabled):active,
   </div>
   <div class="splash-vignette" aria-hidden="true"></div>
   <div class="splash-brand" aria-hidden="true">
-    <img class="splash-logo" src="assets/branding/Arc_Logo.png" alt="" width="512" height="512" decoding="async"/>
+    <span class="arc-mark arc-mark--splash arc-mark--on-dark" aria-hidden="true"></span>
+    <span class="splash-wordmark">Arc</span>
     <p class="splash-tagline">Nutrition, structured.</p>
   </div>
 </div>
