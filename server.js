@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import OpenAI from "openai";
-import { readFileSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import vm from "node:vm";
@@ -234,12 +234,23 @@ function requestPublicOrigin(req) {
   return `${proto}://${host}`;
 }
 
+/** Authoritative browser UI — tests and docs reference Index1.html (not index.html). */
+const ARC_UI_HTML = path.join(ROOT, "Index1.html");
+if (!existsSync(ARC_UI_HTML)) {
+  console.error("[Arc] Missing UI entry:", ARC_UI_HTML);
+}
+
 /** Scoped static assets only — never serve repo root or node_modules. */
 app.use("/js", express.static(path.join(ROOT, "js"), { index: false, dotfiles: "deny" }));
+app.use("/assets", express.static(path.join(ROOT, "assets"), { index: false, dotfiles: "deny" }));
 
-app.get("/", (req, res) => {
-  res.sendFile(path.join(ROOT, "index.html"));
-});
+function sendArcUi(_req, res) {
+  res.sendFile(ARC_UI_HTML);
+}
+
+app.get("/", sendArcUi);
+app.get("/index.html", sendArcUi);
+app.get("/Index1.html", sendArcUi);
 
 /** Public client config — anon key only (RLS-protected), no service role. */
 app.get("/api/config/public", (req, res) => {
