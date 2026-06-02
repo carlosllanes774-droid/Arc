@@ -9,7 +9,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const INDEX_HTML = path.join(__dirname, '..', 'Index.html');
+const INDEX_HTML = path.join(__dirname, '..', 'index.html');
 
 function sliceIndexLines(start, end) {
   const lines = readFileSync(INDEX_HTML, 'utf8').split('\n');
