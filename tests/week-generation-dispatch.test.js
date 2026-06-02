@@ -1,5 +1,5 @@
 /**
- * callAI week-generation vs enhancement classification (mirrors Index1.html callAI).
+ * callAI week-generation vs enhancement classification (mirrors Index.html callAI).
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
