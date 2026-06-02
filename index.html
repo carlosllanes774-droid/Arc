@@ -1687,10 +1687,20 @@ button:not(:disabled):active,
 
 #s-today .today-flow > .prepday-banner,
 #s-today .today-flow > .today-hero,
+#s-today .today-flow > .today-no-plan,
 #s-today .today-flow > .today-more-details,
 #s-today .today-flow > .today-foot{
   animation:contentFadeUp var(--motion-fast) var(--ease-out) both;
 }
+.today-no-plan{padding:var(--sp-1) 0 var(--sp-4)}
+.today-no-plan-progress{margin-bottom:var(--sp-3)}
+.today-no-plan-card{border-radius:var(--r-xl);padding:var(--sp-3) var(--sp-page-x);background:var(--arc-card);border:1px solid var(--arc-border);text-align:left}
+.today-no-plan-h{margin:0 0 10px;font-family:Georgia,serif;font-size:var(--fs-display);font-weight:700;color:var(--arc-text);line-height:var(--lh-tight);letter-spacing:-.03em}
+.today-no-plan-s{margin:0 0 var(--sp-3);font-size:15px;line-height:1.55;color:var(--arc-subtext);font-weight:500;max-width:32em}
+.today-no-plan-cta{margin-top:4px}
+#s-today.today--no-plan .today-hero,
+#s-today.today--no-plan .today-more-details{display:none!important}
+#s-today.today--no-plan .prepday-banner{display:none!important}
 
 @media (prefers-reduced-motion:no-preference){
   .screen.active .content > *:not(.today-timeline):not(.today-tl-list),
@@ -2131,6 +2141,27 @@ button:not(:disabled):active,
         <div class="prepday-banner-s" id="prepday-banner-s">Cook your meal-prep batches today so the rest of the week runs itself.</div>
       </div>
     </div>
+    <section class="today-no-plan" id="today-no-plan" style="display:none" aria-label="Get started with your meal plan">
+      <div class="today-no-plan-progress">
+        <div class="today-progress-row">
+          <div class="today-ring-wrap" aria-hidden="true">
+            <svg class="today-ring-svg" viewBox="0 0 100 100" aria-hidden="true">
+              <circle class="today-ring-track" cx="50" cy="50" r="41"/>
+              <circle class="today-ring-bar" id="today-empty-ring-bar" cx="50" cy="50" r="41" stroke-dasharray="258" stroke-dashoffset="258"/>
+            </svg>
+          </div>
+          <div class="today-progress-stats">
+            <p class="today-kcal-line" id="today-empty-kcal">Your day’s rhythm</p>
+            <p class="today-protein-line" id="today-empty-protein">Protein pace</p>
+          </div>
+        </div>
+      </div>
+      <div class="today-no-plan-card">
+        <h2 class="today-no-plan-h" id="today-no-plan-h">No meal plan yet.</h2>
+        <p class="today-no-plan-s" id="today-no-plan-s">Let’s build one around your goals, budget, schedule, and food preferences.</p>
+        <button type="button" class="btn-green today-no-plan-cta" id="today-personalize-btn">Personalize My Meal Plan</button>
+      </div>
+    </section>
     <section class="today-hero">
       <div class="today-hero-card">
         <p class="today-focus-eyebrow" id="today-focus-eyebrow">Today</p>
@@ -2369,37 +2400,22 @@ button:not(:disabled):active,
         <span class="bw-dot active" data-step="1"></span>
         <span class="bw-dot" data-step="2"></span>
         <span class="bw-dot" data-step="3"></span>
-        <span class="bw-dot" data-step="4"></span>
       </div>
       <button class="bw-close" id="bw-close" type="button" aria-label="Close">✕</button>
     </div>
 
-    <!-- STEP 1: Cooking style -->
+    <!-- STEP 1: Week vibe -->
     <div class="bw-step active" id="bw-step-1" data-step="1">
-      <div class="bw-h" id="bw-h-1">How do you want to cook this week?</div>
-      <div class="bw-s">Pick the rhythm that fits your life. We'll shape the week around it — fewer cooks for prep weeks, more variety for fresh.</div>
-      <div class="bw-options" id="bw-style-opts">
-        <button class="bw-opt" type="button" data-style="fresh"><span class="bw-opt-ic">🥗</span><span class="bw-opt-body"><span class="bw-opt-h">Fresh meals daily</span><span class="bw-opt-s">A different meal in each slot — most variety, most cooking.</span></span></button>
-        <button class="bw-opt" type="button" data-style="prep"><span class="bw-opt-ic">🍱</span><span class="bw-opt-body"><span class="bw-opt-h">Meal prep</span><span class="bw-opt-s">Cook 3–5 dishes once, repeat across the week. Smallest grocery run.</span></span></button>
-        <button class="bw-opt" type="button" data-style="balanced"><span class="bw-opt-ic">⚖️</span><span class="bw-opt-body"><span class="bw-opt-h">Balanced</span><span class="bw-opt-s">Mostly fresh plates with a few intentional repeats—lighter cooking load without full prep mode.</span></span></button>
-        <button class="bw-opt" type="button" data-style="family"><span class="bw-opt-ic">🍲</span><span class="bw-opt-body"><span class="bw-opt-h">Family-style</span><span class="bw-opt-s">Bigger dinners that feed everyone, plus simple breakfasts and lunches.</span></span></button>
+      <div class="bw-h" id="bw-h-1">Which sounds most like you this week?</div>
+      <div class="bw-options" id="bw-vibe-opts">
+        <button class="bw-opt" type="button" data-week-vibe="noTime"><span class="bw-opt-ic">⏱️</span><span class="bw-opt-body"><span class="bw-opt-h">I don't have time to cook</span><span class="bw-opt-s">Fast recipes, simple prep, minimal cleanup.</span></span></button>
+        <button class="bw-opt" type="button" data-week-vibe="bestResults"><span class="bw-opt-ic">💪</span><span class="bw-opt-body"><span class="bw-opt-h">I want the best results</span><span class="bw-opt-s">Nutrition-focused meals optimized for adherence and performance.</span></span></button>
+        <button class="bw-opt" type="button" data-week-vibe="variety"><span class="bw-opt-ic">🌎</span><span class="bw-opt-body"><span class="bw-opt-h">I want more variety</span><span class="bw-opt-s">More cuisines, more unique meals, more exploration.</span></span></button>
       </div>
     </div>
 
-    <!-- STEP 2: Weekly focus -->
+    <!-- STEP 2: Weekly budget -->
     <div class="bw-step" id="bw-step-2" data-step="2">
-      <div class="bw-h">What should this week prioritize?</div>
-      <div class="bw-s">One focus per week works best. You can shift gears next week.</div>
-      <div class="bw-options" id="bw-focus-opts">
-        <button class="bw-opt" type="button" data-focus="balanced"><span class="bw-opt-ic">⚖️</span><span class="bw-opt-body"><span class="bw-opt-h">Balanced</span><span class="bw-opt-s">Varied meals and even energy—the default Arc rhythm.</span></span></button>
-        <button class="bw-opt" type="button" data-focus="highProtein"><span class="bw-opt-ic">🥚</span><span class="bw-opt-body"><span class="bw-opt-h">Protein-forward</span><span class="bw-opt-s">Satisfying mains and steady protein across the day.</span></span></button>
-        <button class="bw-opt" type="button" data-focus="quick"><span class="bw-opt-ic">⏱️</span><span class="bw-opt-body"><span class="bw-opt-h">Quick meals</span><span class="bw-opt-s">Most meals under 25 minutes. Fewer steps, fewer pans.</span></span></button>
-        <button class="bw-opt" type="button" data-focus="budget"><span class="bw-opt-ic">💸</span><span class="bw-opt-body"><span class="bw-opt-h">Budget</span><span class="bw-opt-s">Cheaper proteins, pantry repeats, low waste.</span></span></button>
-      </div>
-    </div>
-
-    <!-- STEP 3: Weekly budget -->
-    <div class="bw-step" id="bw-step-3" data-step="3">
       <div class="bw-subhead">
         <div class="bw-h">What budget vibe fits this week?</div>
         <button class="bw-help-btn" id="bw-budget-help-btn" type="button" aria-label="Budget help">i</button>
@@ -2416,8 +2432,8 @@ button:not(:disabled):active,
       </div>
     </div>
 
-    <!-- STEP 4: Cuisines -->
-    <div class="bw-step" id="bw-step-4" data-step="4">
+    <!-- STEP 3: Cuisines -->
+    <div class="bw-step" id="bw-step-3" data-step="3">
       <div class="bw-h">Any flavors you're craving?</div>
       <div class="bw-s">Pick up to 3, or skip and let Arc surprise you.</div>
       <div class="bw-chips" id="bw-cuisine-chips">
@@ -3780,7 +3796,10 @@ var ARC_COPY = {
     prepSunH: 'Sunday prep can lighten the week',
     prepSunS: 'If it helps, cook your prep batches today so the week feels easier.',
     prepH: 'Today is a good prep day',
-    prepS: 'Cook your meal-prep batches today so the rest of the week can run itself.'
+    prepS: 'Cook your meal-prep batches today so the rest of the week can run itself.',
+    noPlanH: 'No meal plan yet.',
+    noPlanS: 'Let\u2019s build one around your goals, budget, schedule, and food preferences.',
+    noPlanCta: 'Personalize My Meal Plan'
   },
   empty: {
     planH: 'Shape your week',
@@ -4872,29 +4891,33 @@ function arcExitAuthCardAnimated(doneFn) {
   });
 }
 
-function arcFinishAuthSuccessNavigation(pendingGen) {
-  try {
-    sessionStorage.removeItem('arc_pending_ob');
-  } catch (e5) {}
+function arcNavigateToTodayHome() {
+  showScreen('s-today');
+  tab('today');
+  syncCatTabsUI();
+  setupLibraryTabs();
+  renderLibrary();
+  renderPlanner();
+  renderNutrition();
+  renderShopping();
+  renderToday();
+  updatePlannerBar();
+}
+
+function arcEnterAppAfterOnboarding() {
   applySafeProfileDefaults(UP);
   arcBehaviorRecomputeScores(UP);
   syncBehaviorToArcAdaptive(UP);
   applyProfileToUIBar();
   ensureWeeklyPlanShape();
-  if (pendingGen) {
-    runArcPostOnboardingGenerationFlow();
-  } else {
-    showScreen('s-today');
-    tab('today');
-    syncCatTabsUI();
-    setupLibraryTabs();
-    renderLibrary();
-    renderPlanner();
-    renderNutrition();
-    renderShopping();
-    renderToday();
-    updatePlannerBar();
-  }
+  arcNavigateToTodayHome();
+}
+
+function arcFinishAuthSuccessNavigation(pendingGen) {
+  try {
+    sessionStorage.removeItem('arc_pending_ob');
+  } catch (e5) {}
+  arcEnterAppAfterOnboarding();
 }
 
 function arcHandleAuthVerifiedSession(session) {
@@ -5007,7 +5030,7 @@ function transitionObToAuth() {
   var ob = el('ob');
   var auth = el('s-auth');
   if (!ob || !auth) {
-    runArcPostOnboardingGenerationFlow();
+    arcEnterAppAfterOnboarding();
     return;
   }
   try {
@@ -5037,24 +5060,6 @@ function transitionObToAuth() {
     arcClearAuthMsg();
     arcAuthUpdateFieldHints();
   }, 480);
-}
-
-function runArcPostOnboardingGenerationFlow() {
-  arcGenUsesPostOnboardingCopy = true;
-  applyArcBrandingToStaticDom();
-  showScreen('s-gen');
-  resetGenLoadingUI();
-  setGenPhase('profile');
-  setTimeout(function() {
-    completeGenLoadingUI();
-    setTimeout(function() {
-      tab('plan');
-      stopGenLoadingUI();
-      openBuildWeek('first');
-      arcGenUsesPostOnboardingCopy = false;
-      applyArcBrandingToStaticDom();
-    }, 260);
-  }, 900);
 }
 
 function arcAuthSetGoogleBusy(isBusy) {
@@ -7548,10 +7553,14 @@ function renderProfileTab() {
   applySafeProfileDefaults(UP);
   var cookEl = el('profile-cooking-line');
   if (cookEl) {
-    if (UP.weeklyPlan && UP.weeklyPlan.builtAt && UP.weeklyPlan.style) {
-      var sm = BW_STYLE_META[UP.weeklyPlan.style] || BW_STYLE_META.fresh;
-      var fm = BW_FOCUS_META[UP.weeklyPlan.focus] || BW_FOCUS_META.balanced;
-      cookEl.textContent = sm.label + ' · ' + fm.label;
+    if (UP.weeklyPlan && UP.weeklyPlan.builtAt && (UP.weeklyPlan.weekVibe || UP.weeklyPlan.style)) {
+      if (UP.weeklyPlan.weekVibe && BW_WEEK_VIBE_META[UP.weeklyPlan.weekVibe]) {
+        cookEl.textContent = BW_WEEK_VIBE_META[UP.weeklyPlan.weekVibe].label;
+      } else {
+        var sm = BW_STYLE_META[UP.weeklyPlan.style] || BW_STYLE_META.fresh;
+        var fm = BW_FOCUS_META[UP.weeklyPlan.focus] || BW_FOCUS_META.balanced;
+        cookEl.textContent = sm.label + ' · ' + fm.label;
+      }
     } else {
       cookEl.textContent = ARC_COPY.profile.buildWeekCook;
     }
@@ -8920,7 +8929,61 @@ function renderPrepDayBanner() {
     ' feel easier—' + (today === 'Sun' ? 'a gentle start to the week.' : 'the rest of the week can breathe.'));
 }
 
+function arcFmtTodayCalTarget(calTarget) {
+  var t = calTarget || 0;
+  return t ? '~' + Math.round(t).toLocaleString(undefined) + ' kcal daily target' : ARC_COPY.today.kcalPlaceholder;
+}
+
+function arcFmtTodayProteinTarget(proteinTarget) {
+  var t = proteinTarget || 0;
+  return t ? '~' + Math.round(t).toLocaleString(undefined) + 'g protein daily target' : ARC_COPY.today.proteinPlaceholder;
+}
+
+function renderTodayNoPlanEmptyState() {
+  var d = new Date();
+  var day = todayKey();
+  var slots = getSlots();
+  var eff = getEffectiveDailyTargets(day, slots);
+  var calTarget = eff.calTarget;
+  var macros = eff.macros;
+  var protTgt = macros.protein || 0;
+  var copy = ARC_COPY.today || {};
+
+  if (el('today-date')) {
+    el('today-date').textContent = d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+  }
+  var hEl = el('today-no-plan-h');
+  var sEl = el('today-no-plan-s');
+  var ctaEl = el('today-personalize-btn');
+  if (hEl) hEl.textContent = copy.noPlanH || 'No meal plan yet.';
+  if (sEl) sEl.textContent = copy.noPlanS || '';
+  if (ctaEl) ctaEl.textContent = copy.noPlanCta || 'Personalize My Meal Plan';
+
+  var kEl = el('today-empty-kcal');
+  var pEl = el('today-empty-protein');
+  if (kEl) kEl.textContent = arcFmtTodayCalTarget(calTarget);
+  if (pEl) pEl.textContent = arcFmtTodayProteinTarget(protTgt);
+
+  var ring = el('today-empty-ring-bar');
+  if (ring) {
+    var rad = 41;
+    var circumference = 2 * Math.PI * rad;
+    ring.style.strokeDasharray = String(circumference);
+    ring.style.strokeDashoffset = String(circumference);
+  }
+}
+
 function renderToday() {
+  var todayScreen = el('s-today');
+  var noPlan = !hasBuiltWeek();
+  if (todayScreen) todayScreen.classList.toggle('today--no-plan', noPlan);
+  var noPlanEl = el('today-no-plan');
+  if (noPlanEl) noPlanEl.style.display = noPlan ? '' : 'none';
+  if (noPlan) {
+    renderTodayNoPlanEmptyState();
+    return;
+  }
+
   renderPrepDayBanner();
   if (!el('today-slot')) return;
   var d = new Date();
@@ -10209,7 +10272,7 @@ function finishOB() {
     transitionObToAuth();
     return;
   }
-  runArcPostOnboardingGenerationFlow();
+  arcEnterAppAfterOnboarding();
 }
 
 // ── Generating screen: ambient ring + phased copy (tied to real milestones) ──
@@ -10625,10 +10688,46 @@ var BW_FOCUS_META = {
   budget:      { ic: '💸', label: 'Budget',       directive: 'Target $3-7 per serving. Lean on eggs, beans, oats, frozen produce, ground meats and pantry staples. Repeat ingredients across recipes to minimize the shopping list.' }
 };
 
+/** Build My Week screen 1 — maps to legacy style/focus for generation. */
+var BW_WEEK_VIBE_META = {
+  noTime: {
+    ic: '⏱️',
+    label: 'No time to cook',
+    style: 'balanced',
+    focus: 'quick'
+  },
+  bestResults: {
+    ic: '💪',
+    label: 'Best results',
+    style: 'balanced',
+    focus: 'highProtein'
+  },
+  variety: {
+    ic: '🌎',
+    label: 'More variety',
+    style: 'fresh',
+    focus: 'balanced'
+  }
+};
+
+function bwStyleFocusFromWeekVibe(vibe) {
+  var m = BW_WEEK_VIBE_META[vibe];
+  if (!m) return { style: 'balanced', focus: 'balanced' };
+  return { style: m.style, focus: m.focus };
+}
+
+function bwWeekVibeFromLegacyPlan(style, focus) {
+  if (focus === 'quick') return 'noTime';
+  if (focus === 'highProtein') return 'bestResults';
+  if (style === 'fresh') return 'variety';
+  if (style === 'prep') return 'noTime';
+  if (focus === 'budget') return 'noTime';
+  return 'bestResults';
+}
+
 var bwState = {
   step: 1,
-  style: null,
-  focus: null,
+  weekVibe: null,
   weeklyBudget: 'Moderate',
   cuisines: [],
   mode: 'first',   // 'first' (post-onboarding) | 'rebuild'
@@ -10645,7 +10744,7 @@ function hasBuiltWeek() {
 }
 
 function bwSetStep(n) {
-  if (n < 1 || n > 4) return;
+  if (n < 1 || n > 3) return;
   bwState.step = n;
   var steps = document.querySelectorAll('#bw-modal .bw-step');
   for (var i = 0; i < steps.length; i++) {
@@ -10656,31 +10755,24 @@ function bwSetStep(n) {
     dots[j].classList.toggle('active', dots[j].getAttribute('data-step') === String(n));
   }
   el('bw-back').style.visibility = n === 1 ? 'hidden' : 'visible';
-  el('bw-skip').style.display    = n === 4 ? 'inline-flex' : 'none';
-  el('bw-next').textContent      = n === 4 ? 'Build my week ✦' : 'Continue →';
+  el('bw-skip').style.display    = n === 3 ? 'inline-flex' : 'none';
+  el('bw-next').textContent      = n === 3 ? 'Build my week ✦' : 'Continue →';
   bwUpdateNext();
 }
 
 function bwUpdateNext() {
   var ok = false;
-  if (bwState.step === 1) ok = !!bwState.style;
-  else if (bwState.step === 2) ok = !!bwState.focus;
-  else if (bwState.step === 3) ok = !!bwState.weeklyBudget;
-  else if (bwState.step === 4) ok = true; // cuisines are optional
+  if (bwState.step === 1) ok = !!bwState.weekVibe;
+  else if (bwState.step === 2) ok = !!bwState.weeklyBudget;
+  else if (bwState.step === 3) ok = true; // cuisines are optional
   el('bw-next').disabled = !ok;
 }
 
-function bwSelectStyle(value) {
-  bwState.style = value;
-  var opts = document.querySelectorAll('#bw-style-opts .bw-opt');
-  for (var i = 0; i < opts.length; i++) opts[i].classList.toggle('active', opts[i].dataset.style === value);
-  bwUpdateNext();
-}
-
-function bwSelectFocus(value) {
-  bwState.focus = value;
-  var opts = document.querySelectorAll('#bw-focus-opts .bw-opt');
-  for (var i = 0; i < opts.length; i++) opts[i].classList.toggle('active', opts[i].dataset.focus === value);
+function bwSelectWeekVibe(value) {
+  if (!BW_WEEK_VIBE_META[value]) return;
+  bwState.weekVibe = value;
+  var opts = document.querySelectorAll('#bw-vibe-opts .bw-opt');
+  for (var i = 0; i < opts.length; i++) opts[i].classList.toggle('active', opts[i].dataset.weekVibe === value);
   bwUpdateNext();
 }
 
@@ -10706,8 +10798,7 @@ function bwToggleCuisine(value) {
 function bwReset(mode) {
   bwState.step = 1;
   bwState.mode = mode || 'first';
-  bwState.style = null;
-  bwState.focus = null;
+  bwState.weekVibe = null;
   bwState.weeklyBudget = normalizeBudgetValue(UP.weeklyBudget || UP.budget);
   // Pre-seed cuisines from prior weekly plan (or legacy onboarding value) so users don't repick from scratch.
   var seed = (UP.weeklyPlan && Array.isArray(UP.weeklyPlan.cuisines) && UP.weeklyPlan.cuisines.length)
@@ -10715,19 +10806,18 @@ function bwReset(mode) {
     : (Array.isArray(UP.cuisines) ? UP.cuisines.slice(0, 3) : []);
   bwState.cuisines = seed.slice(0, 3);
 
-  // Pre-seed style/focus from prior plan when rebuilding.
   if (mode === 'rebuild' && UP.weeklyPlan) {
-    if (UP.weeklyPlan.style) bwState.style = UP.weeklyPlan.style;
-    if (UP.weeklyPlan.focus) bwState.focus = UP.weeklyPlan.focus;
+    if (UP.weeklyPlan.weekVibe && BW_WEEK_VIBE_META[UP.weeklyPlan.weekVibe]) {
+      bwState.weekVibe = UP.weeklyPlan.weekVibe;
+    } else if (UP.weeklyPlan.style || UP.weeklyPlan.focus) {
+      var legacyStyle = UP.weeklyPlan.style === 'mixed' ? 'balanced' : UP.weeklyPlan.style;
+      bwState.weekVibe = bwWeekVibeFromLegacyPlan(legacyStyle, UP.weeklyPlan.focus);
+    }
     if (UP.weeklyPlan.weeklyBudget) bwState.weeklyBudget = normalizeBudgetValue(UP.weeklyPlan.weeklyBudget);
   }
-  if (bwState.style === 'mixed') bwState.style = 'balanced';
 
-  document.querySelectorAll('#bw-style-opts .bw-opt').forEach(function(o) {
-    o.classList.toggle('active', bwState.style && o.dataset.style === bwState.style);
-  });
-  document.querySelectorAll('#bw-focus-opts .bw-opt').forEach(function(o) {
-    o.classList.toggle('active', bwState.focus && o.dataset.focus === bwState.focus);
+  document.querySelectorAll('#bw-vibe-opts .bw-opt').forEach(function(o) {
+    o.classList.toggle('active', bwState.weekVibe && o.dataset.weekVibe === bwState.weekVibe);
   });
   document.querySelectorAll('#bw-budget-opts .bw-opt').forEach(function(o) {
     o.classList.toggle('active', o.dataset.budget === bwState.weeklyBudget);
@@ -10745,11 +10835,8 @@ function bwReset(mode) {
 
 function bwBind() {
   if (bwState.bound) return;
-  document.querySelectorAll('#bw-style-opts .bw-opt').forEach(function(o) {
-    o.addEventListener('click', function() { bwSelectStyle(this.dataset.style); });
-  });
-  document.querySelectorAll('#bw-focus-opts .bw-opt').forEach(function(o) {
-    o.addEventListener('click', function() { bwSelectFocus(this.dataset.focus); });
+  document.querySelectorAll('#bw-vibe-opts .bw-opt').forEach(function(o) {
+    o.addEventListener('click', function() { bwSelectWeekVibe(this.dataset.weekVibe); });
   });
   document.querySelectorAll('#bw-budget-opts .bw-opt').forEach(function(o) {
     o.addEventListener('click', function() { bwSelectBudget(this.dataset.budget); });
@@ -10767,7 +10854,7 @@ function bwBind() {
   }
   el('bw-back').addEventListener('click', function() { bwSetStep(bwState.step - 1); });
   el('bw-next').addEventListener('click', function() {
-    if (bwState.step < 4) { bwSetStep(bwState.step + 1); return; }
+    if (bwState.step < 3) { bwSetStep(bwState.step + 1); return; }
     bwSubmit();
   });
   el('bw-skip').addEventListener('click', function() {
@@ -10793,22 +10880,25 @@ function closeBuildWeek() {
 }
 
 function bwSubmit() {
-  if (!bwState.style || !bwState.focus || !bwState.weeklyBudget) return;
+  if (!bwState.weekVibe || !bwState.weeklyBudget) return;
+  var mapped = bwStyleFocusFromWeekVibe(bwState.weekVibe);
   UP.budget = normalizeBudgetValue(bwState.weeklyBudget);
   UP.weeklyBudget = normalizeBudgetValue(bwState.weeklyBudget);
   closeBuildWeek();
   // Persist intent so reloads during generation can recover.
   UP.weeklyPlanDraft = {
-    style: bwState.style,
-    focus: bwState.focus,
+    weekVibe: bwState.weekVibe,
+    style: mapped.style,
+    focus: mapped.focus,
     weeklyBudget: bwState.weeklyBudget,
     cuisines: bwState.cuisines.slice()
   };
   try { saveSessionState(); } catch (e) {}
   showScreen('s-gen');
   generateWeeklyPlan({
-    style: bwState.style,
-    focus: bwState.focus,
+    weekVibe: bwState.weekVibe,
+    style: mapped.style,
+    focus: mapped.focus,
     weeklyBudget: bwState.weeklyBudget,
     cuisines: bwState.cuisines.slice(),
     mode: bwState.mode
@@ -11092,6 +11182,7 @@ function generateWeeklyPlan(intent) {
 
       UP.weeklyPlan = {
         builtAt: Date.now(),
+        weekVibe: intent.weekVibe || null,
         style: intent.style,
         focus: intent.focus,
         weeklyBudget: normalizeBudgetValue(intent.weeklyBudget || UP.weeklyBudget || UP.budget),
@@ -11210,11 +11301,16 @@ function renderBuiltForHeader() {
   if (adaptCard) adaptCard.style.display = 'block';
 
   var wp = UP.weeklyPlan;
-  var styleMeta = BW_STYLE_META[wp.style] || BW_STYLE_META.fresh;
-  var focusMeta = BW_FOCUS_META[wp.focus] || BW_FOCUS_META.balanced;
   var pills = '';
-  pills += '<span class="bf-pill"><span class="bf-pill-ic">' + styleMeta.ic + '</span>' + shopEsc(styleMeta.label) + '</span>';
-  pills += '<span class="bf-pill"><span class="bf-pill-ic">' + focusMeta.ic + '</span>' + shopEsc(focusMeta.label) + '</span>';
+  if (wp.weekVibe && BW_WEEK_VIBE_META[wp.weekVibe]) {
+    var vibeMeta = BW_WEEK_VIBE_META[wp.weekVibe];
+    pills += '<span class="bf-pill"><span class="bf-pill-ic">' + vibeMeta.ic + '</span>' + shopEsc(vibeMeta.label) + '</span>';
+  } else {
+    var styleMeta = BW_STYLE_META[wp.style] || BW_STYLE_META.fresh;
+    var focusMeta = BW_FOCUS_META[wp.focus] || BW_FOCUS_META.balanced;
+    pills += '<span class="bf-pill"><span class="bf-pill-ic">' + styleMeta.ic + '</span>' + shopEsc(styleMeta.label) + '</span>';
+    pills += '<span class="bf-pill"><span class="bf-pill-ic">' + focusMeta.ic + '</span>' + shopEsc(focusMeta.label) + '</span>';
+  }
   if (wp.cuisines && wp.cuisines.length) {
     pills += '<span class="bf-pill"><span class="bf-pill-ic">🌍</span>' + shopEsc(wp.cuisines.join(' · ')) + '</span>';
   }
@@ -14774,7 +14870,7 @@ function arcCompletePendingOAuthOnboardingFlow() {
   var uid = arcAuthUser && arcAuthUser.id;
   var finish = function() {
     saveUserProfile();
-    runArcPostOnboardingGenerationFlow();
+    arcEnterAppAfterOnboarding();
   };
   if (uid && arcIsCloudAuthEnabled()) {
     ArcBackend.upsertProfileBundle(uid, buildArcPersistBundle(), UP.arcOnboardingCompletedAt)
@@ -14796,18 +14892,16 @@ function arcWireApplicationDom() {
       syncBehaviorToArcAdaptive(UP);
       applyProfileToUIBar();
       ensureWeeklyPlanShape();
-      if (!arcPendingPostOAuthGen) {
-        showScreen('s-today');
-        tab('today');
-        syncCatTabsUI();
-        setupLibraryTabs();
-        renderLibrary();
-        renderPlanner();
-        renderNutrition();
-        renderShopping();
-        renderToday();
-        updatePlannerBar();
-      }
+      showScreen('s-today');
+      tab('today');
+      syncCatTabsUI();
+      setupLibraryTabs();
+      renderLibrary();
+      renderPlanner();
+      renderNutrition();
+      renderShopping();
+      renderToday();
+      updatePlannerBar();
     } else if (arcBootInitialScreen === 'auth') {
       applySafeProfileDefaults(UP);
       if (validateUserProfile(UP).ok) {
@@ -14944,6 +15038,14 @@ function arcWireApplicationDom() {
     var rid = parseInt(this.dataset.rid, 10);
     if (rid) openRM(rid);
   });
+  var personalizePlanBtn = el('today-personalize-btn');
+  if (personalizePlanBtn && !personalizePlanBtn._arcBound) {
+    personalizePlanBtn._arcBound = true;
+    personalizePlanBtn.addEventListener('click', function() {
+      tab('plan');
+      openBuildWeek('first');
+    });
+  }
   el('today-log-btn').addEventListener('click', function() { tab('progress', { progressPanel: 'log' }); });
   el('today-swap-btn').addEventListener('click', function() {
     var day = this.dataset.day;
