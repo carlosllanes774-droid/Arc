@@ -9,7 +9,7 @@ import vm from 'node:vm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
-const INDEX = path.join(ROOT, 'Index.html');
+const INDEX = path.join(ROOT, 'index.html');
 const CONTRACT_JS = path.join(ROOT, 'js', 'arc-frontend-contract.js');
 const LOOSE = JSON.parse(readFileSync(path.join(__dirname, 'fixtures', 'canonical-week-loose.json'), 'utf8'));
 const CANONICAL = JSON.parse(readFileSync(path.join(__dirname, 'fixtures', 'canonical-week-frontend-contract.json'), 'utf8'));
