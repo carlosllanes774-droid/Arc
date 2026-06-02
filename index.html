@@ -612,18 +612,28 @@ body{
   .intro-reveal-1,.intro-reveal-2,.intro-reveal-3,.intro-reveal-4,.intro-reveal-5{animation:none!important}
 }
 
-/* AUTH — cinematic continuation of onboarding (dark, soft, minimal) */
-#s-auth.screen{opacity:0;transform:none;background:#151210;color:rgba(255,255,255,.92)}
+/* AUTH — cinematic continuation of onboarding (ob-top / ob-body / ob-footer layout) */
+#s-auth.screen{opacity:0;transform:none;background:#151210;color:rgba(255,255,255,.92);min-height:0;height:100%}
 #s-auth.screen.active{opacity:1}
-#s-auth .arc-auth-screen{position:relative;flex:1;display:flex;flex-direction:column;min-height:780px;overflow:hidden;padding:22px 22px calc(28px + env(safe-area-inset-bottom,0px))}
+#s-auth .arc-auth-screen{position:relative;flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+#s-auth .arc-auth-top{position:relative;z-index:2;flex-shrink:0;padding:22px 22px 0}
+#s-auth .arc-auth-body{position:relative;z-index:2;flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 22px 20px}
+#s-auth .arc-auth-footer{
+  position:relative;z-index:2;flex-shrink:0;display:flex;flex-direction:column;gap:10px;
+  padding:var(--sp-2) var(--sp-page-x) calc(var(--sp-2) + env(safe-area-inset-bottom,0px));
+  box-shadow:0 -1px 0 rgba(255,255,255,.08);
+  background:linear-gradient(180deg,rgba(21,18,16,.72) 0%,#151210 100%);
+}
+#s-auth:has(.arc-auth-card.is-verify-pending) .arc-auth-footer,
+#s-auth:has(.arc-auth-card.is-reset-sent) .arc-auth-footer{display:none}
 #s-auth .arc-auth-brand{display:none}
 #s-auth .arc-auth-logo-wrap{display:flex;justify-content:center;margin:0 0 28px}
 #s-auth .arc-auth-logo{width:min(36vw,104px);height:auto;display:block;mix-blend-mode:screen;filter:drop-shadow(0 4px 20px rgba(0,0,0,.35))}
-#s-auth .arc-auth-context{margin-bottom:14px}
-#s-auth .arc-auth-card{margin-top:min(10vh,72px);margin-bottom:auto;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.16)}
+#s-auth .arc-auth-context{margin-bottom:0}
+#s-auth .arc-auth-card{margin-top:0;margin-bottom:0;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.16)}
 #s-auth .arc-auth-h{margin-bottom:10px}
 #s-auth .arc-auth-sub{margin-bottom:18px}
-.arc-auth-screen{position:relative;flex:1;display:flex;flex-direction:column;min-height:780px;overflow:hidden;padding:28px 22px calc(32px + env(safe-area-inset-bottom,0px))}
+.arc-auth-screen{position:relative;flex:1;display:flex;flex-direction:column;min-height:0}
 .arc-auth-ambience{position:absolute;inset:0;pointer-events:none;background:
   radial-gradient(120% 80% at 50% -8%,rgba(227,90,54,.32) 0%,transparent 55%),
   radial-gradient(70% 50% at 100% 12%,rgba(244,160,130,.16) 0%,transparent 55%),
@@ -631,7 +641,7 @@ body{
 .arc-auth-brand{position:relative;z-index:2;display:flex;align-items:center;gap:10px;margin-bottom:22px}
 .arc-auth-context{position:relative;z-index:2;display:flex;flex-wrap:wrap;gap:8px;margin-bottom:22px;min-height:28px}
 .arc-auth-chip{font-size:11px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;padding:8px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.14);color:rgba(255,255,255,.55);background:rgba(255,255,255,.04)}
-.arc-auth-card{position:relative;z-index:2;margin-top:auto;margin-bottom:auto;width:100%;max-width:360px;margin-left:auto;margin-right:auto;border-radius:22px;padding:26px 22px 22px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);box-shadow:0 24px 60px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.08);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);animation:cardFadeIn 720ms cubic-bezier(0.22,1,0.36,1) both}
+.arc-auth-card{position:relative;z-index:2;width:100%;max-width:360px;margin-left:auto;margin-right:auto;border-radius:22px;padding:26px 22px 22px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);box-shadow:0 24px 60px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.08);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);animation:cardFadeIn 720ms cubic-bezier(0.22,1,0.36,1) both}
 .arc-auth-h{font-family:Georgia,serif;font-size:clamp(26px,6vw,32px);font-weight:600;letter-spacing:-.04em;line-height:1.12;color:#fff;margin-bottom:12px}
 .arc-auth-sub{font-size:15px;line-height:1.55;color:rgba(255,255,255,.52);margin-bottom:22px;font-weight:450}
 .arc-auth-google{margin-bottom:18px}
@@ -718,7 +728,8 @@ body{
 .arc-auth-submit{position:relative;overflow:hidden;width:100%;border-radius:var(--r-md);border:none;background:var(--arc-primary);color:#fff;font-size:var(--fs-body);font-weight:650;cursor:pointer;box-shadow:var(--shadow-primary);min-height:var(--tap-min);padding:14px 18px;transition:transform var(--motion-instant) var(--ease-out),background var(--motion-fast) var(--ease-standard),opacity var(--motion-fast) var(--ease-standard)}
 .arc-auth-submit:hover:not(:disabled){background:var(--arc-primary-dark)}
 .arc-auth-submit:disabled{opacity:.55;cursor:default}
-.arc-auth-foot{margin-top:20px;text-align:center}
+.arc-auth-foot{margin-top:0;text-align:center}
+#s-auth .arc-auth-footer .arc-auth-submit{width:100%}
 .arc-auth-toggle{background:none;border:none;color:rgba(255,255,255,.48);font-size:13px;font-weight:500;cursor:pointer;padding:10px 8px;width:100%;transition:color var(--motion-fast) var(--ease-standard)}
 .arc-auth-toggle:hover{color:rgba(255,255,255,.78)}
 .arc-auth-panel{display:block;transition:opacity 480ms cubic-bezier(0.22,1,0.36,1),transform 520ms cubic-bezier(0.33,0.83,0.38,1)}
@@ -763,6 +774,7 @@ body{
 @keyframes arcAuthSpin{to{transform:rotate(360deg)}}
 .arc-auth-submit.is-loading{pointer-events:none}
 .arc-auth-card--exit{opacity:0!important;transform:translateY(-8px) scale(.985)!important;filter:blur(1px);transition:opacity 520ms cubic-bezier(0.33,0.83,0.38,1),transform 520ms cubic-bezier(0.33,0.83,0.38,1),filter 420ms var(--ease-standard)!important}
+.arc-auth-footer--exit{opacity:0!important;transform:translateY(8px)!important;transition:opacity 520ms cubic-bezier(0.33,0.83,0.38,1),transform 520ms cubic-bezier(0.33,0.83,0.38,1)!important}
 .screen.arc-flow-fade{transition:opacity 520ms cubic-bezier(0.33,0.83,0.38,1),transform var(--motion-screen) var(--ease-out)}
 @media (prefers-reduced-motion:reduce){
   .arc-auth-panel,.arc-auth-panel--verify,.arc-auth-field-row.arc-field-shake,.arc-auth-field .fi.arc-field-glow-err,.arc-auth-card-glow,.arc-auth-card.is-verify-pending .arc-auth-card-glow{animation:none!important}
@@ -770,7 +782,7 @@ body{
   .arc-auth-submit-spin{animation:none!important}
   .arc-auth-google-btn{transition:opacity 200ms var(--ease-standard)}
   .arc-auth-google-btn:active:not(:disabled){transform:none}
-  .arc-auth-card--exit{filter:none;transform:none!important;transition:opacity 200ms var(--ease-standard)!important}
+  .arc-auth-card--exit,.arc-auth-footer--exit{filter:none;transform:none!important;transition:opacity 200ms var(--ease-standard)!important}
 }
 .arc-auth-forgot-wrap{margin:-6px 0 12px;text-align:right}
 .arc-auth-forgot-link{background:none;border:none;color:var(--arc-auth-link);font-size:12px;font-weight:600;cursor:pointer;padding:6px 4px;text-decoration:none;transition:color var(--motion-fast) var(--ease-standard)}
@@ -811,7 +823,7 @@ body{
 .arc-auth-exists-ghost:focus-visible{outline:2px solid rgba(227,90,54,.55);outline-offset:2px;border-radius:4px}
 .arc-auth-exists-primary:disabled,
 .arc-auth-exists-ghost:disabled{opacity:.45;cursor:default}
-.arc-auth-panel--reset-sent .arc-auth-google,.arc-auth-panel--reset-sent .arc-auth-divider,.arc-auth-panel--reset-sent #arc-auth-field-password,.arc-auth-panel--reset-sent .arc-auth-forgot-wrap,.arc-auth-panel--reset-sent .arc-auth-foot{display:none}
+.arc-auth-panel--reset-sent .arc-auth-google,.arc-auth-panel--reset-sent .arc-auth-divider,.arc-auth-panel--reset-sent #arc-auth-field-password,.arc-auth-panel--reset-sent .arc-auth-forgot-wrap{display:none}
 .arc-auth-card.is-reset-sent .arc-auth-panel--form{display:none}
 .arc-auth-card.is-reset-sent .arc-auth-panel--reset-sent{display:block}
 .arc-auth-panel--reset-sent{display:none;animation:arcAuthVerifyIn 640ms cubic-bezier(0.22,1,0.36,1) both}
@@ -843,6 +855,18 @@ body{
 .screen.arc-screen-fade-out{opacity:0;transition:opacity 420ms cubic-bezier(0.33,0.83,0.38,1)}
 .screen.arc-screen-fade-in{animation:arcScreenFadeIn 480ms cubic-bezier(0.22,1,0.36,1) both}
 @keyframes arcScreenFadeIn{from{opacity:0}to{opacity:1}}
+@media (max-height:720px){
+  #s-auth .arc-auth-top{padding-top:16px}
+  #s-auth .arc-auth-body{padding-top:8px;padding-bottom:14px}
+  #s-auth .arc-auth-logo-wrap{margin-bottom:16px}
+  #s-auth .arc-auth-logo{width:min(32vw,88px)}
+  #s-auth .arc-auth-h{margin-bottom:8px;font-size:clamp(22px,5.5vw,28px)}
+  #s-auth .arc-auth-sub{margin-bottom:14px;font-size:14px}
+  #s-auth .arc-auth-google{margin-bottom:14px}
+  #s-auth .arc-auth-field{margin-bottom:12px}
+  #s-auth .arc-auth-card{padding:20px 18px 18px}
+  #s-auth .arc-auth-footer{padding-top:12px}
+}
 @media (prefers-reduced-motion:reduce){
   .arc-auth-exists,.arc-reset-modal,.arc-reset-sheet,.screen.arc-screen-fade-out,.screen.arc-screen-fade-in{transition:none!important;animation:none!important}
 }
@@ -1704,7 +1728,8 @@ button:not(:disabled):active,
 
 @media (prefers-reduced-motion:no-preference){
   .screen.active .content > *:not(.today-timeline):not(.today-tl-list),
-  .screen.active .ob-body > *{
+  .screen.active .ob-body > *,
+  .screen.active .arc-auth-body > *{
     animation:contentFadeUp var(--motion-fast) var(--ease-out) both;
   }
 }
@@ -2097,94 +2122,100 @@ button:not(:disabled):active,
 <div class="screen" id="s-auth">
   <div class="arc-auth-screen">
     <div class="arc-auth-ambience" aria-hidden="true"></div>
-    <div class="arc-auth-brand">
-      <span class="arc-mark arc-mark--auth arc-mark--on-dark" aria-hidden="true"></span>
-      <span>Arc</span>
+    <div class="arc-auth-top">
+      <div class="arc-auth-brand">
+        <span class="arc-mark arc-mark--auth arc-mark--on-dark" aria-hidden="true"></span>
+        <span>Arc</span>
+      </div>
+      <div class="arc-auth-context" id="arc-auth-context" aria-label="Your setup"></div>
     </div>
-    <div class="arc-auth-context" id="arc-auth-context" aria-label="Your setup"></div>
-    <div class="arc-auth-card" id="arc-auth-card">
-      <div class="arc-auth-card-glow" aria-hidden="true"></div>
-      <div class="arc-auth-panel arc-auth-panel--form" id="arc-auth-form-panel">
-        <div class="arc-auth-logo-wrap" aria-hidden="true">
-          <img class="arc-auth-logo" src="assets/branding/Arc_Logo.png" alt="" width="512" height="512" decoding="async"/>
-        </div>
-        <h1 class="arc-auth-h" id="arc-auth-h1">Your Arc system is ready.</h1>
-        <p class="arc-auth-sub" id="arc-auth-lead">Save your profile to build your personalized week.</p>
-        <div class="arc-auth-google">
-          <button type="button" class="arc-auth-google-btn" id="arc-auth-google" aria-label="Continue with Google">
-            <svg class="arc-auth-google-ic" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
-              <path fill="#ECEFF1" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-              <path fill="#FFC107" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6C43.98 37.08 46.98 31.38 46.98 24.55z"/>
-              <path fill="#4CAF50" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-              <path fill="#1976D2" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-            </svg>
-            <span id="arc-auth-google-label">Continue with Google</span>
-          </button>
-        </div>
-        <div class="arc-auth-divider" aria-hidden="true"><span id="arc-auth-divider-txt">or continue with email</span></div>
-        <div class="arc-auth-field arc-auth-field-row" id="arc-auth-field-email">
-          <label for="arc-auth-email">Email</label>
-          <input class="fi" id="arc-auth-email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com"/>
-          <p class="arc-auth-field-hint" id="arc-auth-email-hint" aria-live="polite"></p>
-        </div>
-        <div class="arc-auth-field arc-auth-field-row" id="arc-auth-field-password">
-          <label for="arc-auth-password">Password</label>
-          <input class="fi" id="arc-auth-password" type="password" autocomplete="new-password" placeholder="8+ characters"/>
-          <p class="arc-auth-field-hint" id="arc-auth-password-hint" aria-live="polite"></p>
-        </div>
-        <div class="arc-auth-forgot-wrap" id="arc-auth-forgot-wrap" hidden>
-          <button type="button" class="arc-auth-forgot-link" id="arc-auth-forgot">Forgot password?</button>
-        </div>
-        <div class="arc-auth-exists" id="arc-auth-exists" aria-live="polite" hidden>
-          <p class="arc-auth-exists-msg" id="arc-auth-exists-msg">An Arc profile already exists for this email.</p>
-          <div class="arc-auth-exists-actions">
-            <button type="button" class="arc-auth-exists-primary" id="arc-auth-signin-instead">Sign In Instead</button>
-            <button type="button" class="arc-auth-exists-ghost" id="arc-auth-reset-instead">Reset Password</button>
+    <div class="arc-auth-body">
+      <div class="arc-auth-card" id="arc-auth-card">
+        <div class="arc-auth-card-glow" aria-hidden="true"></div>
+        <div class="arc-auth-panel arc-auth-panel--form" id="arc-auth-form-panel">
+          <div class="arc-auth-logo-wrap" aria-hidden="true">
+            <img class="arc-auth-logo" src="assets/branding/Arc_Logo.png" alt="" width="512" height="512" decoding="async"/>
           </div>
+          <h1 class="arc-auth-h" id="arc-auth-h1">Your Arc system is ready.</h1>
+          <p class="arc-auth-sub" id="arc-auth-lead">Save your profile to build your personalized week.</p>
+          <div class="arc-auth-google">
+            <button type="button" class="arc-auth-google-btn" id="arc-auth-google" aria-label="Continue with Google">
+              <svg class="arc-auth-google-ic" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+                <path fill="#ECEFF1" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                <path fill="#FFC107" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6C43.98 37.08 46.98 31.38 46.98 24.55z"/>
+                <path fill="#4CAF50" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                <path fill="#1976D2" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+              </svg>
+              <span id="arc-auth-google-label">Continue with Google</span>
+            </button>
+          </div>
+          <div class="arc-auth-divider" aria-hidden="true"><span id="arc-auth-divider-txt">or continue with email</span></div>
+          <div class="arc-auth-field arc-auth-field-row" id="arc-auth-field-email">
+            <label for="arc-auth-email">Email</label>
+            <input class="fi" id="arc-auth-email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com"/>
+            <p class="arc-auth-field-hint" id="arc-auth-email-hint" aria-live="polite"></p>
+          </div>
+          <div class="arc-auth-field arc-auth-field-row" id="arc-auth-field-password">
+            <label for="arc-auth-password">Password</label>
+            <input class="fi" id="arc-auth-password" type="password" autocomplete="new-password" placeholder="8+ characters"/>
+            <p class="arc-auth-field-hint" id="arc-auth-password-hint" aria-live="polite"></p>
+          </div>
+          <div class="arc-auth-forgot-wrap" id="arc-auth-forgot-wrap" hidden>
+            <button type="button" class="arc-auth-forgot-link" id="arc-auth-forgot">Forgot password?</button>
+          </div>
+          <div class="arc-auth-exists" id="arc-auth-exists" aria-live="polite" hidden>
+            <p class="arc-auth-exists-msg" id="arc-auth-exists-msg">An Arc profile already exists for this email.</p>
+            <div class="arc-auth-exists-actions">
+              <button type="button" class="arc-auth-exists-primary" id="arc-auth-signin-instead">Sign In Instead</button>
+              <button type="button" class="arc-auth-exists-ghost" id="arc-auth-reset-instead">Reset Password</button>
+            </div>
+          </div>
+          <p class="arc-auth-inline" id="arc-auth-msg" aria-live="polite"></p>
         </div>
-        <p class="arc-auth-inline" id="arc-auth-msg" aria-live="polite"></p>
-        <button type="button" class="arc-auth-submit" id="arc-auth-submit" aria-busy="false">
-          <span class="arc-auth-submit-inner">
-            <span class="arc-auth-submit-txt" id="arc-auth-submit-label">Continue</span>
-            <span class="arc-auth-submit-spin" aria-hidden="true"></span>
-          </span>
-        </button>
-        <div class="arc-auth-foot">
-          <button type="button" class="arc-auth-toggle" id="arc-auth-toggle">Already have an account? Sign in</button>
+        <div class="arc-auth-panel arc-auth-panel--reset-sent" id="arc-auth-reset-sent-panel" aria-hidden="true">
+          <div class="arc-auth-reset-sent-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M4 12h16M12 4v16"/></svg>
+          </div>
+          <h1 class="arc-auth-h" id="arc-auth-reset-sent-h">Check your inbox.</h1>
+          <p class="arc-auth-sub" id="arc-auth-reset-sent-lead">We sent recovery instructions to your inbox.</p>
+          <div class="arc-auth-email-chip" title=""><span id="arc-auth-reset-sent-email">you@example.com</span></div>
+          <button type="button" class="arc-auth-secondary-btn" id="arc-auth-reset-back" style="margin-top:20px">Back to sign in</button>
+        </div>
+        <div class="arc-auth-panel arc-auth-panel--verify" id="arc-auth-verify-panel" aria-hidden="true">
+          <button type="button" class="arc-auth-verify-back" id="arc-auth-verify-back">← Back</button>
+          <div class="arc-auth-verify-top">
+            <div class="arc-auth-verify-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+            </div>
+            <div>
+              <h1 class="arc-auth-h" id="arc-auth-verify-h" style="margin-bottom:8px">Check your inbox.</h1>
+              <p class="arc-auth-sub" id="arc-auth-verify-lead" style="margin-bottom:0">We sent a secure sign-in link to your email so Arc can safely save your system.</p>
+              <div class="arc-auth-email-chip" title=""><span id="arc-auth-verify-email">you@example.com</span></div>
+            </div>
+          </div>
+          <div class="arc-auth-verify-micro">
+            <p class="arc-auth-verify-line" id="arc-auth-verify-line1">Verification usually takes less than a minute.</p>
+            <p class="arc-auth-verify-line" id="arc-auth-verify-line2">You can close Arc after verification — your system will be waiting.</p>
+          </div>
+          <div class="arc-auth-verify-actions">
+            <button type="button" class="arc-auth-secondary-btn" id="arc-auth-verify-continue">Already verified? Continue</button>
+            <button type="button" class="arc-auth-secondary-btn" id="arc-auth-open-mail">Open email app</button>
+            <button type="button" class="arc-auth-ghost-btn" id="arc-auth-resend">Resend email</button>
+            <button type="button" class="arc-auth-ghost-btn" id="arc-auth-change-email">Use another email</button>
+          </div>
+          <p class="arc-auth-verify-feedback is-quiet" id="arc-auth-verify-feedback" aria-live="polite"></p>
         </div>
       </div>
-      <div class="arc-auth-panel arc-auth-panel--reset-sent" id="arc-auth-reset-sent-panel" aria-hidden="true">
-        <div class="arc-auth-reset-sent-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M4 12h16M12 4v16"/></svg>
-        </div>
-        <h1 class="arc-auth-h" id="arc-auth-reset-sent-h">Check your inbox.</h1>
-        <p class="arc-auth-sub" id="arc-auth-reset-sent-lead">We sent recovery instructions to your inbox.</p>
-        <div class="arc-auth-email-chip" title=""><span id="arc-auth-reset-sent-email">you@example.com</span></div>
-        <button type="button" class="arc-auth-secondary-btn" id="arc-auth-reset-back" style="margin-top:20px">Back to sign in</button>
-      </div>
-      <div class="arc-auth-panel arc-auth-panel--verify" id="arc-auth-verify-panel" aria-hidden="true">
-        <button type="button" class="arc-auth-verify-back" id="arc-auth-verify-back">← Back</button>
-        <div class="arc-auth-verify-top">
-          <div class="arc-auth-verify-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
-          </div>
-          <div>
-            <h1 class="arc-auth-h" id="arc-auth-verify-h" style="margin-bottom:8px">Check your inbox.</h1>
-            <p class="arc-auth-sub" id="arc-auth-verify-lead" style="margin-bottom:0">We sent a secure sign-in link to your email so Arc can safely save your system.</p>
-            <div class="arc-auth-email-chip" title=""><span id="arc-auth-verify-email">you@example.com</span></div>
-          </div>
-        </div>
-        <div class="arc-auth-verify-micro">
-          <p class="arc-auth-verify-line" id="arc-auth-verify-line1">Verification usually takes less than a minute.</p>
-          <p class="arc-auth-verify-line" id="arc-auth-verify-line2">You can close Arc after verification — your system will be waiting.</p>
-        </div>
-        <div class="arc-auth-verify-actions">
-          <button type="button" class="arc-auth-secondary-btn" id="arc-auth-verify-continue">Already verified? Continue</button>
-          <button type="button" class="arc-auth-secondary-btn" id="arc-auth-open-mail">Open email app</button>
-          <button type="button" class="arc-auth-ghost-btn" id="arc-auth-resend">Resend email</button>
-          <button type="button" class="arc-auth-ghost-btn" id="arc-auth-change-email">Use another email</button>
-        </div>
-        <p class="arc-auth-verify-feedback is-quiet" id="arc-auth-verify-feedback" aria-live="polite"></p>
+    </div>
+    <div class="arc-auth-footer" id="arc-auth-footer">
+      <button type="button" class="arc-auth-submit" id="arc-auth-submit" aria-busy="false">
+        <span class="arc-auth-submit-inner">
+          <span class="arc-auth-submit-txt" id="arc-auth-submit-label">Continue</span>
+          <span class="arc-auth-submit-spin" aria-hidden="true"></span>
+        </span>
+      </button>
+      <div class="arc-auth-foot">
+        <button type="button" class="arc-auth-toggle" id="arc-auth-toggle">Already have an account? Sign in</button>
       </div>
     </div>
   </div>
@@ -4810,6 +4841,8 @@ function arcAuthHideVerifyUI() {
     card.classList.remove('is-verify-pending');
     card.classList.remove('arc-auth-card--exit');
   }
+  var footer = el('arc-auth-footer');
+  if (footer) footer.classList.remove('arc-auth-footer--exit');
   var fp = el('arc-auth-form-panel');
   var vp = el('arc-auth-verify-panel');
   if (fp) fp.setAttribute('aria-hidden', 'false');
@@ -4883,10 +4916,12 @@ function arcAuthResendVerification() {
 
 function arcExitAuthCardAnimated(doneFn) {
   var card = el('arc-auth-card');
+  var footer = el('arc-auth-footer');
   if (arcPrefersReducedMotion() || !card) {
     return Promise.resolve(typeof doneFn === 'function' ? doneFn() : null);
   }
   card.classList.add('arc-auth-card--exit');
+  if (footer) footer.classList.add('arc-auth-footer--exit');
   return new Promise(function (resolve) {
     setTimeout(function () {
       Promise.resolve(typeof doneFn === 'function' ? doneFn() : null)
@@ -4895,6 +4930,7 @@ function arcExitAuthCardAnimated(doneFn) {
         .then(function () {
           try {
             card.classList.remove('arc-auth-card--exit');
+            if (footer) footer.classList.remove('arc-auth-footer--exit');
           } catch (e4) {}
           resolve();
         });
