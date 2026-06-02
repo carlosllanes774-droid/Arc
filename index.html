@@ -993,6 +993,7 @@ body{
   .ob-step.active.ob-step--enter .ob-summary-grid .ob-sum-card:nth-child(4){animation-delay:180ms}
   .ob-step.active.ob-step--enter .ob-summary-grid .ob-sum-card:nth-child(5){animation-delay:220ms}
   .ob-step.active.ob-step--enter .ob-summary-grid .ob-sum-card:nth-child(6){animation-delay:255ms}
+  #s-bw .ob-step.active.ob-step--enter .ob-card--pad{animation:obCardRise 720ms cubic-bezier(0.22,1,0.36,1) both}
 }
 @keyframes obCardRise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 @keyframes obPieceIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
@@ -1408,17 +1409,18 @@ body{
 .step-phase-body .step-row{margin-bottom:12px}
 .step-phase-body .step-row:last-child{margin-bottom:4px}
 
-/* WEEKLY PLANNING — Build Your Week wizard + planner header */
-.bw-sheet{background:#fff;border-radius:var(--r-xl) var(--r-xl) 0 0;padding:var(--sp-3) var(--sp-page-x) var(--sp-2);width:100%;max-height:90%;overflow:hidden;display:flex;flex-direction:column;box-shadow:var(--shadow-lg);transform:translateY(var(--sheet-offset));transition:transform var(--motion-sheet) var(--ease-out)}
-.modal-bg.is-open .bw-sheet{transform:translateY(0)}
-.modal-bg.is-closing .bw-sheet{transform:translateY(var(--sheet-offset))}
-.bw-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
-.bw-dots{display:flex;gap:6px;margin-left:auto}
-.bw-dot{width:6px;height:6px;border-radius:50%;background:rgba(31,31,31,.14);transition:background var(--motion-fast) var(--ease-standard),width var(--motion-fast) var(--ease-standard)}
-.bw-dot.active{background:var(--arc-primary);width:18px;border-radius:3px}
-.bw-step{display:none;flex-direction:column;gap:6px;overflow-y:auto;padding-bottom:4px}
-.bw-step.active{display:flex}
-.bw-eyebrow{font-size:11px;font-weight:700;color:var(--arc-primary);text-transform:uppercase;letter-spacing:.12em}
+/* WEEKLY PLANNING — Build Your Week full-screen flow + planner header */
+#s-bw .ob-brand{width:100%}
+#s-bw .bw-close-top{margin-left:auto;background:transparent;border:none;color:rgba(255,255,255,.55);font-size:22px;line-height:1;padding:6px 8px;border-radius:8px;cursor:pointer;font-family:inherit;-webkit-tap-highlight-color:transparent}
+#s-bw .bw-close-top:hover{color:#fff;background:rgba(255,255,255,.08)}
+#s-bw .ob-footer{align-items:center}
+#s-bw #bw-skip{margin-left:auto;margin-right:0}
+#s-bw #bw-next{flex:1;max-width:none}
+#s-bw #bw-back{flex-shrink:0}
+#s-bw .ob-step{display:none}
+#s-bw .ob-step.active{display:block}
+#s-bw .bw-budget-head{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+#s-bw .bw-budget-head .bw-h{margin:0;flex:1}
 .bw-h{font-size:22px;font-weight:700;color:var(--arc-text);font-family:Georgia,serif;line-height:1.22;letter-spacing:-.01em;margin:2px 0 4px}
 .bw-s{font-size:13.5px;color:var(--arc-subtext);line-height:1.55;margin-bottom:14px}
 .bw-options{display:flex;flex-direction:column;gap:10px;margin-bottom:8px}
@@ -1439,14 +1441,12 @@ body{
 .bw-chip:hover{border-color:rgba(227,90,54,.3)}
 .bw-chip.active{background:var(--arc-primary);color:#fff;border-color:var(--arc-primary)}
 .bw-hint{font-size:11.5px;color:var(--arc-subtext);font-style:italic;margin:6px 0 12px}
-.bw-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:10px;border-top:1px solid var(--arc-divider);flex-shrink:0}
-.bw-back,.bw-skip{padding:10px 14px;border-radius:10px;border:none;background:transparent;color:var(--arc-subtext);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
-.bw-back:hover,.bw-skip:hover{color:var(--arc-text)}
-.bw-next{padding:11px 22px;border-radius:12px;border:none;background:var(--arc-primary);color:#fff;font-size:14px;font-weight:700;cursor:pointer;box-shadow:var(--shadow-primary);font-family:inherit;letter-spacing:.01em;min-width:140px;transition:background var(--motion-fast) var(--ease-standard)}
-.bw-next:hover{background:var(--arc-primary-dark)}
-.bw-next:disabled{opacity:.5;cursor:not-allowed;background:var(--arc-primary)}
-.bw-close{background:transparent;border:none;cursor:pointer;font-size:18px;color:var(--arc-subtext);padding:4px 8px;border-radius:8px;font-family:inherit}
-.bw-close:hover{color:var(--arc-text);background:rgba(31,31,31,.04)}
+.bw-section-h{font-size:22px;font-weight:700;color:var(--arc-text);font-family:Georgia,serif;line-height:1.22;letter-spacing:-.01em;margin:20px 0 10px}
+.bw-section-h:first-child{margin-top:2px}
+.bw-dislikes{width:100%;min-height:88px;padding:14px 16px;border:none;border-radius:var(--r-sm);font-size:var(--fs-body);color:var(--arc-text);background:var(--arc-surface-2);font-family:inherit;line-height:1.5;resize:vertical;box-shadow:inset 0 0 0 1px var(--arc-border);margin-bottom:8px}
+.bw-dislikes:focus{outline:none;box-shadow:inset 0 0 0 2px rgba(227,90,54,.35)}
+.bw-dislikes-hint{font-size:12px;color:var(--arc-subtext);line-height:1.45;margin:0 0 4px}
+#s-bw .btn-dark:disabled{opacity:.45;cursor:not-allowed}
 
 /* Planner — Built for header + empty state */
 .plan-empty{padding:var(--sp-4) var(--sp-page-x);border-radius:var(--r-md);background:var(--arc-card);border:1px solid var(--arc-border);text-align:center;margin-bottom:var(--sp-2)}
@@ -1999,6 +1999,91 @@ button:not(:disabled):active,
   <div class="ob-err" id="ob-err"></div>
 </div>
 
+<!-- BUILD YOUR WEEK — full-screen flow (onboarding layout) -->
+<div class="screen" id="s-bw">
+  <div class="ob-top">
+    <div class="ob-brand">
+      <span class="arc-mark arc-mark--ob arc-mark--on-dark" aria-hidden="true"></span>
+      <span class="ob-brand-name">Arc</span>
+      <button type="button" class="bw-close-top" id="bw-close" aria-label="Close">✕</button>
+    </div>
+    <div class="ob-dots" aria-hidden="true">
+      <div class="ob-dot active" id="bd1"></div>
+      <div class="ob-dot" id="bd2"></div>
+      <div class="ob-dot" id="bd3"></div>
+      <div class="ob-dot" id="bd4"></div>
+    </div>
+    <div class="ob-step-n" id="bw-step-n">Step 1 of 4</div>
+    <div class="ob-heading" id="bw-h">Which sounds most like you this week?</div>
+    <div class="ob-sub" id="bw-s"></div>
+  </div>
+  <div class="ob-body bw-body">
+    <div class="ob-step active" id="bw-step-1" data-step="1">
+      <div class="ob-card ob-card--pad">
+        <div class="bw-options" id="bw-vibe-opts">
+          <button class="bw-opt" type="button" data-week-vibe="noTime"><span class="bw-opt-ic">⏱️</span><span class="bw-opt-body"><span class="bw-opt-h">I don't have time to cook</span><span class="bw-opt-s">Fast recipes, simple prep, minimal cleanup.</span></span></button>
+          <button class="bw-opt" type="button" data-week-vibe="bestResults"><span class="bw-opt-ic">💪</span><span class="bw-opt-body"><span class="bw-opt-h">I want the best results</span><span class="bw-opt-s">Nutrition-focused meals optimized for adherence and performance.</span></span></button>
+          <button class="bw-opt" type="button" data-week-vibe="variety"><span class="bw-opt-ic">🌎</span><span class="bw-opt-body"><span class="bw-opt-h">I want more variety</span><span class="bw-opt-s">More cuisines, more unique meals, more exploration.</span></span></button>
+        </div>
+      </div>
+    </div>
+    <div class="ob-step" id="bw-step-2" data-step="2">
+      <div class="ob-card ob-card--pad">
+        <div class="bw-budget-head">
+          <button class="bw-help-btn" id="bw-budget-help-btn" type="button" aria-label="Budget help">i</button>
+        </div>
+        <div class="bw-help" id="bw-budget-help">
+          <div><strong>Budget</strong>: roughly $50-150 per week, pantry staples, repeat ingredients, lower-cost proteins.</div>
+          <div><strong>Moderate</strong>: roughly $150-250 per week, more variety and a balanced ingredient mix.</div>
+          <div><strong>Flexible</strong>: $150+ per week, wider ingredient range, premium proteins, and more variety.</div>
+        </div>
+        <div class="bw-options" id="bw-budget-opts">
+          <button class="bw-opt" type="button" data-budget="Budget"><span class="bw-opt-ic">💸</span><span class="bw-opt-body"><span class="bw-opt-h">Budget</span><span class="bw-opt-s">Lean staples, repeat ingredients, and lower-cost proteins.</span></span></button>
+          <button class="bw-opt" type="button" data-budget="Moderate"><span class="bw-opt-ic">⚖️</span><span class="bw-opt-body"><span class="bw-opt-h">Moderate</span><span class="bw-opt-s">Balanced variety across the week without premium-only picks.</span></span></button>
+          <button class="bw-opt" type="button" data-budget="Flexible"><span class="bw-opt-ic">✨</span><span class="bw-opt-body"><span class="bw-opt-h">Flexible</span><span class="bw-opt-s">More premium proteins and wider ingredient variety.</span></span></button>
+        </div>
+      </div>
+    </div>
+    <div class="ob-step" id="bw-step-3" data-step="3">
+      <div class="ob-card ob-card--pad">
+        <div class="bw-chips" id="bw-diet-opts">
+          <button type="button" class="bw-chip bw-diet-chip" data-v="Vegetarian">Vegetarian</button>
+          <button type="button" class="bw-chip bw-diet-chip" data-v="Vegan">Vegan</button>
+          <button type="button" class="bw-chip bw-diet-chip" data-v="Gluten-free">Gluten-free</button>
+          <button type="button" class="bw-chip bw-diet-chip" data-v="Dairy-free">Dairy-free</button>
+          <button type="button" class="bw-chip bw-diet-chip" data-v="Nut allergy">Nut allergy</button>
+          <button type="button" class="bw-chip bw-diet-chip" data-v="Halal">Halal</button>
+          <button type="button" class="bw-chip bw-diet-chip" data-v="Keto">Keto</button>
+          <button type="button" class="bw-chip bw-diet-chip" data-v="Paleo">Paleo</button>
+        </div>
+        <div class="bw-section-h">Foods you dislike</div>
+        <p class="bw-dislikes-hint">Write naturally — one line or many. We keep your words exactly as you enter them.</p>
+        <textarea class="bw-dislikes fi" id="bw-dislikes" rows="3" placeholder="e.g. I hate mushrooms and olives&#10;cilantro&#10;canned tuna"></textarea>
+      </div>
+    </div>
+    <div class="ob-step" id="bw-step-4" data-step="4">
+      <div class="ob-card ob-card--pad">
+        <div class="bw-chips" id="bw-cuisine-chips">
+          <button class="bw-chip" type="button" data-v="Mediterranean">🫒 Mediterranean</button>
+          <button class="bw-chip" type="button" data-v="Italian">🍝 Italian</button>
+          <button class="bw-chip" type="button" data-v="Asian">🥢 Asian</button>
+          <button class="bw-chip" type="button" data-v="Japanese">🍱 Japanese</button>
+          <button class="bw-chip" type="button" data-v="Mexican">🌮 Mexican</button>
+          <button class="bw-chip" type="button" data-v="American">🍔 American</button>
+          <button class="bw-chip" type="button" data-v="Indian">🍛 Indian</button>
+          <button class="bw-chip" type="button" data-v="Middle Eastern">🥙 Middle Eastern</button>
+        </div>
+        <div class="bw-hint" id="bw-cuisine-hint">No selection = varied international</div>
+      </div>
+    </div>
+  </div>
+  <div class="ob-footer">
+    <button type="button" class="btn btn-ghost" id="bw-back" style="display:none">Back</button>
+    <button type="button" class="btn btn-ghost" id="bw-skip" style="display:none">Skip</button>
+    <button type="button" class="btn btn-dark" id="bw-next" disabled>Continue</button>
+  </div>
+</div>
+
 <div class="modal-bg" id="ob-info-modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="ob-info-title">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
@@ -2391,72 +2476,6 @@ button:not(:disabled):active,
   </div>
 </div>
 
-<!-- BUILD YOUR WEEK WIZARD -->
-<div class="modal-bg" id="bw-modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="bw-h-1">
-  <div class="bw-sheet">
-    <div class="bw-head">
-      <span class="bw-eyebrow" id="bw-eyebrow">This week</span>
-      <div class="bw-dots" aria-hidden="true">
-        <span class="bw-dot active" data-step="1"></span>
-        <span class="bw-dot" data-step="2"></span>
-        <span class="bw-dot" data-step="3"></span>
-      </div>
-      <button class="bw-close" id="bw-close" type="button" aria-label="Close">✕</button>
-    </div>
-
-    <!-- STEP 1: Week vibe -->
-    <div class="bw-step active" id="bw-step-1" data-step="1">
-      <div class="bw-h" id="bw-h-1">Which sounds most like you this week?</div>
-      <div class="bw-options" id="bw-vibe-opts">
-        <button class="bw-opt" type="button" data-week-vibe="noTime"><span class="bw-opt-ic">⏱️</span><span class="bw-opt-body"><span class="bw-opt-h">I don't have time to cook</span><span class="bw-opt-s">Fast recipes, simple prep, minimal cleanup.</span></span></button>
-        <button class="bw-opt" type="button" data-week-vibe="bestResults"><span class="bw-opt-ic">💪</span><span class="bw-opt-body"><span class="bw-opt-h">I want the best results</span><span class="bw-opt-s">Nutrition-focused meals optimized for adherence and performance.</span></span></button>
-        <button class="bw-opt" type="button" data-week-vibe="variety"><span class="bw-opt-ic">🌎</span><span class="bw-opt-body"><span class="bw-opt-h">I want more variety</span><span class="bw-opt-s">More cuisines, more unique meals, more exploration.</span></span></button>
-      </div>
-    </div>
-
-    <!-- STEP 2: Weekly budget -->
-    <div class="bw-step" id="bw-step-2" data-step="2">
-      <div class="bw-subhead">
-        <div class="bw-h">What budget vibe fits this week?</div>
-        <button class="bw-help-btn" id="bw-budget-help-btn" type="button" aria-label="Budget help">i</button>
-      </div>
-      <div class="bw-help" id="bw-budget-help">
-        <div><strong>Budget</strong>: roughly $50-150 per week, pantry staples, repeat ingredients, lower-cost proteins.</div>
-        <div><strong>Moderate</strong>: roughly $150-250 per week, more variety and a balanced ingredient mix.</div>
-        <div><strong>Flexible</strong>: $150+ per week, wider ingredient range, premium proteins, and more variety.</div>
-      </div>
-      <div class="bw-options" id="bw-budget-opts">
-        <button class="bw-opt" type="button" data-budget="Budget"><span class="bw-opt-ic">💸</span><span class="bw-opt-body"><span class="bw-opt-h">Budget</span><span class="bw-opt-s">Lean staples, repeat ingredients, and lower-cost proteins.</span></span></button>
-        <button class="bw-opt" type="button" data-budget="Moderate"><span class="bw-opt-ic">⚖️</span><span class="bw-opt-body"><span class="bw-opt-h">Moderate</span><span class="bw-opt-s">Balanced variety across the week without premium-only picks.</span></span></button>
-        <button class="bw-opt" type="button" data-budget="Flexible"><span class="bw-opt-ic">✨</span><span class="bw-opt-body"><span class="bw-opt-h">Flexible</span><span class="bw-opt-s">More premium proteins and wider ingredient variety.</span></span></button>
-      </div>
-    </div>
-
-    <!-- STEP 3: Cuisines -->
-    <div class="bw-step" id="bw-step-3" data-step="3">
-      <div class="bw-h">Any flavors you're craving?</div>
-      <div class="bw-s">Pick up to 3, or skip and let Arc surprise you.</div>
-      <div class="bw-chips" id="bw-cuisine-chips">
-        <button class="bw-chip" type="button" data-v="Mediterranean">🫒 Mediterranean</button>
-        <button class="bw-chip" type="button" data-v="Italian">🍝 Italian</button>
-        <button class="bw-chip" type="button" data-v="Asian">🥢 Asian</button>
-        <button class="bw-chip" type="button" data-v="Japanese">🍱 Japanese</button>
-        <button class="bw-chip" type="button" data-v="Mexican">🌮 Mexican</button>
-        <button class="bw-chip" type="button" data-v="American">🍔 American</button>
-        <button class="bw-chip" type="button" data-v="Indian">🍛 Indian</button>
-        <button class="bw-chip" type="button" data-v="Middle Eastern">🥙 Middle Eastern</button>
-      </div>
-      <div class="bw-hint" id="bw-cuisine-hint">No selection = varied international</div>
-    </div>
-
-    <div class="bw-actions">
-      <button class="bw-back" id="bw-back" type="button" style="visibility:hidden">← Back</button>
-      <button class="bw-skip" id="bw-skip" type="button" style="display:none">Skip</button>
-      <button class="bw-next" id="bw-next" type="button" disabled>Continue →</button>
-    </div>
-  </div>
-</div>
-
 <!-- RECIPE MODAL -->
 <div class="rm-bg" id="rm-bg" style="display:none">
   <div class="rm-sheet">
@@ -2701,23 +2720,7 @@ button:not(:disabled):active,
           <span class="sc" data-v="Japanese">🍱 Japanese</span>
         </div>
       </div>
-      <div class="fl" style="margin-bottom:12px">
-        <label class="s-lbl">Dietary restrictions <small style="color:#9ca3af;font-weight:400;text-transform:none">(tap to toggle)</small></label>
-        <div class="s-chips" id="sg-diet">
-          <span class="sc" data-v="Vegetarian">Vegetarian</span>
-          <span class="sc" data-v="Vegan">Vegan</span>
-          <span class="sc" data-v="Gluten-free">Gluten-free</span>
-          <span class="sc" data-v="Dairy-free">Dairy-free</span>
-          <span class="sc" data-v="Nut allergy">Nut allergy</span>
-          <span class="sc" data-v="Halal">Halal</span>
-          <span class="sc" data-v="Keto">Keto</span>
-          <span class="sc" data-v="Paleo">Paleo</span>
-        </div>
-      </div>
-      <div class="fl" style="margin-bottom:0">
-        <label class="s-lbl">Foods to avoid</label>
-        <textarea class="fi" id="s-dislikes" rows="2" style="resize:none;width:100%;margin-top:0" placeholder="e.g. mushrooms, spicy food, shellfish…"></textarea>
-      </div>
+      <p style="font-size:13px;color:var(--arc-subtext);line-height:1.5;margin:0">Dietary restrictions and foods you dislike are set when you build your week in Plan.</p>
     </div>
 
     <!-- CURRENT TARGETS (read-only) -->
@@ -10626,7 +10629,7 @@ function validateUserProfile(p) {
   if (p.goal == null || String(p.goal).trim() === '') errors.push('Goal is required. Choose one in Preferences.');
 
   if (!Array.isArray(p.restrictions) || !p.restrictions.length) {
-    errors.push('Diet preferences are missing. Open Preferences to set them.');
+    errors.push('Diet preferences are missing. Set them in Build My Week when you plan meals.');
   }
 
   return { ok: errors.length === 0, errors: errors };
@@ -10725,12 +10728,30 @@ function bwWeekVibeFromLegacyPlan(style, focus) {
   return 'bestResults';
 }
 
+var BW_STEPS = 4;
+var BW_STEP_META = [
+  { h: 'Which sounds most like you this week?', s: '' },
+  { h: 'What budget vibe fits this week?', s: '' },
+  { h: 'Any dietary restrictions?', s: 'Tap any that apply. Leave blank if none.' },
+  { h: 'Any flavors you\u2019re craving?', s: 'Pick up to 3, or skip and let Arc surprise you.' }
+];
+var BW_RETURN_TAB = {
+  's-today': 'today',
+  's-planner': 'plan',
+  's-shopping': 'grocery',
+  's-progress': 'progress',
+  's-profile': 'profile'
+};
+
 var bwState = {
   step: 1,
   weekVibe: null,
   weeklyBudget: 'Moderate',
+  restrictions: ['None'],
+  dislikes: '',
   cuisines: [],
   mode: 'first',   // 'first' (post-onboarding) | 'rebuild'
+  returnScreenId: 's-today',
   bound: false
 };
 
@@ -10744,19 +10765,32 @@ function hasBuiltWeek() {
 }
 
 function bwSetStep(n) {
-  if (n < 1 || n > 3) return;
+  if (n < 1 || n > BW_STEPS) return;
+  if (bwState.step === 3 && n !== 3) bwPersistDietToProfile();
+  var prev = el('bw-step-' + bwState.step);
+  if (prev) prev.classList.remove('active', 'ob-step--enter');
   bwState.step = n;
-  var steps = document.querySelectorAll('#bw-modal .bw-step');
-  for (var i = 0; i < steps.length; i++) {
-    steps[i].classList.toggle('active', steps[i].getAttribute('data-step') === String(n));
+  var next = el('bw-step-' + n);
+  if (next) next.classList.add('active');
+  var meta = BW_STEP_META[n - 1] || BW_STEP_META[0];
+  setText('bw-h', meta.h);
+  setText('bw-s', meta.s || '');
+  setText('bw-step-n', 'Step ' + n + ' of ' + BW_STEPS);
+  for (var i = 1; i <= BW_STEPS; i++) {
+    var dot = el('bd' + i);
+    if (dot) dot.className = 'ob-dot' + (i < n ? ' done' : i === n ? ' active' : '');
   }
-  var dots = document.querySelectorAll('#bw-modal .bw-dot');
-  for (var j = 0; j < dots.length; j++) {
-    dots[j].classList.toggle('active', dots[j].getAttribute('data-step') === String(n));
-  }
-  el('bw-back').style.visibility = n === 1 ? 'hidden' : 'visible';
-  el('bw-skip').style.display    = n === 3 ? 'inline-flex' : 'none';
-  el('bw-next').textContent      = n === 3 ? 'Build my week ✦' : 'Continue →';
+  withEl('bw-back', function (back) { back.style.display = n === 1 ? 'none' : 'block'; });
+  withEl('bw-skip', function (skip) { skip.style.display = n === BW_STEPS ? 'block' : 'none'; });
+  setText('bw-next', n === BW_STEPS ? 'Build my week ✦' : 'Continue');
+  var body = document.querySelector('#s-bw .ob-body');
+  if (body) body.scrollTop = 0;
+  requestAnimationFrame(function () {
+    if (next) next.classList.add('ob-step--enter');
+    setTimeout(function () {
+      if (next) next.classList.remove('ob-step--enter');
+    }, 780);
+  });
   bwUpdateNext();
 }
 
@@ -10764,8 +10798,42 @@ function bwUpdateNext() {
   var ok = false;
   if (bwState.step === 1) ok = !!bwState.weekVibe;
   else if (bwState.step === 2) ok = !!bwState.weeklyBudget;
-  else if (bwState.step === 3) ok = true; // cuisines are optional
+  else if (bwState.step === 3 || bwState.step === 4) ok = true;
   el('bw-next').disabled = !ok;
+}
+
+function bwReadRestrictionsFromDom() {
+  var sels = document.querySelectorAll('#bw-diet-opts .bw-diet-chip.active');
+  var out = [];
+  for (var i = 0; i < sels.length; i++) out.push(sels[i].dataset.v);
+  if (!out.length) return ['None'];
+  return out;
+}
+
+function bwReadDislikesRawFromDom() {
+  var ta = el('bw-dislikes');
+  return ta ? ta.value : '';
+}
+
+function bwPersistDietToProfile() {
+  var restrictions = bwReadRestrictionsFromDom();
+  var dislikesRaw = bwReadDislikesRawFromDom();
+  bwState.restrictions = restrictions;
+  bwState.dislikes = dislikesRaw;
+  UP.restrictions = restrictions.slice();
+  UP.dislikes = dislikesRaw;
+  try { saveUserProfile(); } catch (eSave) {}
+}
+
+function bwSyncDietUiFromProfile() {
+  var selected = (UP.restrictions || []).filter(function (r) { return r && r !== 'None'; });
+  document.querySelectorAll('#bw-diet-opts .bw-diet-chip').forEach(function (chip) {
+    chip.classList.toggle('active', selected.indexOf(chip.dataset.v) >= 0);
+  });
+  var ta = el('bw-dislikes');
+  if (ta) ta.value = UP.dislikes != null ? String(UP.dislikes) : '';
+  bwState.restrictions = UP.restrictions ? UP.restrictions.slice() : ['None'];
+  bwState.dislikes = UP.dislikes != null ? String(UP.dislikes) : '';
 }
 
 function bwSelectWeekVibe(value) {
@@ -10828,8 +10896,8 @@ function bwReset(mode) {
   el('bw-cuisine-hint').textContent = bwState.cuisines.length
     ? 'This week: ' + bwState.cuisines.join(' · ')
     : 'No selection = varied international';
+  bwSyncDietUiFromProfile();
   if (el('bw-budget-help')) el('bw-budget-help').style.display = 'none';
-  el('bw-eyebrow').textContent = mode === 'rebuild' ? 'Rebuild this week' : 'Build this week';
   bwSetStep(1);
 }
 
@@ -10840,6 +10908,9 @@ function bwBind() {
   });
   document.querySelectorAll('#bw-budget-opts .bw-opt').forEach(function(o) {
     o.addEventListener('click', function() { bwSelectBudget(this.dataset.budget); });
+  });
+  document.querySelectorAll('#bw-diet-opts .bw-diet-chip').forEach(function(c) {
+    c.addEventListener('click', function() { this.classList.toggle('active'); });
   });
   document.querySelectorAll('#bw-cuisine-chips .bw-chip').forEach(function(c) {
     c.addEventListener('click', function() { bwToggleCuisine(this.dataset.v); });
@@ -10852,39 +10923,49 @@ function bwBind() {
       budgetHelp.style.display = budgetHelp.style.display === 'block' ? 'none' : 'block';
     });
   }
-  el('bw-back').addEventListener('click', function() { bwSetStep(bwState.step - 1); });
-  el('bw-next').addEventListener('click', function() {
-    if (bwState.step < 3) { bwSetStep(bwState.step + 1); return; }
+  el('bw-back').addEventListener('click', function () {
+    if (bwState.step > 1) bwSetStep(bwState.step - 1);
+  });
+  el('bw-next').addEventListener('click', function () {
+    if (bwState.step < BW_STEPS) { bwSetStep(bwState.step + 1); return; }
     bwSubmit();
   });
-  el('bw-skip').addEventListener('click', function() {
+  el('bw-skip').addEventListener('click', function () {
     bwState.cuisines = [];
-    document.querySelectorAll('#bw-cuisine-chips .bw-chip').forEach(function(c) { c.classList.remove('active'); });
+    document.querySelectorAll('#bw-cuisine-chips .bw-chip').forEach(function (c) { c.classList.remove('active'); });
     bwSubmit();
   });
   el('bw-close').addEventListener('click', closeBuildWeek);
-  el('bw-modal').addEventListener('click', function(e) {
-    if (e.target === this) closeBuildWeek();
-  });
   bwState.bound = true;
 }
 
 function openBuildWeek(mode) {
   bwBind();
+  var active = document.querySelector('.screen.active');
+  var aid = active && active.id ? active.id : 's-today';
+  if (aid === 's-bw' || aid === 's-gen') aid = 's-today';
+  bwState.returnScreenId = aid;
   bwReset(mode || (hasBuiltWeek() ? 'rebuild' : 'first'));
-  openMotion('bw-modal');
+  showScreen('s-bw');
 }
 
 function closeBuildWeek() {
-  closeMotion('bw-modal');
+  var dest = bwState.returnScreenId || 's-today';
+  var tabKey = BW_RETURN_TAB[dest];
+  if (tabKey) {
+    showScreen(dest, 'back');
+    tab(tabKey);
+  } else {
+    showScreen(dest, 'back');
+  }
 }
 
 function bwSubmit() {
   if (!bwState.weekVibe || !bwState.weeklyBudget) return;
+  bwPersistDietToProfile();
   var mapped = bwStyleFocusFromWeekVibe(bwState.weekVibe);
   UP.budget = normalizeBudgetValue(bwState.weeklyBudget);
   UP.weeklyBudget = normalizeBudgetValue(bwState.weeklyBudget);
-  closeBuildWeek();
   // Persist intent so reloads during generation can recover.
   UP.weeklyPlanDraft = {
     weekVibe: bwState.weekVibe,
@@ -11211,7 +11292,8 @@ function generateWeeklyPlan(intent) {
         setTimeout(function() {
           if (myGen !== recipeGenId) return;
           saveUserProfile();
-          tab('plan');
+          tab('today');
+          renderToday();
           scheduleWeeklyRecapAutoCheck();
           stopGenLoadingUI();
         }, 420);
@@ -14495,7 +14577,6 @@ function openSettings() {
   el('s-age').value     = UP.age      || '';
   el('s-wt').value      = UP.weight   || '';
   el('s-sex').value     = UP.sex      || 'Male';
-  el('s-dislikes').value= UP.dislikes || '';
 
   // Populate single-select chips
   sSetChip('sg-goal',     UP.goal);
@@ -14506,7 +14587,6 @@ function openSettings() {
 
   // Populate multi-select chips
   sSetMulti('sg-cuisine', UP.cuisines     || []);
-  sSetMulti('sg-diet',    UP.restrictions || []);
 
   // Refresh targets panel
   renderSettingsTargets();
@@ -14519,7 +14599,7 @@ function openSettings() {
   wireSettingsChips();
 
   // Wire text inputs
-  var tinputs = ['s-name','s-age','s-wt','s-dislikes'];
+  var tinputs = ['s-name','s-age','s-wt'];
   for (var ti = 0; ti < tinputs.length; ti++) {
     (function(id) {
       var inp = el(id);
@@ -14582,7 +14662,7 @@ function wireSettingsChips() {
       }
     })(singles[si]);
   }
-  var multis = ['sg-cuisine','sg-diet'];
+  var multis = ['sg-cuisine'];
   for (var mi = 0; mi < multis.length; mi++) {
     (function(gid) {
       var chips = document.querySelectorAll('#' + gid + ' .sc');
@@ -14621,9 +14701,6 @@ function applySettingsProfile() {
   UP.skill        = sGetChip('sg-skill')         || UP.skill;
   UP.budget       = sGetChip('sg-budget')        || UP.budget;
   UP.cuisines     = sGetMulti('sg-cuisine');
-  UP.restrictions = sGetMulti('sg-diet');
-  UP.dislikes     = el('s-dislikes').value.trim();
-
   // Recalculate TDEE with new profile
   UP.tdee   = calcTDEE();
   UP.macros = getMacroTargets(getCalTarget());
@@ -15042,7 +15119,6 @@ function arcWireApplicationDom() {
   if (personalizePlanBtn && !personalizePlanBtn._arcBound) {
     personalizePlanBtn._arcBound = true;
     personalizePlanBtn.addEventListener('click', function() {
-      tab('plan');
       openBuildWeek('first');
     });
   }
