@@ -6,7 +6,6 @@
 <title>Arc</title>
 <link rel="icon" type="image/png" href="assets/branding/Arc_Logo.png" sizes="32x32"/>
 <link rel="apple-touch-icon" href="assets/branding/Arc_Logo.png"/>
-<link rel="preload" as="image" href="assets/branding/splash.png" fetchpriority="high"/>
 <link rel="preload" as="image" href="assets/branding/arc-mark.png"/>
 <meta name="theme-color" content="#000000"/>
 <style>
@@ -166,7 +165,7 @@ body{
 @keyframes arcMarkBreathe{0%,100%{opacity:.86;transform:scale(1)}50%{opacity:1;transform:scale(1.04)}}
 @keyframes arcMarkFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
 
-/* ARC SPLASH — cinematic launch (splash.png) */
+/* ARC SPLASH — dark launch (brand stack; no fullscreen splash artwork) */
 #splash-screen{
   position:fixed;inset:0;z-index:9999;
   display:flex;align-items:center;justify-content:center;
@@ -181,11 +180,6 @@ body{
   pointer-events:none;
   opacity:0;
   visibility:hidden;
-}
-#splash-screen.is-exiting .splash-art{
-  transform:scale(1.02) translateY(-4px);
-  filter:blur(10px);
-  opacity:0;
 }
 #splash-screen.is-exiting .splash-ambience,
 #splash-screen.is-exiting .splash-glow,
@@ -266,27 +260,6 @@ body{
 @keyframes splashFrameFloat{
   from{transform:translate3d(0,0,0) scale(1)}
   to{transform:translate3d(0,-5px,0) scale(1.008)}
-}
-.splash-art{
-  display:block;
-  width:100%;height:100%;
-  max-width:100%;
-  max-height:100%;
-  object-fit:cover;
-  object-position:center center;
-  opacity:0;
-  transform:scale(1.045);
-  transform-origin:center center;
-  transition:opacity 1.15s var(--splash-ease),transform 1.35s var(--splash-ease),filter 820ms var(--splash-ease-out);
-  user-select:none;
-  -webkit-user-drag:none;
-}
-#splash-screen.is-loaded .splash-art{
-  opacity:1;
-  transform:scale(1);
-}
-@media (min-aspect-ratio: 10/9){
-  .splash-art{object-fit:contain}
 }
 .splash-vignette{
   position:absolute;inset:0;z-index:4;
@@ -402,13 +375,11 @@ body{
 .a-hdr:hover .a-hdr-mark{opacity:.95}
 
 @media (prefers-reduced-motion:reduce){
-  .splash-frame,.splash-ambience,.splash-glow,.splash-art,#splash-screen:not(.is-loaded) .splash-frame::after,.arc-mark--breathe,.arc-mark--float,.gen-logo-glow,.gen-logo-wrap .arc-mark--gen,.intro-brand{animation:none!important}
+  .splash-frame,.splash-ambience,.splash-glow,#splash-screen:not(.is-loaded) .splash-frame::after,.arc-mark--breathe,.arc-mark--float,.gen-logo-glow,.gen-logo-wrap .arc-mark--gen,.intro-brand{animation:none!important}
   .splash-brand{transition:none!important}
   .splash-frame{transform:none!important}
-  #splash-screen.is-loaded .splash-art{opacity:1;transform:none}
   #splash-screen.is-loaded .splash-glow{opacity:.65}
   #splash-screen.is-loaded .splash-brand{opacity:1}
-  #splash-screen.is-exiting .splash-art{filter:none;transform:none}
   .screen.arc-splash-handoff{filter:none;transform:none}
   .intro-brand{opacity:1;transform:none}
 }
@@ -1820,9 +1791,7 @@ button:not(:disabled):active,
   <div class="splash-curtain" aria-hidden="true"></div>
   <div class="splash-ambience" aria-hidden="true"></div>
   <div class="splash-glow" aria-hidden="true"></div>
-  <div class="splash-frame">
-    <img class="splash-art" id="splash-art" src="assets/branding/splash.png" alt="" width="1081" height="1921" decoding="async" fetchpriority="high"/>
-  </div>
+  <div class="splash-frame" aria-hidden="true"></div>
   <div class="splash-vignette" aria-hidden="true"></div>
   <div class="splash-brand" aria-hidden="true">
     <span class="arc-mark arc-mark--splash arc-mark--on-dark" aria-hidden="true"></span>
@@ -4068,8 +4037,6 @@ function applyArcBrandingToStaticDom() {
     root.style.setProperty('--arc-mark-url', "url('" + ARC_BRANDING.markSrc + "')");
     root.style.setProperty('--arc-logo-url', "url('" + ARC_BRANDING.logoSrc + "')");
   }
-  var splashArt = el('splash-art');
-  if (splashArt) splashArt.src = ARC_BRANDING.splashSrc;
   var fav = document.querySelector('link[rel="icon"]');
   if (fav) fav.href = ARC_BRANDING.icon.favicon;
   var apple = document.querySelector('link[rel="apple-touch-icon"]');
@@ -4121,6 +4088,10 @@ var arcAuthResendNotBefore = 0;
 var arcAuthVerifyTransitionLock = false;
 var arcPendingPostOAuthGen = false;
 var arcBootInitialScreen = 'welcome';
+var arcSplashBootReady = false;
+var arcSplashSequenceStarted = false;
+var arcSplashBrandShownAt = 0;
+var arcSplashDismissTimer = null;
 var arcGenUsesPostOnboardingCopy = false;
 var arcCloudSyncTimer = null;
 var MOTION_FAST = 160;
@@ -9790,26 +9761,19 @@ function nutritionPreviewFromDraft(draft) {
     height: draft.heightParse && draft.heightParse.ok ? draft.heightParse.display : ''
   };
   var physio = computePhysiologyMetrics(profile);
-  var maint = physio.maintenance;
-  var savedG = UP.goal;
-  var savedP = UP.weightGoalPaceLbWeek;
-  var savedW = UP.weight;
-  var savedAct = UP.activity;
-  var savedMuscle = UP.muscleGainEmphasis;
-  UP.goal = profile.goal;
-  UP.weightGoalPaceLbWeek = profile.weightGoalPaceLbWeek;
-  UP.weight = String(profile.weight);
-  UP.activity = profile.activity;
-  UP.muscleGainEmphasis = profile.muscleGainEmphasis;
-  var calorieRec = computeCalorieRecommendation(maint, profile.goal, profile.weightGoalPaceLbWeek, { muscleEmphasis: profile.muscleGainEmphasis });
+  var calorieRec = computeCalorieRecommendation(physio.maintenance, profile.goal, profile.weightGoalPaceLbWeek, {
+    profile: profile,
+    muscleEmphasis: profile.muscleGainEmphasis
+  });
   var target = calorieRec.target;
-  var macros = getMacroTargets(target);
-  UP.goal = savedG;
-  UP.weightGoalPaceLbWeek = savedP;
-  UP.weight = savedW;
-  UP.activity = savedAct;
-  UP.muscleGainEmphasis = savedMuscle;
-  return { maintenance: maint, target: target, macros: macros, calorieRec: calorieRec, physiology: physio };
+  var macros = ArcRuntime.getMacroTargetsForProfile(profile, target);
+  return {
+    maintenance: calorieRec.maintenance,
+    target: target,
+    macros: macros,
+    calorieRec: calorieRec,
+    physiology: physio
+  };
 }
 
 function setObAnimatedNumber(id, num) {
@@ -15351,6 +15315,27 @@ function arcWireApplicationDom() {
   if (arcPendingPostOAuthGen) {
     arcCompletePendingOAuthOnboardingFlow();
   }
+
+  arcNotifySplashBootReady();
+}
+
+function arcNotifySplashBootReady() {
+  arcSplashBootReady = true;
+  arcScheduleSplashDismiss();
+}
+
+function arcScheduleSplashDismiss() {
+  if (!arcSplashBootReady || !arcSplashSequenceStarted) return;
+  var splash = document.getElementById('splash-screen');
+  if (!splash || splash.classList.contains('is-exiting') || !splash.classList.contains('is-ready')) return;
+  if (arcSplashDismissTimer) return;
+  var minBrandMs = 720;
+  var elapsed = arcSplashBrandShownAt ? Date.now() - arcSplashBrandShownAt : 0;
+  var delay = Math.max(0, minBrandMs - elapsed);
+  arcSplashDismissTimer = setTimeout(function() {
+    arcSplashDismissTimer = null;
+    arcDismissSplash();
+  }, delay);
 }
 
 function arcBootAfterConfig() {
@@ -15376,6 +15361,7 @@ function arcBootAfterConfig() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+  arcRunSplashSequence();
   if (typeof ArcRuntime !== 'undefined' && ArcRuntime.bootstrap) {
     ArcRuntime.bootstrap().then(arcBootAfterConfig).catch(arcBootAfterConfig);
   } else {
@@ -15420,51 +15406,21 @@ function arcDismissSplash() {
 
 function arcRunSplashSequence() {
   var splash = document.getElementById('splash-screen');
-  var art = document.getElementById('splash-art');
   if (!splash) {
     arcActivatePostSplashScreen();
     return;
   }
   document.documentElement.classList.add('splash-active');
   document.body.classList.add('splash-active');
-  var sequenceStarted = false;
-  var holdMs = 2400;
-  var maxWaitMs = 4200;
-  function markLoaded() {
-    splash.classList.add('is-loaded');
-  }
-  function startSequence() {
-    if (sequenceStarted) return;
-    sequenceStarted = true;
-    setTimeout(function() {
-      splash.classList.add('is-ready');
-      setTimeout(arcDismissSplash, holdMs);
-    }, 220);
-  }
-  if (art && art.complete && art.naturalWidth > 0) {
-    markLoaded();
-    startSequence();
-  } else if (art) {
-    art.addEventListener('load', function() {
-      markLoaded();
-      startSequence();
-    }, { once: true });
-    art.addEventListener('error', function() {
-      splash.classList.add('is-loaded');
-      startSequence();
-    }, { once: true });
-    setTimeout(function() {
-      if (!sequenceStarted) {
-        splash.classList.add('is-loaded');
-        startSequence();
-      }
-    }, maxWaitMs);
-  } else {
-    startSequence();
-  }
+  if (arcSplashSequenceStarted) return;
+  arcSplashSequenceStarted = true;
+  splash.classList.add('is-loaded');
+  setTimeout(function() {
+    splash.classList.add('is-ready');
+    arcSplashBrandShownAt = Date.now();
+    arcScheduleSplashDismiss();
+  }, 220);
 }
-
-window.addEventListener('load', arcRunSplashSequence);
 </script>
 </body>
 </html>
