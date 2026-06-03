@@ -144,16 +144,26 @@
 
   function computeCalorieRecommendation(maintenance, goalRaw, paceLbWeek, opts) {
     opts = opts || {};
-    var draftProfile = {
-      goal: goalRaw,
-      weightGoalPaceLbWeek: paceLbWeek,
-      muscleGainEmphasis: opts.muscleEmphasis,
-      weight: (typeof UP !== 'undefined' && UP) ? UP.weight : 170,
-      heightInches: (typeof UP !== 'undefined' && UP) ? UP.heightInches : 68,
-      age: (typeof UP !== 'undefined' && UP) ? UP.age : 30,
-      sex: (typeof UP !== 'undefined' && UP) ? UP.sex : 'Male',
-      activity: (typeof UP !== 'undefined' && UP) ? UP.activity : 'Moderate'
-    };
+    var draftProfile;
+    if (opts.profile && typeof opts.profile === 'object') {
+      draftProfile = opts.profile;
+      if (goalRaw != null) draftProfile = Object.assign({}, draftProfile, { goal: goalRaw });
+      if (paceLbWeek != null) draftProfile = Object.assign({}, draftProfile, { weightGoalPaceLbWeek: paceLbWeek });
+      if (opts.muscleEmphasis !== undefined) {
+        draftProfile = Object.assign({}, draftProfile, { muscleGainEmphasis: opts.muscleEmphasis });
+      }
+    } else {
+      draftProfile = {
+        goal: goalRaw,
+        weightGoalPaceLbWeek: paceLbWeek,
+        muscleGainEmphasis: opts.muscleEmphasis,
+        weight: (typeof UP !== 'undefined' && UP) ? UP.weight : 170,
+        heightInches: (typeof UP !== 'undefined' && UP) ? UP.heightInches : 68,
+        age: (typeof UP !== 'undefined' && UP) ? UP.age : 30,
+        sex: (typeof UP !== 'undefined' && UP) ? UP.sex : 'Male',
+        activity: (typeof UP !== 'undefined' && UP) ? UP.activity : 'Moderate'
+      };
+    }
     var targets = generateNutritionTargets(draftProfile);
     var m = targets.maintenanceCalories;
     var target = targets.targetCalories;
