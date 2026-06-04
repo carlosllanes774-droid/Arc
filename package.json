@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "npm run test:arc-engine && npm run test:arc-api && npm run test:arc-nutrition-pipeline && npm run test:arc-frontend-contract && npm run test:week-library-targets && npm run test:spoonacular-week-library && npm run test:spoonacular-edamam-pipeline && npm run test:week-library-source && npm run test:frontend-week-render && npm run test:week-generation-dispatch && npm run test:week-meal-assignment-validation",
+    "test": "npm run test:arc-engine && npm run test:arc-api && npm run test:arc-nutrition-pipeline && npm run test:arc-frontend-contract && npm run test:week-library-targets && npm run test:spoonacular-week-library && npm run test:spoonacular-edamam-pipeline && npm run test:week-library-source && npm run test:frontend-week-render && npm run test:week-generation-dispatch && npm run test:week-meal-assignment-validation && npm run test:arc-food-log-signals",
     "test:week-library-targets": "node --test tests/week-library-targets.test.js",
     "test:week-library-source": "node --test tests/week-library-source.test.js",
     "test:spoonacular-week-library": "node --test tests/spoonacular-week-library.test.js",
@@ -16,7 +16,8 @@
     "test:arc-frontend-contract": "node --test tests/arc-frontend-contract.test.js",
     "test:arc-engine": "node --test tests/arc-engine.test.js",
     "test:arc-api": "node --test tests/arc-api.test.js",
-    "test:frontend-week-render": "node --test tests/frontend-week-render.test.js"
+    "test:frontend-week-render": "node --test tests/frontend-week-render.test.js",
+    "test:arc-food-log-signals": "node --test tests/arc-food-log-signals.test.js"
   },
   "keywords": [],
   "author": "",
