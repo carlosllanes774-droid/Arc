@@ -689,6 +689,7 @@ app.post("/api/spoonacular/search", async (req, res) => {
     const body = req.body || {};
     const params = new URLSearchParams({ apiKey: key, number: String(body.number || 6), addRecipeInformation: "true" });
     if (body.query) params.set("query", body.query);
+    if (body.cuisine) params.set("cuisine", String(body.cuisine));
     if (body.diet) params.set("diet", body.diet);
     if (body.maxCalories) params.set("maxCalories", String(body.maxCalories));
     if (body.minProtein) params.set("minProtein", String(body.minProtein));
