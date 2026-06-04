@@ -3171,9 +3171,10 @@ function groupLibraryRecipesByCategory(libraryRecipes) {
   return grouped;
 }
 
-/** Resolve week planner mode from UP.arcWeekPlanner ('legacy' | 'scg'). */
+/** Resolve week planner mode from UP.arcWeekPlanner ('legacy' | 'scg'). Build My Week defaults to SCG. */
 function resolveArcWeekPlannerMode() {
-  return (UP && UP.arcWeekPlanner === 'scg') ? 'scg' : 'legacy';
+  if (UP && UP.arcWeekPlanner === 'legacy') return 'legacy';
+  return 'scg';
 }
 
 function arcPlannerIngredientKey(name) {
@@ -3222,7 +3223,7 @@ function arcScgAvgOverlapWithWeek(candidate, weekRecipeIds, recipeById) {
   return n ? sum / n : 0;
 }
 
-function arcScgScoreCandidate(candidate, ctx) {
+function arcScgCoreScore(candidate, ctx) {
   var wOverlap = 3.0;
   var wStyle = 2.0;
   var wRepeat = 10.0;
@@ -3236,16 +3237,19 @@ function arcScgScoreCandidate(candidate, ctx) {
   score += wStyle * arcScgBlockBonus(candidate.id, ctx.slotHistory, ctx.blockLen);
   if (ctx.pool.length > 1 && yesterdayId === candidate.id) score -= wRepeat;
   if (usage >= servings) score -= wCap * (usage - servings + 1);
-
-  if (ctx.adaptiveCtx && typeof ArcAdaptiveRecipeScoring !== 'undefined') {
-    var adaptive = ArcAdaptiveRecipeScoring.scoreRecipeAdaptiveBehavior(candidate, ctx.adaptiveCtx, {
-      slot: ctx.slot,
-      slotCat: ctx.slotCat
-    });
-    score += adaptive.delta;
-  }
-
   return score;
+}
+
+function arcScgAdaptiveDelta(candidate, ctx) {
+  if (!ctx.adaptiveCtx || typeof ArcAdaptiveRecipeScoring === 'undefined') return 0;
+  return ArcAdaptiveRecipeScoring.scoreRecipeAdaptiveBehavior(candidate, ctx.adaptiveCtx, {
+    slot: ctx.slot,
+    slotCat: ctx.slotCat
+  }).delta;
+}
+
+function arcScgScoreCandidate(candidate, ctx) {
+  return arcScgCoreScore(candidate, ctx) + arcScgAdaptiveDelta(candidate, ctx);
 }
 
 function arcScgSortPool(pool, ctx) {
@@ -3260,7 +3264,8 @@ function arcScgSortPool(pool, ctx) {
 }
 
 /** Legacy pool rotation — original deterministic week assignment. */
-function buildLegacyWeekMealPlan(libraryRecipes, slots) {
+function buildLegacyWeekMealPlan(libraryRecipes, slots, opts) {
+  opts = opts || {};
   var byCat = groupLibraryRecipesByCategory(libraryRecipes);
   var plan = {};
   var sampleDay = null;
@@ -3279,17 +3284,19 @@ function buildLegacyWeekMealPlan(libraryRecipes, slots) {
     if (d === 0) sampleDay = plan[day];
   }
 
-  console.log('[ARC PIPELINE] Deterministic week assignment built', {
-    librarySize: libraryRecipes.length,
-    slots: slots,
-    byCategory: {
-      Breakfast: byCat.Breakfast.length,
-      Lunch: byCat.Lunch.length,
-      Dinner: byCat.Dinner.length,
-      Snack: byCat.Snack.length
-    },
-    sampleMonday: sampleDay
-  });
+  if (!opts.quiet) {
+    console.log('[ARC PIPELINE] Deterministic week assignment built', {
+      librarySize: libraryRecipes.length,
+      slots: slots,
+      byCategory: {
+        Breakfast: byCat.Breakfast.length,
+        Lunch: byCat.Lunch.length,
+        Dinner: byCat.Dinner.length,
+        Snack: byCat.Snack.length
+      },
+      sampleMonday: sampleDay
+    });
+  }
 
   return { recipes: libraryRecipes, plan: plan };
 }
@@ -3309,6 +3316,7 @@ function buildScgWeekMealPlan(libraryRecipes, slots, intent) {
   var usageCounts = {};
   var weekRecipeIds = {};
   var slotTrace = {};
+  var assignmentTelemetry = [];
   var adaptiveCtx = (typeof ArcAdaptiveRecipeScoring !== 'undefined')
     ? ArcAdaptiveRecipeScoring.buildAdaptiveScoringContext(UP, {
       mealJournal: mealJournal,
@@ -3343,6 +3351,17 @@ function buildScgWeekMealPlan(libraryRecipes, slots, intent) {
       };
       var ranked = arcScgSortPool(pool, ctx);
       var pick = ranked[0].recipe;
+      var pickCore = arcScgCoreScore(pick, ctx);
+      var pickAdaptiveDelta = arcScgAdaptiveDelta(pick, ctx);
+      assignmentTelemetry.push({
+        day: day,
+        slot: slot,
+        slotCat: cat,
+        recipeId: pick.id,
+        coreScore: Math.round(pickCore * 1000) / 1000,
+        adaptiveDelta: Math.round(pickAdaptiveDelta * 1000) / 1000,
+        totalScore: Math.round(ranked[0].score * 1000) / 1000
+      });
       if (adaptiveCtx && typeof ArcAdaptiveRecipeScoring !== 'undefined') {
         var pickAdaptive = ArcAdaptiveRecipeScoring.scoreRecipeAdaptiveBehavior(pick, adaptiveCtx, {
           slot: slot,
@@ -3382,7 +3401,10 @@ function buildScgWeekMealPlan(libraryRecipes, slots, intent) {
       usageCounts: usageCounts,
       slotAssignments: slotTrace,
       blockLen: blockLen,
-      style: intent.style || 'balanced'
+      style: intent.style || 'balanced',
+      weekVibe: intent.weekVibe || null,
+      focus: intent.focus || null,
+      assignmentTelemetry: assignmentTelemetry
     }
   };
 }
@@ -3483,19 +3505,78 @@ function logArcWeekPlannerTrace(mode, payload, libraryRecipes, slots, intent) {
   if (mode === 'scg' && payload._scgTrace) {
     trace.scgStyle = payload._scgTrace.style;
     trace.scgBlockLen = payload._scgTrace.blockLen;
+    trace.weekVibe = payload._scgTrace.weekVibe;
+    trace.focus = payload._scgTrace.focus;
   }
   console.log('[ARC WEEK PLANNER]', trace);
+}
+
+/** Shadow compare: legacy rotation vs SCG+adaptive picks (telemetry only). */
+function logArcWeekPlannerAssignmentCompare(legacyPayload, scgPayload, libraryRecipes, slots, intent) {
+  if (!legacyPayload || !legacyPayload.plan || !scgPayload || !scgPayload.plan) return;
+  intent = intent || {};
+  var telemetry = (scgPayload._scgTrace && scgPayload._scgTrace.assignmentTelemetry) || [];
+  var slotDiffs = [];
+  var adaptiveSum = 0;
+  var adaptiveNonZero = 0;
+  var adaptiveMax = 0;
+
+  for (var si = 0; si < slots.length; si++) {
+    var slot = slots[si];
+    for (var d = 0; d < DAYS.length; d++) {
+      var day = DAYS[d];
+      var legacyId = legacyPayload.plan[day] && legacyPayload.plan[day][slot];
+      var scgId = scgPayload.plan[day] && scgPayload.plan[day][slot];
+      if (legacyId !== scgId) {
+        slotDiffs.push({ day: day, slot: slot, legacyRecipeId: legacyId, scgRecipeId: scgId });
+      }
+    }
+  }
+
+  for (var ti = 0; ti < telemetry.length; ti++) {
+    var t = telemetry[ti];
+    var ad = Math.abs(t.adaptiveDelta || 0);
+    adaptiveSum += ad;
+    if (ad > 0.001) adaptiveNonZero++;
+    if (ad > adaptiveMax) adaptiveMax = ad;
+  }
+
+  var totalSlots = telemetry.length || (DAYS.length * slots.length);
+  console.log('[ARC WEEK PLANNER COMPARE]', {
+    weekVibe: intent.weekVibe || null,
+    focus: intent.focus || null,
+    style: intent.style || null,
+    librarySize: libraryRecipes.length,
+    plannerApplied: 'scg',
+    legacyShadow: true,
+    slotsTotal: totalSlots,
+    slotsChangedFromLegacy: slotDiffs.length,
+    slotChanges: slotDiffs.slice(0, 12),
+    adaptive: {
+      picksWithNonZeroDelta: adaptiveNonZero,
+      avgAbsDelta: totalSlots ? Math.round((adaptiveSum / totalSlots) * 1000) / 1000 : 0,
+      maxAbsDelta: Math.round(adaptiveMax * 1000) / 1000,
+      samplePicks: telemetry.filter(function (p) { return Math.abs(p.adaptiveDelta || 0) > 0.001; }).slice(0, 8)
+    },
+    scgOverlap: arcWeekPlannerComputeOverlapSummary(libraryRecipes, scgPayload.plan, slots),
+    legacyOverlap: arcWeekPlannerComputeOverlapSummary(libraryRecipes, legacyPayload.plan, slots)
+  });
 }
 
 /** Build a full week plan from the AI library — dispatches legacy vs SCG via UP.arcWeekPlanner. */
 function buildDeterministicWeekMealPlan(libraryRecipes, slots, intent) {
   if (!Array.isArray(libraryRecipes) || !libraryRecipes.length) return null;
+  intent = intent || {};
   slots = Array.isArray(slots) && slots.length ? slots : getSlots();
   var mode = resolveArcWeekPlannerMode();
+  var legacyShadow = buildLegacyWeekMealPlan(libraryRecipes, slots, { quiet: true });
   var payload = (mode === 'scg')
     ? buildScgWeekMealPlan(libraryRecipes, slots, intent)
     : buildLegacyWeekMealPlan(libraryRecipes, slots);
   logArcWeekPlannerTrace(mode, payload, libraryRecipes, slots, intent);
+  if (mode === 'scg' && payload) {
+    logArcWeekPlannerAssignmentCompare(legacyShadow, payload, libraryRecipes, slots, intent);
+  }
   if (payload && payload._scgTrace) {
     var clean = { recipes: payload.recipes, plan: payload.plan };
     return clean;
@@ -4092,7 +4173,7 @@ function applyArcBrandingToStaticDom() {
 }
 
 // ── Application state ─────────────────────────────────────────
-var UP          = {region:'us-midwest', budget:'Moderate', weeklyBudget:'Moderate', arcWeekPlanner:'legacy'};
+var UP          = {region:'us-midwest', budget:'Moderate', weeklyBudget:'Moderate', arcWeekPlanner:'scg'};
 var recipes     = [];
 var mealPlan    = {};
 var selectedRecipes = new Set();
@@ -10613,7 +10694,7 @@ function applySafeProfileDefaults(p) {
 
   if (p.dislikes == null) p.dislikes = '';
 
-  if (p.arcWeekPlanner !== 'scg') p.arcWeekPlanner = 'legacy';
+  if (p.arcWeekPlanner !== 'legacy') p.arcWeekPlanner = 'scg';
 
   var w0 = parseFloat(p.weight);
   if (!isFinite(w0) || !(w0 > 0)) p.weight = 170;
@@ -10723,7 +10804,7 @@ function resetAppAfterInvalidStoredProfile(errors) {
   useCustom = false;
   locDetected = false;
   recipeGenId++;
-  UP = { region: 'us-midwest', budget: 'Moderate', weeklyBudget: 'Moderate', arcWeekPlanner: 'legacy', mealFeedback: {}, arcAdaptive: defaultArcAdaptive(), arcBehavior: defaultArcBehaviorProfile(), weeklyReviewHistory: [], chaosRecovery: defaultChaosRecovery() };
+  UP = { region: 'us-midwest', budget: 'Moderate', weeklyBudget: 'Moderate', arcWeekPlanner: 'scg', mealFeedback: {}, arcAdaptive: defaultArcAdaptive(), arcBehavior: defaultArcBehaviorProfile(), weeklyReviewHistory: [], chaosRecovery: defaultChaosRecovery() };
   obStep = 1;
   var msg = (errors && errors[0]) ? errors[0] : 'Saved profile was incomplete or damaged. Please run onboarding again.';
   showToast(msg);
@@ -11219,7 +11300,7 @@ function generateWeeklyPlan(intent) {
     }
     console.log('[ARC PIPELINE] Week recipe library ready', { count: weekLibraryRecipes.length });
     setGenPhase('balancing');
-    UP.arcWeekPlanner = (intent && intent.weekVibe === 'variety') ? 'scg' : 'legacy';
+    UP.arcWeekPlanner = 'scg';
     var weekPayload = buildDeterministicWeekMealPlan(weekLibraryRecipes, built.slots, intent);
     if (!weekPayload) {
       failWeekGeneration('Could not build week assignment from library', raw);
