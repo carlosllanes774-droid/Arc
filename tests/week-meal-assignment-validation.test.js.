@@ -19,7 +19,7 @@ function sliceIndexLines(start, end) {
 function loadSandbox(extraUp = {}) {
   const sandbox = {
     console,
-    UP: { meals: '4', arcWeekPlanner: 'legacy', ...extraUp },
+    UP: { meals: '4', arcWeekPlanner: 'scg', ...extraUp },
     DAYS: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
     SLOT_SETS: {
       '3': ['Breakfast', 'Lunch', 'Dinner'],
@@ -27,15 +27,17 @@ function loadSandbox(extraUp = {}) {
     },
     BW_STYLE_META: {
       balanced: { repeats: 2 },
+      fresh: { repeats: 1 },
       prep: { repeats: 4 }
     },
+    mealJournal: {},
     getSlots() {
       return this.SLOT_SETS[String(this.UP.meals || '3')] || this.SLOT_SETS['3'];
     }
   };
   const ctx = vm.createContext(sandbox);
   const chunks = [
-    sliceIndexLines(3167, 3482)
+    sliceIndexLines(3146, 3586)
   ];
   for (const src of chunks) vm.runInContext(src, ctx);
   return sandbox;
@@ -61,16 +63,17 @@ describe('deterministic week meal assignment', () => {
     assert.equal(out.plan.Mon.Dinner, 3);
   });
 
-  test('rotates within category when multiple recipes exist', () => {
+  test('SCG varies breakfast across days when multiple recipes exist', () => {
     const sandbox = loadSandbox();
     const lib = library.concat([
-      { id: 5, name: 'Greek Yogurt Bowl', cat: 'Breakfast' }
+      { id: 5, name: 'Greek Yogurt Bowl', cat: 'Breakfast', ing: ['Yogurt', 'Berries'], servings: 4 }
     ]);
     const slots = ['Breakfast', 'Lunch', 'Dinner'];
-    const out = sandbox.buildDeterministicWeekMealPlan(lib, slots);
-    assert.equal(out.plan.Mon.Breakfast, 1);
-    assert.equal(out.plan.Tue.Breakfast, 5);
-    assert.equal(out.plan.Wed.Breakfast, 1);
+    const out = sandbox.buildDeterministicWeekMealPlan(lib, slots, { style: 'balanced', focus: 'balanced' });
+    const breakfastIds = new Set(
+      sandbox.DAYS.map((day) => out.plan[day].Breakfast)
+    );
+    assert.ok(breakfastIds.size >= 2, 'SCG should use more than one breakfast across the week');
   });
 
   test('fills all seven days with library recipe ids only', () => {
@@ -86,12 +89,25 @@ describe('deterministic week meal assignment', () => {
     }
   });
 
-  test('defaults to legacy planner when UP.arcWeekPlanner unset', () => {
+  test('defaults to SCG planner when UP.arcWeekPlanner unset', () => {
     const sandbox = loadSandbox({ arcWeekPlanner: undefined });
     const slots = ['Breakfast', 'Lunch', 'Dinner'];
     const out = sandbox.buildDeterministicWeekMealPlan(library, slots);
+    assert.equal(sandbox.resolveArcWeekPlannerMode(), 'scg');
+    assert.ok(out.plan.Mon.Breakfast);
+  });
+
+  test('legacy planner only when UP.arcWeekPlanner is legacy', () => {
+    const sandbox = loadSandbox({ arcWeekPlanner: 'legacy' });
+    const slots = ['Breakfast', 'Lunch', 'Dinner'];
+    const lib = library.concat([
+      { id: 5, name: 'Greek Yogurt Bowl', cat: 'Breakfast' }
+    ]);
+    const out = sandbox.buildDeterministicWeekMealPlan(lib, slots);
     assert.equal(sandbox.resolveArcWeekPlannerMode(), 'legacy');
     assert.equal(out.plan.Mon.Breakfast, 1);
+    assert.equal(out.plan.Tue.Breakfast, 5);
+    assert.equal(out.plan.Wed.Breakfast, 1);
   });
 
   test('SCG planner returns same output shape and valid library ids', () => {
@@ -116,6 +132,38 @@ describe('deterministic week meal assignment', () => {
         assert.ok(allowedIds.has(out.plan[day][slot]), `${day} ${slot}`);
       }
     }
+  });
+
+  test('bestResults and noTime vibes use SCG with vibe style/focus', () => {
+    const sandbox = loadSandbox();
+    const lib = [
+      { id: 1, name: 'Eggs', cat: 'Breakfast', ing: ['Eggs'], servings: 4 },
+      { id: 2, name: 'Salad', cat: 'Lunch', ing: ['Greens'], servings: 4 },
+      { id: 3, name: 'Steak', cat: 'Dinner', ing: ['Beef'], servings: 4 }
+    ];
+    const slots = ['Breakfast', 'Lunch', 'Dinner'];
+    const best = sandbox.buildScgWeekMealPlan(lib, slots, {
+      weekVibe: 'bestResults',
+      style: 'balanced',
+      focus: 'highProtein'
+    });
+    const quick = sandbox.buildScgWeekMealPlan(lib, slots, {
+      weekVibe: 'noTime',
+      style: 'balanced',
+      focus: 'quick'
+    });
+    const variety = sandbox.buildScgWeekMealPlan(lib, slots, {
+      weekVibe: 'variety',
+      style: 'fresh',
+      focus: 'balanced'
+    });
+    assert.equal(best._scgTrace.focus, 'highProtein');
+    assert.equal(best._scgTrace.style, 'balanced');
+    assert.equal(quick._scgTrace.focus, 'quick');
+    assert.equal(variety._scgTrace.style, 'fresh');
+    assert.equal(variety._scgTrace.blockLen, 1);
+    assert.ok(Array.isArray(best._scgTrace.assignmentTelemetry));
+    assert.equal(best._scgTrace.assignmentTelemetry.length, 21);
   });
 
   test('groups recipes by normalized category', () => {
