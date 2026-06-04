@@ -3134,7 +3134,10 @@ function buildWeekRecipeLibraryPrompt(intent) {
       focus: intent.focus || null,
       maxReadyTime: intent.focus === 'quick' ? 25 : undefined,
       preferProtein: intent.focus === 'highProtein'
-    }
+    },
+    cuisines: intent.cuisines && intent.cuisines.length
+      ? intent.cuisines.slice(0, 3)
+      : []
   };
 }
 
@@ -11067,6 +11070,12 @@ function dispatchWeekLibraryFetch(built, applyLibraryFn) {
   logWeekLibrarySource('spoonacular');
   built.restrictions = (UP && UP.restrictions) ? UP.restrictions.slice() : [];
   built.dislikes = (UP && UP.dislikes != null) ? String(UP.dislikes) : '';
+  if (!built.cuisines || !built.cuisines.length) {
+    var wpCuis = UP && UP.weeklyPlanDraft && Array.isArray(UP.weeklyPlanDraft.cuisines)
+      ? UP.weeklyPlanDraft.cuisines
+      : (UP && UP.weeklyPlan && Array.isArray(UP.weeklyPlan.cuisines) ? UP.weeklyPlan.cuisines : []);
+    built.cuisines = wpCuis.length ? wpCuis.slice(0, 3) : [];
+  }
 
   ArcSpoonacularWeekLibrary.fetchSpoonacularWeekLibrary(built, function (err, payload, meta) {
     if (err && err.type === 'validation_failed') {
