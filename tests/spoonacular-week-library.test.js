@@ -599,3 +599,158 @@ describe('fetchSpoonacularWeekLibrary validation gate', () => {
     }));
   });
 });
+
+describe('cuisine preference enforcement', () => {
+  const Lib = loadLib();
+
+  test('resolveCuisineContext maps Mexican and Italian to Spoonacular slugs', () => {
+    var ctx = Lib.resolveCuisineContext(['Mexican', 'Italian']);
+    assert.equal(ctx.active, true);
+    assert.equal(ctx.selected.length, 2);
+    assert.equal(ctx.selected[0], 'Mexican');
+    assert.equal(ctx.selected[1], 'Italian');
+    assert.equal(ctx.slugs.length, 2);
+    assert.equal(ctx.slugs[0], 'mexican');
+    assert.equal(ctx.slugs[1], 'italian');
+    assert.equal(ctx.cuisineParam, 'mexican,italian');
+    assert.ok(ctx.queryTerms.indexOf('mexican') >= 0);
+    assert.ok(ctx.queryTerms.indexOf('italian') >= 0);
+  });
+
+  test('buildCategorySearchQuery prefixes cuisine into search terms', () => {
+    var ctx = Lib.resolveCuisineContext(['Mexican', 'Italian']);
+    var lunchQ = Lib.buildCategorySearchQuery('Lunch', ctx, 0);
+    var dinnerQ = Lib.buildCategorySearchQuery('Dinner', ctx, 1);
+    assert.ok(/mexican/i.test(lunchQ));
+    assert.ok(/lunch/i.test(lunchQ));
+    assert.ok(/italian/i.test(dinnerQ));
+    assert.ok(/dinner/i.test(dinnerQ));
+  });
+
+  test('selectOverlapOptimizedLibrary prefers cuisine-matched recipes', () => {
+    var ctx = Lib.resolveCuisineContext(['Italian']);
+    var italian = {
+      spoonacularId: 1,
+      cat: 'Dinner',
+      name: 'Classic Pasta Marinara',
+      ing: ['pasta', 'marinara', 'parmesan'],
+      cal: 500,
+      p: 30
+    };
+    var generic = {
+      spoonacularId: 2,
+      cat: 'Dinner',
+      name: 'Plain Chicken Bowl',
+      ing: ['chicken', 'rice'],
+      cal: 500,
+      p: 30
+    };
+    var pick = Lib.selectOverlapOptimizedLibrary(
+      [generic, italian],
+      { Dinner: 1 },
+      { preferOverlap: false, cuisineCtx: ctx }
+    );
+    assert.equal(pick.recipes[0].spoonacularId, 1);
+  });
+
+  test('fetchSpoonacularWeekLibrary sends cuisine param and biased queries for Mexican + Italian', async () => {
+    var searchBodies = [];
+    const Lib = loadLib({
+      fetch: function (url, opts) {
+        const path = String(url);
+        if (path.indexOf('/bulk') >= 0) {
+          var body = JSON.parse(opts.body);
+          var recipes = (body.ids || []).map(function (id) {
+            var n = Number(id);
+            if (n === 10) {
+              return {
+                id: 10,
+                title: 'Chicken Taco Bowl',
+                calories: 420,
+                protein: 32,
+                carbs: 36,
+                fat: 11,
+                tags: ['mexican'],
+                extendedIngredients: [{ name: 'tortilla', original: '2 tortillas' }, { name: 'salsa', original: '1/2 cup salsa' }],
+                instructions: ['Assemble']
+              };
+            }
+            if (n === 20) {
+              return {
+                id: 20,
+                title: 'Pasta Primavera',
+                calories: 430,
+                protein: 28,
+                carbs: 40,
+                fat: 12,
+                tags: ['italian'],
+                extendedIngredients: [{ name: 'pasta', original: '8 oz pasta' }, { name: 'parmesan', original: '2 tbsp parmesan' }],
+                instructions: ['Boil']
+              };
+            }
+            return {
+              id: id,
+              title: 'Generic Bowl ' + id,
+              calories: 400,
+              protein: 25,
+              carbs: 35,
+              fat: 10,
+              extendedIngredients: [{ name: 'chicken', original: '8 oz chicken' }],
+              instructions: ['Cook']
+            };
+          });
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ recipes: recipes })
+          });
+        }
+        searchBodies.push(JSON.parse(opts.body));
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({
+            results: [
+              { id: 10, recipeId: 10 },
+              { id: 20, recipeId: 20 },
+              { id: 30, recipeId: 30 },
+              { id: 40, recipeId: 40 },
+              { id: 50, recipeId: 50 },
+              { id: 60, recipeId: 60 }
+            ]
+          })
+        });
+      }
+    });
+
+    const result = await new Promise((resolve) => {
+      Lib.fetchSpoonacularWeekLibrary(
+        {
+          libraryTargets: { perCat: { Lunch: 4 }, total: 4, profile: 'standard', varietyMode: false },
+          mt: { perSlot: { cal: 500, p: 40 }, Lunch: { cal: 500, p: 40 } },
+          restrictions: [],
+          cuisines: ['Mexican', 'Italian']
+        },
+        function (err, payload) {
+          resolve({ err, payload, searchBodies });
+        }
+      );
+    });
+
+    assert.equal(result.err, null);
+    assert.ok(result.searchBodies.length >= 1);
+    assert.ok(result.searchBodies.every(function (b) {
+      return b.cuisine === 'mexican,italian';
+    }));
+    assert.ok(result.searchBodies.some(function (b) {
+      return /mexican|italian/i.test(String(b.query || ''));
+    }));
+
+    var dist = Lib.summarizeCuisineDistribution(result.payload.recipes, Lib.resolveCuisineContext(['Mexican', 'Italian']));
+    assert.ok(dist.matchedCount >= 1, 'expected at least one cuisine-matched recipe in final library');
+    assert.ok(
+      dist.counts.mexican >= 1 || dist.counts.italian >= 1,
+      'final library should include mexican or italian signals: ' + JSON.stringify(dist.counts)
+    );
+  });
+});
