@@ -16,6 +16,185 @@
     Snack: 'healthy snack'
   };
 
+  var CUISINE_LOG_PREFIX = '[ARC CUISINE]';
+
+  /** UI chip label → Spoonacular complexSearch cuisine slug (null = query-only). */
+  var CUISINE_TO_SPOONACULAR = {
+    Mediterranean: 'mediterranean',
+    Italian: 'italian',
+    Asian: null,
+    Japanese: 'japanese',
+    Mexican: 'mexican',
+    American: 'american',
+    Indian: 'indian',
+    'Middle Eastern': 'middle eastern'
+  };
+
+  /** Keywords used to detect cuisine on mapped recipes (tags, title, ingredients). */
+  var CUISINE_DETECT_KEYWORDS = {
+    mediterranean: ['mediterranean', 'greek', 'hummus', 'feta', 'tzatziki', 'olive'],
+    italian: ['italian', 'pasta', 'marinara', 'parmesan', 'risotto', 'pesto', 'lasagna', 'carbonara'],
+    asian: ['asian', 'stir fry', 'soy sauce', 'sesame', 'teriyaki', 'ramen', 'pho'],
+    japanese: ['japanese', 'miso', 'sushi', 'teriyaki', 'udon', 'soba', 'ramen'],
+    mexican: ['mexican', 'taco', 'tortilla', 'salsa', 'cilantro', 'enchilada', 'burrito', 'queso', 'chipotle'],
+    american: ['american', 'burger', 'bbq', 'barbecue', 'mac and cheese', 'cornbread'],
+    indian: ['indian', 'curry', 'masala', 'tikka', 'naan', 'dal', 'chutney'],
+    'middle eastern': ['middle eastern', 'shawarma', 'falafel', 'tahini', 'harissa', 'pita']
+  };
+
+  function normalizeSelectedCuisines(raw) {
+    if (!Array.isArray(raw)) return [];
+    var out = [];
+    var seen = {};
+    for (var i = 0; i < raw.length; i++) {
+      var label = String(raw[i] || '').trim();
+      if (!label || seen[label]) continue;
+      seen[label] = true;
+      out.push(label);
+      if (out.length >= 3) break;
+    }
+    return out;
+  }
+
+  /**
+   * @param {string[]} selectedLabels
+   * @returns {{ active: boolean, selected: string[], slugs: string[], cuisineParam: string|null, queryTerms: string[] }}
+   */
+  function resolveCuisineContext(selectedLabels) {
+    var selected = normalizeSelectedCuisines(selectedLabels);
+    if (!selected.length) {
+      return { active: false, selected: [], slugs: [], cuisineParam: null, queryTerms: [] };
+    }
+    var slugs = [];
+    var queryTerms = [];
+    var slugSeen = {};
+    selected.forEach(function (label) {
+      var slug = CUISINE_TO_SPOONACULAR.hasOwnProperty(label)
+        ? CUISINE_TO_SPOONACULAR[label]
+        : String(label).trim().toLowerCase();
+      var queryTerm = slug || String(label).trim().toLowerCase();
+      if (queryTerm && queryTerms.indexOf(queryTerm) < 0) queryTerms.push(queryTerm);
+      if (slug && !slugSeen[slug]) {
+        slugSeen[slug] = true;
+        slugs.push(slug);
+      }
+    });
+    return {
+      active: true,
+      selected: selected,
+      slugs: slugs,
+      cuisineParam: slugs.length ? slugs.join(',') : null,
+      queryTerms: queryTerms
+    };
+  }
+
+  function detectRecipeCuisines(recipe) {
+    var hits = {};
+    var parts = [String(recipe && recipe.name || '')];
+    (recipe && recipe.tags || []).forEach(function (t) { parts.push(String(t || '')); });
+    (recipe && recipe.ing || []).forEach(function (n) { parts.push(String(n || '')); });
+    var blob = parts.join(' ').toLowerCase();
+
+    Object.keys(CUISINE_DETECT_KEYWORDS).forEach(function (slug) {
+      var terms = CUISINE_DETECT_KEYWORDS[slug];
+      for (var i = 0; i < terms.length; i++) {
+        if (textContainsTerm(blob, terms[i])) {
+          hits[slug] = true;
+          break;
+        }
+      }
+    });
+    return Object.keys(hits);
+  }
+
+  /**
+   * @param {object} recipe
+   * @param {{ slugs?: string[], queryTerms?: string[] }} cuisineCtx
+   * @returns {number} 0–1 match strength
+   */
+  function recipeCuisineMatchScore(recipe, cuisineCtx) {
+    if (!cuisineCtx || !cuisineCtx.active) return 0;
+    var detected = detectRecipeCuisines(recipe);
+    if (!detected.length) return 0;
+
+    var want = (cuisineCtx.slugs || []).concat(cuisineCtx.queryTerms || []);
+    var wantNorm = {};
+    want.forEach(function (w) {
+      var key = String(w || '').trim().toLowerCase();
+      if (key) wantNorm[key] = true;
+    });
+
+    var matched = 0;
+    for (var i = 0; i < detected.length; i++) {
+      if (wantNorm[detected[i]]) matched += 1;
+    }
+    if (!matched && cuisineCtx.queryTerms && cuisineCtx.queryTerms.length) {
+      var blob = recipeSearchableText(recipe);
+      for (var qi = 0; qi < cuisineCtx.queryTerms.length; qi++) {
+        if (textContainsTerm(blob, cuisineCtx.queryTerms[qi])) {
+          matched += 1;
+          break;
+        }
+      }
+    }
+    if (!matched) return 0;
+    return Math.min(1, matched / Math.max(1, (cuisineCtx.slugs || []).length || cuisineCtx.queryTerms.length));
+  }
+
+  function buildCategorySearchQuery(cat, cuisineCtx, catIndex) {
+    var base = CATEGORY_QUERIES[cat] || String(cat).toLowerCase();
+    if (!cuisineCtx || !cuisineCtx.active) return base;
+
+    var terms = cuisineCtx.queryTerms.length ? cuisineCtx.queryTerms : cuisineCtx.slugs;
+    if (!terms.length) return base;
+
+    var idx = catIndex != null && isFinite(catIndex) ? Math.abs(parseInt(catIndex, 10) || 0) : 0;
+    var primary = terms[idx % terms.length];
+    return primary + ' ' + base;
+  }
+
+  function summarizeCuisineDistribution(recipes, cuisineCtx) {
+    var counts = {};
+    (recipes || []).forEach(function (r) {
+      var detected = detectRecipeCuisines(r);
+      if (!detected.length) {
+        counts.unknown = (counts.unknown || 0) + 1;
+        return;
+      }
+      detected.forEach(function (slug) {
+        counts[slug] = (counts[slug] || 0) + 1;
+      });
+    });
+    var matched = 0;
+    (recipes || []).forEach(function (r) {
+      if (recipeCuisineMatchScore(r, cuisineCtx) > 0) matched += 1;
+    });
+    return { counts: counts, matchedCount: matched, total: (recipes || []).length };
+  }
+
+  function logArcCuisineTelemetry(phase, cuisineCtx, stats) {
+    if (!cuisineCtx || !cuisineCtx.active) {
+      console.log(CUISINE_LOG_PREFIX, phase, {
+        selectedCuisines: [],
+        candidateCuisines: {},
+        finalCuisines: {},
+        note: 'no_cuisine_preference'
+      });
+      return;
+    }
+    console.log(CUISINE_LOG_PREFIX, phase, {
+      selectedCuisines: cuisineCtx.selected,
+      spoonacularCuisineParam: cuisineCtx.cuisineParam,
+      searchQueryTerms: cuisineCtx.queryTerms,
+      candidateCuisines: stats && stats.candidate ? stats.candidate.counts : {},
+      candidateMatched: stats && stats.candidate ? stats.candidate.matchedCount : 0,
+      candidateTotal: stats && stats.candidate ? stats.candidate.total : 0,
+      finalCuisines: stats && stats.final ? stats.final.counts : {},
+      finalMatched: stats && stats.final ? stats.final.matchedCount : 0,
+      finalTotal: stats && stats.final ? stats.final.total : 0
+    });
+  }
+
   function apiUrl(path) {
     if (global.ArcRuntime && global.ArcRuntime.apiUrl) return global.ArcRuntime.apiUrl(path);
     if (typeof global.arcApiPath === 'function') return global.arcApiPath(path);
@@ -579,9 +758,11 @@
     var isBudget = !!opts.isBudget;
     var varietyMode = !!opts.varietyMode;
     var preferProtein = !!opts.preferProtein;
+    var cuisineCtx = opts.cuisineCtx && opts.cuisineCtx.active ? opts.cuisineCtx : null;
     var wOverlap = preferOverlap ? 6.0 : 2.0;
     var wSimplicity = isBudget ? 2.5 : 0.75;
     var wProtein = preferProtein ? 4.0 : 0;
+    var wCuisine = cuisineCtx ? 5.5 : 0;
     var grouped = groupRecipesByCategory(recipes);
     var selected = [];
     var pickedIds = {};
@@ -619,6 +800,10 @@
             }
           }
 
+          if (wCuisine > 0) {
+            score += wCuisine * recipeCuisineMatchScore(candidate, cuisineCtx);
+          }
+
           if (score > bestScore || (score === bestScore && best && candidate.spoonacularId < best.spoonacularId)) {
             best = candidate;
             bestScore = score;
@@ -650,6 +835,7 @@
   function searchCandidatePoolSize(perCatCount, built) {
     var base = Math.max(parseInt(perCatCount, 10) || 2, 2);
     var mult = 3;
+    if (built && built.cuisineCtx && built.cuisineCtx.active) mult = Math.max(mult, 4);
     if (built && built.libraryTargets && built.libraryTargets.varietyMode) mult = 4;
     if (built && built.dislikes && String(built.dislikes).trim()) mult = Math.max(mult, 5);
     if (built && Array.isArray(built.restrictions) && built.restrictions.filter(function (r) {
@@ -684,16 +870,22 @@
     var mt = built && built.mt ? built.mt : {};
     var perSlot = mt.perSlot || { cal: 600 };
     var weekMode = built && built.weekMode ? built.weekMode : {};
+    var cuisineCtx = built && built.cuisineCtx ? built.cuisineCtx : null;
     var diet = mapRestrictionsToSpoonacularDiet(built && built.restrictions);
     var poolSize = searchCandidatePoolSize(count, built);
     if (searchOpts.poolBoost) poolSize = Math.min(poolSize + searchOpts.poolBoost, 24);
 
+    var catIndex = searchOpts.catIndex != null ? searchOpts.catIndex : 0;
     var body = {
-      query: CATEGORY_QUERIES[cat] || String(cat).toLowerCase(),
+      query: buildCategorySearchQuery(cat, cuisineCtx, catIndex),
       diet: diet,
       maxCalories: Math.round((Number(perSlot.cal) || 600) * 1.15),
       number: poolSize
     };
+
+    if (cuisineCtx && cuisineCtx.active && cuisineCtx.cuisineParam) {
+      body.cuisine = cuisineCtx.cuisineParam;
+    }
 
     if (weekMode.maxReadyTime) body.maxReadyTime = weekMode.maxReadyTime;
     if (weekMode.preferProtein) {
@@ -701,7 +893,7 @@
       var minP = Math.round((Number(slotTarget.p) || 30) * 0.85);
       if (minP > 0) body.minProtein = minP;
       if (cat === 'Breakfast' || cat === 'Lunch' || cat === 'Dinner') {
-        body.query = (CATEGORY_QUERIES[cat] || cat) + ' high protein';
+        body.query = buildCategorySearchQuery(cat, cuisineCtx, catIndex) + ' high protein';
       }
     }
 
@@ -743,6 +935,10 @@
    * @returns {Promise<{ selection: object, mappedCount: number, attempts: number }>}
    */
   function buildCompliantWeekLibrary(built, perCat) {
+    built.cuisineCtx = resolveCuisineContext(built.cuisines);
+    if (built.cuisineCtx.active) {
+      logArcCuisineTelemetry('search_start', built.cuisineCtx, null);
+    }
     var restrictions = built.restrictions || [];
     var dislikeTerms = parseDislikes(built.dislikes);
     var targets = built.libraryTargets || {};
@@ -750,7 +946,8 @@
       isBudget: targets.profile === 'budget',
       preferOverlap: !targets.varietyMode,
       varietyMode: !!targets.varietyMode,
-      preferProtein: !!(built.weekMode && built.weekMode.preferProtein)
+      preferProtein: !!(built.weekMode && built.weekMode.preferProtein),
+      cuisineCtx: built.cuisineCtx
     };
     var triedIds = {};
     var compliantPool = [];
@@ -774,16 +971,21 @@
         catsToSearch = Object.keys(short).length ? Object.keys(short) : catsToSearch;
       }
 
-      return Promise.all(catsToSearch.map(function (cat) {
+      return Promise.all(catsToSearch.map(function (cat, catIdx) {
         return searchCategory(cat, perCat[cat], built, {
           excludeIds: triedIds,
-          poolBoost: poolBoost
+          poolBoost: poolBoost,
+          catIndex: catIdx
         });
       })).then(function (groups) {
         var merged = mergeCategoryMaps(groups);
         markTried(merged.ids);
         if (!merged.ids.length) {
-          return { selection: selectOverlapOptimizedLibrary(compliantPool, perCat, selectionOpts), mappedCount: compliantPool.length };
+          return {
+            selection: selectOverlapOptimizedLibrary(compliantPool, perCat, selectionOpts),
+            mappedCount: compliantPool.length,
+            compliantPool: compliantPool.slice()
+          };
         }
         return postJson('/api/spoonacular/bulk', {
           ids: merged.ids,
@@ -800,7 +1002,11 @@
           var filtered = filterCompliantCandidates(mapped.recipes, restrictions, dislikeTerms);
           compliantPool = mergeRecipesBySpoonacularId(compliantPool, filtered.compliant);
           var selection = selectOverlapOptimizedLibrary(compliantPool, perCat, selectionOpts);
-          return { selection: selection, mappedCount: compliantPool.length };
+          return {
+            selection: selection,
+            mappedCount: compliantPool.length,
+            compliantPool: compliantPool.slice()
+          };
         });
       });
     }
@@ -810,10 +1016,20 @@
         var short = perCatSelectionShortfall(result.selection.recipes, perCat);
         var shortKeys = Object.keys(short);
         if (!shortKeys.length && result.selection.recipes.length >= MIN_RECIPES) {
-          return { selection: result.selection, mappedCount: result.mappedCount, attempts: attempts };
+          return {
+            selection: result.selection,
+            mappedCount: result.mappedCount,
+            compliantPool: compliantPool.slice(),
+            attempts: attempts
+          };
         }
         if (attempts >= maxAttempts) {
-          return { selection: result.selection, mappedCount: result.mappedCount, attempts: attempts };
+          return {
+            selection: result.selection,
+            mappedCount: result.mappedCount,
+            compliantPool: compliantPool.slice(),
+            attempts: attempts
+          };
         }
         console.log('[ARC DISLIKES FILTER]', {
           action: 'fetch_replacements',
@@ -857,17 +1073,23 @@
         var restrictions = built.restrictions || [];
         var dislikeTerms = parseDislikes(built.dislikes);
 
+        var cuisineCtx = resolveCuisineContext(built.cuisines);
+        built.cuisineCtx = cuisineCtx;
+
         var finalFiltered = filterCompliantCandidates(selection.recipes, restrictions, dislikeTerms);
-        if (finalFiltered.rejectedDislikes.length || finalFiltered.rejectedDiet.length) {
-          selection = selectOverlapOptimizedLibrary(finalFiltered.compliant, perCat, {
-            isBudget: targets.profile === 'budget',
-            preferOverlap: !targets.varietyMode,
-            varietyMode: !!targets.varietyMode,
-            preferProtein: !!(built.weekMode && built.weekMode.preferProtein)
-          });
-        } else {
-          selection.recipes = finalFiltered.compliant;
-        }
+        var selectionOptsFinal = {
+          isBudget: targets.profile === 'budget',
+          preferOverlap: !targets.varietyMode,
+          varietyMode: !!targets.varietyMode,
+          preferProtein: !!(built.weekMode && built.weekMode.preferProtein),
+          cuisineCtx: cuisineCtx
+        };
+        selection = selectOverlapOptimizedLibrary(finalFiltered.compliant, perCat, selectionOptsFinal);
+
+        logArcCuisineTelemetry('week_library_complete', cuisineCtx, {
+          candidate: summarizeCuisineDistribution(result.compliantPool || finalFiltered.compliant, cuisineCtx),
+          final: summarizeCuisineDistribution(selection.recipes, cuisineCtx)
+        });
 
         var preOverlap = computeLibraryOverlapSummary(selection.recipes);
         var preUnique = uniqueIngredientCount(selection.recipes);
@@ -928,6 +1150,12 @@
     recipeMatchesDislike: recipeMatchesDislike,
     validateRecipeDietCompliance: validateRecipeDietCompliance,
     filterCompliantCandidates: filterCompliantCandidates,
-    fetchSpoonacularWeekLibrary: fetchSpoonacularWeekLibrary
+    fetchSpoonacularWeekLibrary: fetchSpoonacularWeekLibrary,
+    normalizeSelectedCuisines: normalizeSelectedCuisines,
+    resolveCuisineContext: resolveCuisineContext,
+    buildCategorySearchQuery: buildCategorySearchQuery,
+    detectRecipeCuisines: detectRecipeCuisines,
+    recipeCuisineMatchScore: recipeCuisineMatchScore,
+    summarizeCuisineDistribution: summarizeCuisineDistribution
   };
 })(typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : this);
