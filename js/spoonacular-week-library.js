@@ -412,12 +412,50 @@
   }
 
   /**
+   * V2 nutrition hard rejects — calories, protein, quality, budget (not meal-target matching).
+   * @param {object[]} recipes
+   * @param {{ budget?: string }} [opts]
+   * @returns {{ compliant: object[], rejectedNutrition: object[] }}
+   */
+  function filterNutritionHardRejects(recipes, opts) {
+    opts = opts || {};
+    var V2 = global.ArcNutritionV2;
+    if (!V2 || !V2.shouldHardRejectRecipe) {
+      return { compliant: recipes || [], rejectedNutrition: [] };
+    }
+    var compliant = [];
+    var rejectedNutrition = [];
+    (recipes || []).forEach(function (r) {
+      var check = V2.shouldHardRejectRecipe(r, { cat: r.cat, budget: opts.budget });
+      if (check.rejected) {
+        rejectedNutrition.push({
+          spoonacularId: r.spoonacularId,
+          name: r.name,
+          reasons: check.reasons
+        });
+        return;
+      }
+      compliant.push(r);
+    });
+    if (rejectedNutrition.length) {
+      console.log('[ARC NUTRITION V2]', {
+        rejected: rejectedNutrition.length,
+        kept: compliant.length,
+        samples: rejectedNutrition.slice(0, 5)
+      });
+    }
+    return { compliant: compliant, rejectedNutrition: rejectedNutrition };
+  }
+
+  /**
    * @param {object[]} recipes
    * @param {string[]} [restrictions]
    * @param {string[]} [dislikeTerms]
-   * @returns {{ compliant: object[], rejectedDislikes: object[], rejectedDiet: object[] }}
+   * @param {{ budget?: string }} [opts]
+   * @returns {{ compliant: object[], rejectedDislikes: object[], rejectedDiet: object[], rejectedNutrition: object[] }}
    */
-  function filterCompliantCandidates(recipes, restrictions, dislikeTerms) {
+  function filterCompliantCandidates(recipes, restrictions, dislikeTerms, opts) {
+    opts = opts || {};
     var compliant = [];
     var rejectedDislikes = [];
     var rejectedDiet = [];
@@ -444,6 +482,9 @@
       compliant.push(r);
     });
 
+    var nutritionFiltered = filterNutritionHardRejects(compliant, opts);
+    compliant = nutritionFiltered.compliant;
+
     if (rejectedDislikes.length) {
       console.log('[ARC DISLIKES FILTER]', {
         rejected: rejectedDislikes.length,
@@ -460,7 +501,7 @@
       });
     }
 
-    return { compliant: compliant, rejectedDislikes: rejectedDislikes, rejectedDiet: rejectedDiet };
+    return { compliant: compliant, rejectedDislikes: rejectedDislikes, rejectedDiet: rejectedDiet, rejectedNutrition: nutritionFiltered.rejectedNutrition };
   }
 
   function perCatSelectionShortfall(selected, perCat) {
@@ -999,7 +1040,9 @@
             merged.categoryBySpoonacularId,
             built.mt
           );
-          var filtered = filterCompliantCandidates(mapped.recipes, restrictions, dislikeTerms);
+          var filtered = filterCompliantCandidates(mapped.recipes, restrictions, dislikeTerms, {
+            budget: built.budget || (built.libraryTargets && built.libraryTargets.budgetProfile)
+          });
           compliantPool = mergeRecipesBySpoonacularId(compliantPool, filtered.compliant);
           var selection = selectOverlapOptimizedLibrary(compliantPool, perCat, selectionOpts);
           return {
@@ -1076,7 +1119,9 @@
         var cuisineCtx = resolveCuisineContext(built.cuisines);
         built.cuisineCtx = cuisineCtx;
 
-        var finalFiltered = filterCompliantCandidates(selection.recipes, restrictions, dislikeTerms);
+        var finalFiltered = filterCompliantCandidates(selection.recipes, restrictions, dislikeTerms, {
+          budget: built.budget || (built.libraryTargets && built.libraryTargets.budgetProfile)
+        });
         var selectionOptsFinal = {
           isBudget: targets.profile === 'budget',
           preferOverlap: !targets.varietyMode,
@@ -1149,6 +1194,7 @@
     parseDislikes: parseDislikes,
     recipeMatchesDislike: recipeMatchesDislike,
     validateRecipeDietCompliance: validateRecipeDietCompliance,
+    filterNutritionHardRejects: filterNutritionHardRejects,
     filterCompliantCandidates: filterCompliantCandidates,
     fetchSpoonacularWeekLibrary: fetchSpoonacularWeekLibrary,
     normalizeSelectedCuisines: normalizeSelectedCuisines,
