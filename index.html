@@ -2804,6 +2804,7 @@ button:not(:disabled):active,
 <script src="js/arc-api/edamamHelpers.js"></script>
 <script src="js/arc-api/providers/providerBase.js"></script>
 <script src="js/arc-api/arcValidationService.js"></script>
+<script src="js/arc-nutrition-v2.js"></script>
 <script src="js/arc-api/arcRecipeCurationService.js"></script>
 <script src="js/arc-engine/arcNutritionEngine.js"></script>
 <script src="js/arc-engine/arcGoalEngine.js"></script>
@@ -7540,33 +7541,19 @@ function computeMealNutritionTargets(calT, macros, slots) {
 }
 
 function formatNutritionPromptBlock(mt, calT, macros) {
-  var r = Math.round;
-  var lines = [];
-  lines.push('=== CALORIE & MACRO ALIGNMENT (STRICT — applies to every recipe\'s cal, p, c, f fields) ===');
-  lines.push('The user plans ' + mt.n + ' eating occasion(s) per day: ' + mt.slots.join(', ') + '.');
-  lines.push('');
-  lines.push('TOTAL DAILY TARGETS — the sum of calories and macros across ALL slots in ONE day must approximate these (within ~5–10% combined):');
-  lines.push('- Calories: ' + calT + ' kcal');
-  lines.push('- Protein: ' + macros.protein + ' g');
-  lines.push('- Carbs: ' + macros.carbs + ' g');
-  lines.push('- Fat: ' + macros.fat + ' g');
-  lines.push('');
-  lines.push('EQUAL SPLIT ACROSS EACH DAILY SLOT (' + mt.n + ' slot(s)): each eating occasion should target approximately:');
-  lines.push('- Calories: ' + r(mt.perSlot.cal) + ' kcal');
-  lines.push('- Protein: ' + r(mt.perSlot.p) + ' g');
-  lines.push('- Carbs: ' + r(mt.perSlot.c) + ' g');
-  lines.push('- Fat: ' + r(mt.perSlot.f) + ' g');
-  lines.push('(Each slot target may vary by ±10% when balancing flavors; the DAY TOTAL must still converge to the daily targets above.)');
-  lines.push('');
-  lines.push('PER RECIPE CATEGORY — set each recipe\'s cal, p, c, f within ±10% of the targets below for its "cat" field:');
-  lines.push('- Breakfast recipes: ~' + r(mt.Breakfast.cal) + ' kcal, Protein ~' + r(mt.Breakfast.p) + ' g, Carbs ~' + r(mt.Breakfast.c) + ' g, Fat ~' + r(mt.Breakfast.f) + ' g');
-  lines.push('- Lunch recipes: ~' + r(mt.Lunch.cal) + ' kcal, Protein ~' + r(mt.Lunch.p) + ' g, Carbs ~' + r(mt.Lunch.c) + ' g, Fat ~' + r(mt.Lunch.f) + ' g');
-  lines.push('- Dinner recipes: ~' + r(mt.Dinner.cal) + ' kcal, Protein ~' + r(mt.Dinner.p) + ' g, Carbs ~' + r(mt.Dinner.c) + ' g, Fat ~' + r(mt.Dinner.f) + ' g');
-  lines.push('- Snack recipes: ~' + r(mt.Snack.cal) + ' kcal, Protein ~' + r(mt.Snack.p) + ' g, Carbs ~' + r(mt.Snack.c) + ' g, Fat ~' + r(mt.Snack.f) + ' g');
-  lines.push('');
-  lines.push('If the user\'s meal pattern does not include a slot for a category (e.g. no snack slots), use the fallback targets shown for that category so portion sizes stay realistic.');
-  lines.push('SANITY CHECK: 7 Breakfast + 7 Lunch + 7 Dinner + 7 Snack are a WEEK of options — each single recipe still MUST hit its category target so any day built from these recipes can hit daily totals.');
-  return lines.join('\n') + '\n';
+  if (typeof ArcNutritionV2 !== 'undefined' && ArcNutritionV2.formatNutritionPromptBlock) {
+    var weightKg = Number(UP && UP.weightKg);
+    if (!isFinite(weightKg) || weightKg <= 0) {
+      var weightLb = Number(UP && UP.weightLb);
+      if (!isFinite(weightLb) && UP && UP.weight) {
+        weightLb = parseFloat(String(UP.weight).replace(/[^0-9.]/g, ''));
+      }
+      if (isFinite(weightLb) && weightLb > 0) weightKg = weightLb * 0.453592;
+    }
+    var enriched = Object.assign({}, macros || {}, { weightKg: weightKg });
+    return ArcNutritionV2.formatNutritionPromptBlock(mt, calT, enriched, UP && UP.goal);
+  }
+  return '';
 }
 
 function buildArcGoalNutritionDirective() {
@@ -11718,7 +11705,7 @@ function generateRecipes() {
                'Start your response with [ and end with ]. ' +
                'Every recipe object MUST have all required fields including a "steps" array of 5-8 objects shaped like {"phase":"Prep"|"Cook"|"Serve","instruction":"string"}. ' +
                'Every recipe MUST comply 100% with the user MANDATORY DIETARY COMPLIANCE section—never relax it. ' +
-               'Every recipe\'s cal, p, c, f MUST align with the CALORIE & MACRO ALIGNMENT section within ±10% for its category. ' +
+               'Follow ARC NUTRITION V2: optimize for daily goal achievement and adherence—not exact per-meal calorie matching. ' +
                'CRITICAL: The macros (cal, p, c, f) MUST mathematically align with the ingredients provided. 1g of protein = 4 cal, 1g carb = 4 cal, 1g fat = 9 cal. Do not hallucinate macros that contradict the ingredient list.';
 
   var userMsg = 'Generate exactly 28 personalized recipes for this user profile:\n';
@@ -11747,7 +11734,7 @@ function generateRecipes() {
   userMsg += '1. Each recipe MUST fully satisfy the MANDATORY DIETARY COMPLIANCE section and all dislikes—ingredient names, amounts, and steps must comply; if a concept would break a rule, pick a different compliant recipe.\n';
   userMsg += '2. "steps" MUST be 5-8 objects with "phase" exactly Prep, Cook, or Serve and a specific "instruction" (not vague placeholders like "cook until done")\n';
   userMsg += '3. ingQty must list EVERY item in ing with realistic amounts\n';
-  userMsg += '4. cal, p, c, f must be accurate for the listed ingredients AND MUST fall within ±10% of that recipe category\'s targets in the CALORIE & MACRO ALIGNMENT section\n';
+  userMsg += '4. cal, p, c, f must be accurate for the listed ingredients; meal sizes may vary (250–1800 kcal) as long as daily totals stay coherent and main meals have ≥15g protein\n';
   userMsg += '5. price is USD cost per serving — match the budget: ' + budgetNote + '\n';
   userMsg += '6. Vary proteins, cooking methods, and cuisines across all 28 recipes (only using compliant ingredients)\n';
   userMsg += '7. difficulty must be one of: Easy, Medium, Hard\n';
@@ -12569,11 +12556,18 @@ function scoreRecipeForSlot(r, slotCat, focus, mealTargets) {
   // Hard penalty for wrong category (still keep in the "all" list)
   if (r.cat !== slotCat) score -= 50;
 
-  // Slot-target alignment (calories) — closer = better
+  // Tier 3 soft alignment — never reject for calorie mismatch
   var target = mealTargets && mealTargets[slotCat] ? mealTargets[slotCat] : null;
   if (target && target.cal > 0) {
-    var diffPct = Math.abs(r.cal - target.cal) / target.cal;
-    score += Math.max(0, 30 - diffPct * 60);
+    if (typeof ArcNutritionV2 !== 'undefined' && ArcNutritionV2.mealCalorieSoftScore) {
+      score += ArcNutritionV2.mealCalorieSoftScore(r.cal, target.cal);
+    } else {
+      var diffPct = Math.abs(r.cal - target.cal) / target.cal;
+      score += Math.max(0, 8 - diffPct * 16);
+    }
+  }
+  if (typeof ArcNutritionV2 !== 'undefined' && ArcNutritionV2.scoreRecipeQuality) {
+    score += ArcNutritionV2.scoreRecipeQuality(r, { goal: UP && UP.goal, budget: UP && UP.budget }).total * 0.08;
   }
 
   // Focus bias
@@ -12782,7 +12776,7 @@ function refreshSingleSlotMeal() {
   userMsg += buildMandatoryDietPrompt(UP.restrictions, UP.dislikes);
   userMsg += buildFeedbackPromptBlock();
   userMsg += buildAdaptiveBehaviorPromptBlock();
-  userMsg += 'Macro targets for THIS meal (stay within ±10%): ~' + Math.round(t.cal) + ' kcal, protein ~' + Math.round(t.p) + ' g, carbs ~' + Math.round(t.c) + ' g, fat ~' + Math.round(t.f) + ' g.\n';
+  userMsg += 'Reference targets for THIS meal (flexible — daily balance matters more): ~' + Math.round(t.cal) + ' kcal, protein ~' + Math.round(t.p) + ' g, carbs ~' + Math.round(t.c) + ' g, fat ~' + Math.round(t.f) + ' g. Hard bounds: 250–1800 kcal; main meals ≥15g protein.\n';
   userMsg += 'Daily context: ' + calT + ' kcal / day across ' + mt.n + ' eating occasions.\n';
   userMsg += buildArcGoalNutritionDirective();
   userMsg += 'price is USD per serving for budget ' + budgetNote + '.\n';
