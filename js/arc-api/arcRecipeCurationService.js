@@ -94,89 +94,46 @@
     options = options || {};
     var ctx = mealContext(options.profile, options.scenario);
     var signals = deriveSignals(recipe);
+    var V2 = global.ArcNutritionV2;
+
+    if (V2 && V2.shouldHardRejectRecipe && V2.scoreRecipeQuality) {
+      var hard = V2.shouldHardRejectRecipe(recipe, {
+        cat: recipe.cat,
+        budgetTier: ctx.budgetTier,
+        budget: options.profile && options.profile.budget
+      });
+      var quality = V2.scoreRecipeQuality(recipe, {
+        goal: ctx.goal,
+        budgetTier: ctx.budgetTier,
+        budget: options.profile && options.profile.budget,
+        busy: ctx.busy,
+        preferenceMatch: options.preferenceMatch,
+        ingredientOverlap: options.ingredientOverlap
+      });
+
+      return {
+        recipeQualityScore: quality.total,
+        categoryScores: quality.breakdown,
+        rejected: hard.rejected,
+        rejectionReasons: hard.reasons,
+        signals: signals
+      };
+    }
+
     var nutrition = recipe && recipe.nutrition ? recipe.nutrition : recipe || {};
     var calories = toNumber(nutrition.calories || recipe.calories || recipe.cal);
     var protein = toNumber(nutrition.protein || recipe.protein || recipe.p);
-    var carbs = toNumber(nutrition.carbs || recipe.carbs || recipe.c);
-    var fat = toNumber(nutrition.fat || recipe.fat || recipe.f);
-    var prepTime = toNumber(recipe.prepTime || recipe.readyInMinutes || 0);
-    var ingredientCount = signals.ingredients.length || (Array.isArray(recipe.ingredients) ? recipe.ingredients.length : 0);
-    var isSnack = containsAny(signals.blob, SNACK_KEYWORDS);
-
-    var macroCalories = protein * 4 + carbs * 4 + fat * 9;
-    var denom = calories > 0 ? calories : (macroCalories > 0 ? macroCalories : 1);
-    var fatPct = (fat * 9) / denom;
-    var proteinPct = (protein * 4) / denom;
-    var carbPct = (carbs * 4) / denom;
-
-    var proteinDensity = clamp((protein / Math.max(1, calories)) * 160, 0, 25);
-    if (protein < 20 && !isSnack) proteinDensity = proteinDensity * 0.35;
-
-    var macroBalance = 15;
-    if (fatPct > 0.55) macroBalance -= 9;
-    if (proteinPct < 0.15) macroBalance -= 5;
-    if (carbPct < 0.05 || carbPct > 0.75) macroBalance -= 3;
-    if (calories > 1200 || calories < 180) macroBalance -= 3;
-    if (Math.abs(macroCalories - calories) / Math.max(1, calories) > 0.25) macroBalance -= 4;
-    macroBalance = clamp(macroBalance, 0, 15);
-
-    var wholeFoodHits = countMatches(signals.ingredients, WHOLE_FOOD_KEYWORDS);
     var processedHits = countMatches(signals.ingredients, PROCESSED_KEYWORDS);
-    var ingredientQuality = clamp(8 + wholeFoodHits * 2 - processedHits * 2, 0, 12);
-
-    var athleteUtility = 10;
-    if (ctx.athlete && carbs < 30) athleteUtility -= 3;
-    if (ctx.goal.indexOf('fat') !== -1 && ingredientCount < 3) athleteUtility -= 2;
-    if (countMatches(signals.ingredients, SATIETY_KEYWORDS) < 2) athleteUtility -= 2;
-    athleteUtility = clamp(athleteUtility, 0, 12);
-
-    var prepSimplicity = 10;
-    if (ingredientCount > 14) prepSimplicity -= 4;
-    if (ingredientCount < 4) prepSimplicity -= 2;
-    if (prepTime > 45) prepSimplicity -= 4;
-    if (ctx.busy && prepTime > 30) prepSimplicity -= 2;
-    if (ctx.travel && ingredientCount > 8) prepSimplicity -= 3;
-    prepSimplicity = clamp(prepSimplicity, 0, 10);
-
-    var flavorHits = countMatches(signals.ingredients, FLAVOR_KEYWORDS);
-    var tasteProxy = clamp(5 + flavorHits * 1.4 + (signals.textures.length ? 1 : 0), 0, 10);
-
-    var budgetEfficiency = 8;
-    if (protein >= 30) budgetEfficiency += 2;
-    if (countMatches(signals.ingredients, ['salmon', 'steak', 'asparagus']) > 1 && ctx.budgetTier === 'budget') budgetEfficiency -= 3;
-    if (ingredientCount > 12) budgetEfficiency -= 2;
-    budgetEfficiency = clamp(budgetEfficiency, 0, 10);
-
-    var repeatability = 6;
-    if (containsAny(signals.blob, ['loaded', 'deep fried', 'triple', 'extreme'])) repeatability -= 3;
-    if (ingredientCount >= 5 && ingredientCount <= 11) repeatability += 2;
-    repeatability = clamp(repeatability, 0, 8);
-
-    var total = Math.round(clamp(
-      proteinDensity + macroBalance + ingredientQuality + athleteUtility + prepSimplicity + tasteProxy + budgetEfficiency + repeatability,
-      1,
-      100
-    ));
-
+    var isSnack = containsAny(signals.blob, SNACK_KEYWORDS);
     var rejectionReasons = [];
-    if (protein < 20 && !isSnack) rejectionReasons.push('protein_below_threshold');
-    if (fatPct > 0.62) rejectionReasons.push('excessive_fat_ratio');
-    if (calories > 1400 || calories < 150) rejectionReasons.push('unrealistic_calories');
-    if (processedHits >= 3) rejectionReasons.push('ultra_processed_ingredients');
-    if (total < 45) rejectionReasons.push('low_quality_score');
+    if (calories > 0 && calories < 250) rejectionReasons.push('calories_below_minimum');
+    if (calories > 1800) rejectionReasons.push('calories_above_maximum');
+    if (protein > 0 && protein < 15 && !isSnack) rejectionReasons.push('protein_below_main_meal_minimum');
+    if (processedHits >= 4) rejectionReasons.push('poor_ingredient_quality');
 
     return {
-      recipeQualityScore: total,
-      categoryScores: {
-        proteinDensity: Math.round(proteinDensity),
-        macroBalance: Math.round(macroBalance),
-        ingredientQuality: Math.round(ingredientQuality),
-        athleteUtility: Math.round(athleteUtility),
-        prepSimplicity: Math.round(prepSimplicity),
-        tasteProxy: Math.round(tasteProxy),
-        budgetEfficiency: Math.round(budgetEfficiency),
-        repeatability: Math.round(repeatability)
-      },
+      recipeQualityScore: 50,
+      categoryScores: {},
       rejected: rejectionReasons.length > 0,
       rejectionReasons: rejectionReasons,
       signals: signals
