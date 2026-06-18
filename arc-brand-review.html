@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Arc Brand Review — Visual concepts only</title>
+<meta name="robots" content="noindex,nofollow"/>
+<script>
+(function () {
+  var href = location.href.split('#')[0].split('?')[0];
+  var base = href.slice(0, href.lastIndexOf('/') + 1);
+  var el = document.createElement('base');
+  el.href = base;
+  document.head.appendChild(el);
+})();
+</script>
+<link rel="preload" as="image" href="assets/branding/splash.png"/>
+<link rel="preload" as="image" href="assets/branding/arc-mark.png"/>
+<link rel="preload" as="image" href="assets/branding/Arc_Logo.png"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --arc-primary:#e35a36;
+  --arc-primary-dark:#c94a2b;
+  --asset-splash:url('assets/branding/splash.png');
+  --asset-mark:url('assets/branding/arc-mark.png');
+  --asset-logo:url('assets/branding/Arc_Logo.png');
+  --r-md:14px;
+  --tap-min:44px;
+  --fs-body:15px;
+  --shadow-primary:0 4px 14px rgba(227,90,54,.18);
+  --review-bg:#0e0d0c;
+  --review-border:rgba(255,255,255,.08);
+  --review-muted:rgba(255,255,255,.45);
+}
+html{background:var(--review-bg)}
+body.arc-brand-review-page{
+  min-height:100vh;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  font-size:15px;line-height:1.5;color:rgba(255,255,255,.88);
+  -webkit-font-smoothing:antialiased;
+}
+.review-banner{
+  position:sticky;top:0;z-index:100;padding:14px 20px;
+  background:rgba(14,13,12,.92);border-bottom:1px solid var(--review-border);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+}
+.review-banner h1{font-size:17px;font-weight:650;letter-spacing:-.02em;color:#fff;margin-bottom:4px}
+.review-banner p{font-size:13px;color:var(--review-muted);max-width:52rem}
+.review-banner code{font-size:12px;color:rgba(244,160,130,.9);background:rgba(255,255,255,.06);padding:2px 6px;border-radius:6px}
+.review-main{max-width:1200px;margin:0 auto;padding:28px 20px 80px}
+.review-block{margin-bottom:56px}
+.review-block-h{margin-bottom:6px;font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(227,90,54,.85)}
+.review-block h2{font-family:Georgia,serif;font-size:clamp(22px,4vw,28px);font-weight:600;letter-spacing:-.03em;color:#fff;margin-bottom:8px}
+.review-block-desc{font-size:14px;color:var(--review-muted);max-width:40rem;margin-bottom:22px;line-height:1.55}
+.review-compare{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+@media (max-width:900px){.review-compare{grid-template-columns:1fr}}
+.review-col{display:flex;flex-direction:column;align-items:center;gap:10px}
+.review-col-label{
+  font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:rgba(255,255,255,.38);align-self:flex-start;width:100%;max-width:430px;padding-left:4px;
+}
+.review-col-label--concept{color:rgba(244,180,150,.75)}
+.review-device{
+  width:100%;max-width:430px;height:780px;border-radius:22px;overflow:hidden;position:relative;
+  box-shadow:0 24px 64px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.06);
+  background:#000;flex-shrink:0;
+}
+.review-device-inner{position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden}
+
+/* Real arc-mark asset (white on black PNG — screen blend on dark UI) */
+.review-mark-img{
+  display:block;object-fit:contain;object-position:center;
+  mix-blend-mode:screen;
+  pointer-events:none;user-select:none;
+}
+
+/* ═══ MOCKUP 1 — SPLASH CURRENT ═══ */
+.review-splash-current{background:#000}
+.review-splash-current .rs-ambience{
+  position:absolute;inset:-12%;pointer-events:none;
+  background:
+    radial-gradient(88% 62% at 50% 38%,rgba(227,90,54,.22) 0%,transparent 58%),
+    radial-gradient(52% 42% at 12% 82%,rgba(244,160,130,.1) 0%,transparent 55%),
+    radial-gradient(48% 38% at 92% 18%,rgba(255,255,255,.05) 0%,transparent 52%);
+}
+.review-splash-current .rs-glow{
+  position:absolute;left:50%;top:44%;z-index:1;
+  width:min(72%,320px);height:min(36%,240px);
+  transform:translate(-50%,-50%);border-radius:50%;
+  background:radial-gradient(ellipse at center,rgba(227,90,54,.28) 0%,rgba(227,90,54,.06) 45%,transparent 72%);
+  filter:blur(22px);opacity:.75;
+}
+.review-splash-current .rs-art{
+  position:absolute;inset:0;z-index:2;width:100%;height:100%;
+  object-fit:cover;object-position:center;
+}
+.review-splash-current .rs-vignette{
+  position:absolute;inset:0;z-index:3;pointer-events:none;
+  background:
+    linear-gradient(180deg,rgba(0,0,0,.42) 0%,transparent 22%,transparent 78%,rgba(0,0,0,.5) 100%),
+    radial-gradient(120% 90% at 50% 50%,transparent 42%,rgba(0,0,0,.35) 100%);
+}
+
+/* ═══ MOCKUP 1 — SPLASH V2 CONCEPT ═══ */
+.review-splash-v2{background:#000}
+.review-splash-v2 .rs2-curtain{
+  position:absolute;inset:0;z-index:0;background:#000;
+  opacity:0;pointer-events:none;
+}
+.review-splash-v2 .rs2-ambience{
+  position:absolute;inset:-14%;z-index:1;pointer-events:none;
+  background:
+    radial-gradient(90% 64% at 50% 36%,rgba(227,90,54,.26) 0%,transparent 56%),
+    radial-gradient(55% 44% at 8% 88%,rgba(244,160,130,.12) 0%,transparent 52%),
+    radial-gradient(50% 40% at 94% 12%,rgba(255,255,255,.06) 0%,transparent 50%);
+  animation:rs2Ambience 20s ease-in-out infinite alternate;
+}
+@keyframes rs2Ambience{to{transform:translate(-1%,.6%) scale(1.02)}}
+.review-splash-v2 .rs2-glow{
+  position:absolute;left:50%;top:42%;z-index:2;
+  width:min(78%,340px);height:min(40%,260px);
+  transform:translate(-50%,-50%);border-radius:50%;
+  background:radial-gradient(ellipse at center,rgba(227,90,54,.32) 0%,rgba(227,90,54,.08) 42%,transparent 70%);
+  filter:blur(26px);opacity:.85;
+  animation:rs2Glow 6s ease-in-out infinite alternate;
+}
+@keyframes rs2Glow{50%{opacity:1;transform:translate(-50%,-50%) scale(1.05)}}
+.review-splash-v2 .rs2-art{
+  position:absolute;inset:0;z-index:3;width:100%;height:100%;
+  object-fit:cover;object-position:center;
+  filter:brightness(1.02) contrast(1.02);
+  animation:rs2ArtIn 1.2s cubic-bezier(0.22,1,0.36,1) both;
+}
+@keyframes rs2ArtIn{from{opacity:0;transform:scale(1.04)}to{opacity:1;transform:scale(1)}}
+.review-splash-v2 .rs2-vignette{
+  position:absolute;inset:0;z-index:4;pointer-events:none;
+  background:radial-gradient(115% 88% at 50% 48%,transparent 38%,rgba(0,0,0,.28) 100%);
+}
+.review-splash-v2 .rs2-fade-top,
+.review-splash-v2 .rs2-fade-bottom{position:absolute;left:0;right:0;z-index:5;pointer-events:none}
+.review-splash-v2 .rs2-fade-top{top:0;height:30%;background:linear-gradient(180deg,rgba(0,0,0,.58) 0%,transparent 100%)}
+.review-splash-v2 .rs2-fade-bottom{
+  bottom:0;height:42%;
+  background:linear-gradient(0deg,rgba(0,0,0,.78) 0%,rgba(0,0,0,.25) 50%,transparent 100%);
+}
+.review-splash-v2 .rs2-mark-overlay{
+  position:absolute;z-index:6;left:50%;top:46%;
+  transform:translate(-50%,-50%);
+  width:64px;height:64px;opacity:.28;
+  filter:drop-shadow(0 8px 36px rgba(227,90,54,.4));
+  animation:rs2MarkPulse 5.5s ease-in-out infinite;
+}
+@keyframes rs2MarkPulse{0%,100%{opacity:.22;transform:translate(-50%,-50%) scale(1)}50%{opacity:.34;transform:translate(-50%,-50%) scale(1.04)}}
+.review-splash-v2 .rs2-launch{
+  position:absolute;z-index:7;left:0;right:0;bottom:0;
+  padding:0 28px calc(40px + env(safe-area-inset-bottom,0px));
+  display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;
+  animation:rs2LaunchIn 1s cubic-bezier(0.22,1,0.36,1) .35s both;
+}
+@keyframes rs2LaunchIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.review-splash-v2 .rs2-logo{
+  width:min(42vw,120px);height:auto;display:block;
+  mix-blend-mode:screen;
+  filter:drop-shadow(0 8px 28px rgba(0,0,0,.5));
+}
+.review-splash-v2 .rs2-tagline{
+  font-size:11px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;
+  color:rgba(255,255,255,.44);
+}
+
+/* ═══ MOCKUP 2 — AUTH ═══ */
+.review-auth{background:#151210;color:rgba(255,255,255,.92)}
+.review-auth-ambience{
+  position:absolute;inset:0;pointer-events:none;
+  background:
+    radial-gradient(120% 80% at 50% -8%,rgba(227,90,54,.32) 0%,transparent 55%),
+    radial-gradient(70% 50% at 100% 12%,rgba(244,160,130,.16) 0%,transparent 55%),
+    linear-gradient(165deg,#141210 0%,#1f1b18 52%,#151311 100%);
+}
+.review-auth-screen{position:relative;flex:1;display:flex;flex-direction:column;padding:28px 22px 32px;min-height:100%}
+.review-auth-brand{position:relative;z-index:2;display:flex;align-items:center;gap:10px;margin-bottom:22px}
+.review-auth-brand span{font-size:17px;font-weight:650;letter-spacing:-.3px;color:#fff}
+.review-auth-brand .review-mark-img{width:26px;height:26px}
+.review-auth-card{
+  position:relative;z-index:2;margin:auto 0;width:100%;max-width:360px;
+  margin-left:auto;margin-right:auto;
+  border-radius:22px;padding:26px 22px 22px;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);
+  box-shadow:0 24px 60px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.08);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+}
+.review-auth-h{
+  font-family:Georgia,serif;font-size:28px;font-weight:600;letter-spacing:-.04em;
+  line-height:1.12;color:#fff;margin-bottom:12px;
+}
+.review-auth-sub{font-size:15px;line-height:1.55;color:rgba(255,255,255,.52);margin-bottom:22px;font-weight:450}
+.review-auth-google-btn{
+  width:100%;display:flex;align-items:center;justify-content:center;gap:12px;
+  min-height:var(--tap-min);padding:14px 18px;border-radius:var(--r-md);
+  border:1px solid rgba(255,255,255,.14);
+  background:linear-gradient(165deg,rgba(255,255,255,.09) 0%,rgba(0,0,0,.18) 100%);
+  color:rgba(255,255,255,.94);font-size:var(--fs-body);font-weight:650;
+  font-family:inherit;margin-bottom:18px;
+  box-shadow:0 10px 28px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.1);
+}
+.review-auth-google-ic{width:20px;height:20px;flex-shrink:0;opacity:.88}
+.review-auth-divider{display:flex;align-items:center;gap:12px;margin:0 0 18px}
+.review-auth-divider::before,.review-auth-divider::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.1)}
+.review-auth-divider span{font-size:12px;color:rgba(255,255,255,.38);white-space:nowrap}
+.review-auth-field{margin-bottom:14px}
+.review-auth-field label{
+  display:block;font-size:11px;font-weight:650;letter-spacing:.08em;
+  text-transform:uppercase;color:rgba(255,255,255,.42);margin-bottom:8px;
+}
+.review-auth-field input{width:100%;border-radius:14px;padding:14px 16px;font-size:15px;font-family:inherit;outline:none}
+.review-auth--current .review-auth-field input{
+  border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:rgba(255,255,255,.95);
+}
+.review-auth--concept .review-auth-logo-wrap{display:flex;justify-content:center;margin:0 0 18px}
+.review-auth--concept .review-auth-logo{
+  width:min(36vw,104px);height:auto;display:block;
+  mix-blend-mode:screen;
+  filter:drop-shadow(0 4px 20px rgba(0,0,0,.35));
+}
+.review-auth--concept .review-auth-h,.review-auth--concept .review-auth-sub{text-align:center}
+.review-auth--concept .review-auth-field input{
+  border:1px solid rgba(255,255,255,.14);
+  background:linear-gradient(165deg,rgba(255,255,255,.07) 0%,rgba(0,0,0,.14) 100%);
+  color:rgba(255,255,255,.95);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 10px 28px rgba(0,0,0,.12);
+}
+.review-auth-exists{
+  margin:0 0 16px;padding:14px 16px;border-radius:16px;
+  background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.1);
+}
+.review-auth-exists-msg{font-size:14px;line-height:1.5;color:rgba(255,255,255,.78);margin:0 0 10px}
+.review-auth-exists-actions{display:flex;flex-wrap:wrap;gap:6px 16px}
+.review-auth-link-btn{
+  background:none;border:none;padding:0;font-family:inherit;font-size:13px;font-weight:600;
+  color:var(--arc-primary);cursor:default;text-align:left;
+  text-decoration:underline;text-underline-offset:3px;
+}
+.review-auth--current .review-auth-exists{display:none}
+.review-auth--concept .review-auth-exists{display:block}
+.review-auth-submit{
+  width:100%;border-radius:var(--r-md);border:none;background:var(--arc-primary);color:#fff;
+  font-size:var(--fs-body);font-weight:650;min-height:var(--tap-min);padding:14px 18px;
+  box-shadow:var(--shadow-primary);margin-top:4px;
+}
+.review-auth-foot{margin-top:20px;text-align:center}
+.review-auth-toggle{
+  background:none;border:none;color:rgba(255,255,255,.48);
+  font-size:13px;font-weight:500;padding:10px 8px;width:100%;font-family:inherit;
+}
+.review-auth--concept .review-auth-toggle{
+  color:var(--arc-primary);text-decoration:underline;text-underline-offset:3px;
+}
+
+/* ═══ MOCKUP 3 — GENERATING ═══ */
+.review-gen{
+  background:var(--arc-primary);align-items:center;justify-content:center;
+  text-align:center;padding:48px 28px 40px;
+}
+.review-gen-mark-wrap{
+  position:relative;width:72px;height:72px;margin:0 auto 26px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+}
+.review-gen-mark-wrap .review-mark-img{
+  position:relative;z-index:1;width:48px;height:48px;
+}
+.review-gen-glow{
+  position:absolute;inset:-24%;border-radius:50%;
+  background:radial-gradient(circle,rgba(255,255,255,.28) 0%,rgba(255,255,255,.06) 42%,transparent 72%);
+  filter:blur(12px);pointer-events:none;
+  animation:genGlow 5.8s ease-in-out infinite;
+}
+@keyframes genGlow{0%,100%{opacity:.55;transform:scale(.96)}50%{opacity:1;transform:scale(1.05)}}
+.review-gen--concept .review-gen-mark-wrap{width:96px;height:96px;margin-bottom:24px}
+.review-gen--concept .review-gen-mark-wrap .review-mark-img{width:72px;height:72px}
+.review-gen--concept .review-gen-glow{inset:-36%}
+.review-gen-ring-wrap{width:96px;height:96px;margin:0 auto 24px;position:relative;flex-shrink:0}
+.review-gen-ring-wrap::after{
+  content:'';position:absolute;inset:18%;border-radius:50%;
+  background:rgba(255,255,255,.06);pointer-events:none;
+}
+.review-gen-ring-svg{position:absolute;inset:0;width:100%;height:100%;animation:genRingDrift 78s linear infinite}
+@keyframes genRingDrift{from{transform:rotate(-90deg)}to{transform:rotate(270deg)}}
+.review-gen-ring-track{fill:none;stroke:rgba(255,255,255,.22);stroke-width:3.25}
+.review-gen-ring-bar{
+  fill:none;stroke:rgba(255,255,255,.92);stroke-width:3.25;stroke-linecap:round;
+  stroke-dasharray:270.177;opacity:.95;
+  filter:drop-shadow(0 0 12px rgba(255,255,255,.15));
+}
+.review-gen--current .review-gen-ring-bar{stroke-dashoffset:180}
+.review-gen--concept .review-gen-ring-bar{stroke-dashoffset:95;animation:genRingProgress 8s ease-in-out infinite}
+@keyframes genRingProgress{0%,100%{stroke-dashoffset:200}50%{stroke-dashoffset:70}}
+.review-gen-title{
+  font-size:24px;font-weight:700;color:#fff;font-family:Georgia,serif;
+  letter-spacing:-.45px;margin-bottom:6px;line-height:1.2;
+}
+.review-gen-kicker{
+  font-size:12px;font-weight:600;color:rgba(255,255,255,.42);
+  letter-spacing:.14em;text-transform:uppercase;margin-bottom:22px;
+}
+.review-gen-phase-dots{display:flex;justify-content:center;gap:6px;margin-bottom:18px}
+.review-gen--current .review-gen-phase-dots{visibility:hidden;height:0;margin:0;overflow:hidden}
+.review-gen-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.25);transition:background .3s,box-shadow .3s}
+.review-gen--concept .review-gen-dot{animation:genDotPulse 8s ease-in-out infinite}
+.review-gen--concept .review-gen-dot:nth-child(1){animation-delay:0s}
+.review-gen--concept .review-gen-dot:nth-child(2){animation-delay:2s}
+.review-gen--concept .review-gen-dot:nth-child(3){animation-delay:4s}
+.review-gen--concept .review-gen-dot:nth-child(4){animation-delay:6s}
+@keyframes genDotPulse{
+  0%,18%,100%{background:rgba(255,255,255,.25);box-shadow:none}
+  8%,12%{background:#fff;box-shadow:0 0 10px rgba(255,255,255,.45)}
+}
+.review-gen-stage-stack{
+  min-height:4.75em;display:flex;align-items:center;justify-content:center;
+  padding:0 8px;margin-bottom:20px;max-width:320px;margin-left:auto;margin-right:auto;
+  position:relative;
+}
+.review-gen-stage{
+  font-size:16px;font-weight:500;color:rgba(255,255,255,.94);
+  letter-spacing:-.02em;line-height:1.45;margin:0;text-align:center;
+}
+.review-gen-insight{
+  font-size:13px;color:rgba(255,255,255,.48);line-height:1.55;
+  max-width:300px;margin:0 auto;font-style:italic;
+}
+.review-gen--concept .review-gen-title{font-size:22px;margin-bottom:4px}
+.review-gen--concept .review-gen-kicker{margin-bottom:14px;color:rgba(255,255,255,.5)}
+.review-gen--concept .review-gen-stage{font-size:17px;font-weight:600}
+.review-gen--concept .review-gen-insight{font-style:normal;color:rgba(255,255,255,.58);font-size:14px}
+/* Concept: cycle all four brand messages */
+.review-gen--concept .review-gen-stage-stack{min-height:5.5em}
+.review-gen--concept .review-gen-cycle{position:relative;width:100%;min-height:4.5em}
+.review-gen--concept .review-gen-cycle-item{
+  position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);
+  opacity:0;animation:genMsgCycle 8s ease-in-out infinite;
+}
+.review-gen--concept .review-gen-cycle-item:nth-child(1){animation-delay:0s}
+.review-gen--concept .review-gen-cycle-item:nth-child(2){animation-delay:2s}
+.review-gen--concept .review-gen-cycle-item:nth-child(3){animation-delay:4s}
+.review-gen--concept .review-gen-cycle-item:nth-child(4){animation-delay:6s}
+@keyframes genMsgCycle{
+  0%,20%,100%{opacity:0;transform:translateY(calc(-50% + 6px))}
+  4%,16%{opacity:1;transform:translateY(-50%)}
+}
+.review-gen--concept .review-gen-insight-cycle{position:relative;min-height:3.2em;font-style:normal}
+.review-gen--concept .review-gen-insight-cycle span{
+  position:absolute;left:0;right:0;top:0;opacity:0;
+  animation:genInsightCycle 8s ease-in-out infinite;
+}
+.review-gen--concept .review-gen-insight-cycle span:nth-child(1){animation-delay:0s}
+.review-gen--concept .review-gen-insight-cycle span:nth-child(2){animation-delay:2s}
+.review-gen--concept .review-gen-insight-cycle span:nth-child(3){animation-delay:4s}
+.review-gen--concept .review-gen-insight-cycle span:nth-child(4){animation-delay:6s}
+@keyframes genInsightCycle{
+  0%,20%,100%{opacity:0}
+  4%,16%{opacity:1}
+}
+.review-gen-sequence-note{
+  margin-top:18px;font-size:13px;color:var(--review-muted);line-height:1.55;max-width:40rem;
+}
+@media (prefers-reduced-motion:reduce){
+  .rs2-ambience,.rs2-glow,.rs2-art,.rs2-mark-overlay,.rs2-launch,.review-gen-ring-svg,
+  .review-gen-glow,.review-gen--concept .review-gen-ring-bar,.review-gen-dot,
+  .review-gen-cycle-item,.review-gen-insight-cycle span{animation:none!important}
+  .review-gen--concept .review-gen-cycle-item:first-child,
+  .review-gen--concept .review-gen-insight-cycle span:first-child{opacity:1;position:relative;transform:none}
+  .review-gen--concept .review-gen-cycle-item:not(:first-child),
+  .review-gen--concept .review-gen-insight-cycle span:not(:first-child){display:none}
+}
+</style>
+</head>
+<body class="arc-brand-review-page">
+<header class="review-banner">
+  <h1>Arc Brand Review</h1>
+  <p>Static visual concepts only — no production changes. Open <code>arc-brand-review.html</code> from the project root (or serve locally) so assets resolve.</p>
+</header>
+
+<main class="review-main">
+
+<section class="review-block" id="mockup-splash">
+  <p class="review-block-h">Mockup 1</p>
+  <h2>Splash V2</h2>
+  <p class="review-block-desc">Current splash artwork vs. premium polish: arc-mark overlay, Arc logo placement, smoother fades, cleaner launch presentation.</p>
+  <div class="review-compare">
+    <div class="review-col">
+      <span class="review-col-label">Current</span>
+      <div class="review-device">
+        <div class="review-device-inner review-splash-current">
+          <div class="rs-ambience" aria-hidden="true"></div>
+          <div class="rs-glow" aria-hidden="true"></div>
+          <img class="rs-art" src="assets/branding/splash.png" alt="" width="1081" height="1921" decoding="async"/>
+          <div class="rs-vignette" aria-hidden="true"></div>
+        </div>
+      </div>
+    </div>
+    <div class="review-col">
+      <span class="review-col-label review-col-label--concept">Concept</span>
+      <div class="review-device">
+        <div class="review-device-inner review-splash-v2">
+          <div class="rs2-curtain" aria-hidden="true"></div>
+          <div class="rs2-ambience" aria-hidden="true"></div>
+          <div class="rs2-glow" aria-hidden="true"></div>
+          <img class="rs2-art" src="assets/branding/splash.png" alt="" width="1081" height="1921" decoding="async"/>
+          <div class="rs2-vignette" aria-hidden="true"></div>
+          <div class="rs2-fade-top" aria-hidden="true"></div>
+          <div class="rs2-fade-bottom" aria-hidden="true"></div>
+          <img class="rs2-mark-overlay review-mark-img" src="assets/branding/arc-mark.png" alt="" width="145" height="145" decoding="async"/>
+          <div class="rs2-launch">
+            <img class="rs2-logo" src="assets/branding/Arc_Logo.png" alt="Arc" width="512" height="512" decoding="async"/>
+            <span class="rs2-tagline">Nutrition, structured</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="review-block" id="mockup-auth">
+  <p class="review-block-h">Mockup 2</p>
+  <h2>Auth V2</h2>
+  <p class="review-block-desc">Same layout. Concept: Arc_Logo above headline, glass inputs aligned with Google, secondary actions as text links, CTA brightest.</p>
+  <div class="review-compare">
+    <div class="review-col">
+      <span class="review-col-label">Current</span>
+      <div class="review-device">
+        <div class="review-device-inner review-auth review-auth--current">
+          <div class="review-auth-ambience" aria-hidden="true"></div>
+          <div class="review-auth-screen">
+            <div class="review-auth-brand">
+              <img class="review-mark-img" src="assets/branding/arc-mark.png" alt="" width="145" height="145" decoding="async"/>
+              <span>Arc</span>
+            </div>
+            <div class="review-auth-card">
+              <h1 class="review-auth-h">Your Arc system is ready.</h1>
+              <p class="review-auth-sub">Save your profile to build your personalized week.</p>
+              <div class="review-auth-google-btn" aria-hidden="true">
+                <svg class="review-auth-google-ic" viewBox="0 0 48 48" aria-hidden="true"><path fill="#ECEFF1" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#FFC107" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6C43.98 37.08 46.98 31.38 46.98 24.55z"/><path fill="#4CAF50" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#1976D2" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                Continue with Google
+              </div>
+              <div class="review-auth-divider" aria-hidden="true"><span>or continue with email</span></div>
+              <div class="review-auth-field">
+                <label>Email</label>
+                <input type="email" value="you@example.com" readonly tabindex="-1" aria-readonly="true"/>
+              </div>
+              <div class="review-auth-field">
+                <label>Password</label>
+                <input type="password" value="password" readonly tabindex="-1" aria-readonly="true"/>
+              </div>
+              <button type="button" class="review-auth-submit" disabled>Continue</button>
+              <div class="review-auth-foot">
+                <span class="review-auth-toggle">Already have an account? Sign in</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="review-col">
+      <span class="review-col-label review-col-label--concept">Concept</span>
+      <div class="review-device">
+        <div class="review-device-inner review-auth review-auth--concept">
+          <div class="review-auth-ambience" aria-hidden="true"></div>
+          <div class="review-auth-screen">
+            <div class="review-auth-brand">
+              <img class="review-mark-img" src="assets/branding/arc-mark.png" alt="" width="145" height="145" decoding="async"/>
+              <span>Arc</span>
+            </div>
+            <div class="review-auth-card">
+              <div class="review-auth-logo-wrap">
+                <img class="review-auth-logo" src="assets/branding/Arc_Logo.png" alt="Arc" width="512" height="512" decoding="async"/>
+              </div>
+              <h1 class="review-auth-h">Your Arc system is ready.</h1>
+              <p class="review-auth-sub">Save your profile to build your personalized week.</p>
+              <div class="review-auth-google-btn" aria-hidden="true">
+                <svg class="review-auth-google-ic" viewBox="0 0 48 48" aria-hidden="true"><path fill="#ECEFF1" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#FFC107" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6C43.98 37.08 46.98 31.38 46.98 24.55z"/><path fill="#4CAF50" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#1976D2" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                Continue with Google
+              </div>
+              <div class="review-auth-divider" aria-hidden="true"><span>or continue with email</span></div>
+              <div class="review-auth-field">
+                <label>Email</label>
+                <input type="email" value="you@example.com" readonly tabindex="-1" aria-readonly="true"/>
+              </div>
+              <div class="review-auth-field">
+                <label>Password</label>
+                <input type="password" value="password" readonly tabindex="-1" aria-readonly="true"/>
+              </div>
+              <div class="review-auth-exists">
+                <p class="review-auth-exists-msg">An Arc profile already exists for this email.</p>
+                <div class="review-auth-exists-actions">
+                  <span class="review-auth-link-btn">Sign In Instead</span>
+                  <span class="review-auth-link-btn">Reset Password</span>
+                </div>
+              </div>
+              <button type="button" class="review-auth-submit" disabled>Continue</button>
+              <div class="review-auth-foot">
+                <span class="review-auth-toggle">Already have an account? Sign in</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="review-block" id="mockup-generating">
+  <p class="review-block-h">Mockup 3</p>
+  <h2>Generating V2</h2>
+  <p class="review-block-desc">Current #s-gen vs. concept: larger arc-mark, ring loader retained, brand-reinforcement messaging while waiting.</p>
+  <div class="review-compare">
+    <div class="review-col">
+      <span class="review-col-label">Current</span>
+      <div class="review-device">
+        <div class="review-device-inner review-gen review-gen--current">
+          <div class="review-gen-mark-wrap" aria-hidden="true">
+            <div class="review-gen-glow"></div>
+            <img class="review-mark-img" src="assets/branding/arc-mark.png" alt="" width="145" height="145" decoding="async"/>
+          </div>
+          <div class="review-gen-ring-wrap" aria-hidden="true">
+            <svg class="review-gen-ring-svg" viewBox="0 0 100 100">
+              <circle class="review-gen-ring-track" cx="50" cy="50" r="43"/>
+              <circle class="review-gen-ring-bar" cx="50" cy="50" r="43"/>
+            </svg>
+          </div>
+          <div class="review-gen-phase-dots" aria-hidden="true"><span class="review-gen-dot"></span></div>
+          <div class="review-gen-title">Setting things up</div>
+          <div class="review-gen-kicker">Almost there</div>
+          <div class="review-gen-stage-stack">
+            <p class="review-gen-stage">Building your nutrition profile…</p>
+          </div>
+          <p class="review-gen-insight">Your plan softens as you cook and log.</p>
+        </div>
+      </div>
+    </div>
+    <div class="review-col">
+      <span class="review-col-label review-col-label--concept">Concept</span>
+      <div class="review-device">
+        <div class="review-device-inner review-gen review-gen--concept">
+          <div class="review-gen-mark-wrap" aria-hidden="true">
+            <div class="review-gen-glow"></div>
+            <img class="review-mark-img" src="assets/branding/arc-mark.png" alt="" width="145" height="145" decoding="async"/>
+          </div>
+          <div class="review-gen-ring-wrap" aria-hidden="true">
+            <svg class="review-gen-ring-svg" viewBox="0 0 100 100">
+              <circle class="review-gen-ring-track" cx="50" cy="50" r="43"/>
+              <circle class="review-gen-ring-bar" cx="50" cy="50" r="43"/>
+            </svg>
+          </div>
+          <div class="review-gen-phase-dots" aria-hidden="true">
+            <span class="review-gen-dot"></span>
+            <span class="review-gen-dot"></span>
+            <span class="review-gen-dot"></span>
+            <span class="review-gen-dot"></span>
+          </div>
+          <div class="review-gen-title">Building your week</div>
+          <div class="review-gen-kicker">Arc is preparing your system</div>
+          <div class="review-gen-stage-stack">
+            <div class="review-gen-cycle" aria-hidden="true">
+              <p class="review-gen-cycle-item review-gen-stage">Building your week</p>
+              <p class="review-gen-cycle-item review-gen-stage">Reducing food noise</p>
+              <p class="review-gen-cycle-item review-gen-stage">Planning for real life</p>
+              <p class="review-gen-cycle-item review-gen-stage">Finalizing your Arc</p>
+            </div>
+          </div>
+          <p class="review-gen-insight review-gen-insight-cycle" aria-hidden="true">
+            <span>Creating structure around your goals.</span>
+            <span>Turning decisions into a system.</span>
+            <span>Making room for flexibility.</span>
+            <span>Almost ready.</span>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="review-gen-sequence-note">Concept cycles all four messages (8s loop) — static first frame when reduced motion is enabled.</p>
+</section>
+
+</main>
+</body>
+</html>

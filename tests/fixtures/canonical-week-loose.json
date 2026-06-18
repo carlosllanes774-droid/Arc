@@ -1,0 +1,18 @@
+{
+  "recipes": [
+    {
+      "name": "Test Chicken Bowl",
+      "category": "Lunch",
+      "calories": 650,
+      "protein": 45,
+      "carbs": 55,
+      "fat": 18,
+      "ingredients": ["Chicken", "Rice", "Broccoli"],
+      "instructions": [
+        "Cook chicken.",
+        "Cook rice.",
+        "Serve together."
+      ]
+    }
+  ]
+}
