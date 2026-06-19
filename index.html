@@ -1182,8 +1182,8 @@ body{
 .week-status-chip{margin:0 var(--sp-page-x) var(--sp-2);padding:8px 14px;border-radius:999px;font-size:12px;font-weight:600;letter-spacing:.04em;display:inline-block;background:var(--arc-surface-2);border:1px solid var(--arc-border);color:var(--arc-subtext)}
 /* Today — single-focus hero + progressive disclosure */
 #s-today .content.today-flow{padding:var(--sp-2) var(--sp-page-x) var(--sp-5);background:var(--arc-surface)}
-.today-hero{padding:var(--sp-1) 0 var(--sp-4);text-align:left}
-.today-hero-card{border-radius:var(--r-xl);padding:var(--sp-3) var(--sp-page-x);background:var(--arc-card);border:1px solid var(--arc-border)}
+.today-hero{padding:var(--sp-2) 0 var(--sp-4);text-align:left}
+.today-hero-card{border-radius:var(--r-xl);padding:var(--sp-3) var(--sp-page-x);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);box-shadow:0 24px 60px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.08);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
 .today-hero .today-kicker{font-size:15px;font-weight:600;color:var(--arc-text);letter-spacing:-.01em;margin:0 0 6px;font-family:Georgia,serif}
 .today-name{font-size:var(--fs-display);font-weight:700;color:var(--arc-text);font-family:Georgia,serif;line-height:var(--lh-tight);margin:4px 0 var(--sp-2);letter-spacing:-.03em}
 .today-meta{font-size:14px;color:var(--arc-subtext);display:flex;gap:12px;flex-wrap:wrap;font-weight:500}
@@ -1325,6 +1325,44 @@ body{
 .today-forecast{margin:0;font-size:12px;font-weight:500;color:var(--arc-subtext);line-height:1.45;opacity:.92}
 .prog-plan-sub{font-size:11px;font-weight:500;color:var(--arc-subtext);margin-left:6px;opacity:.9}
 .today-actions{margin-top:4px;padding-top:0}
+/* Today — dark luxury skin (visual only; scoped to Today screen) */
+#s-today{background:#151210}
+#s-today > .a-hdr{background:linear-gradient(165deg,#2a2623 0%,#3d3530 38%,var(--arc-primary-dark) 100%);box-shadow:inset 0 -1px 0 rgba(255,255,255,.06)}
+#s-today > .a-hdr h2{color:#fff;font-family:Georgia,serif;letter-spacing:-.03em}
+#s-today #today-date{color:rgba(255,255,255,.52)!important}
+#s-today > .a-hdr .arc-mark--on-light{--arc-mark-color:#fff}
+#s-today > .a-hdr .settings-open-btn{background:rgba(255,255,255,.1);box-shadow:none}
+#s-today > .a-hdr .settings-open-btn:hover{background:rgba(255,255,255,.16);box-shadow:none}
+#s-today .content.today-flow{background:linear-gradient(180deg,#151210 0%,#1a1614 48%,#151210 100%)}
+#s-today > .nav{background:#151210;box-shadow:0 -1px 0 rgba(255,255,255,.08)}
+#s-today > .nav .nbtn{color:rgba(255,255,255,.42)}
+#s-today > .nav .nbtn:hover:not(.active){color:rgba(255,255,255,.72);background:rgba(255,255,255,.05)}
+#s-today > .nav .nbtn.active{color:var(--arc-primary);background:rgba(227,90,54,.14)}
+.today-hero .today-kicker{color:rgba(255,255,255,.56)}
+.today-hero-card .today-name{color:#fff}
+.today-hero-card .today-meta{color:rgba(255,255,255,.52)}
+.today-hero-card .today-status-line{color:rgba(255,255,255,.52)}
+.today-hero-card .today-status-line strong{color:#fff}
+.today-hero-card .today-status{border-color:rgba(255,255,255,.14);background:rgba(255,255,255,.08);color:rgba(255,255,255,.58)}
+.today-hero-card .today-status--planned{background:rgba(255,255,255,.06);color:rgba(255,255,255,.52)}
+.today-hero-card .today-status--logged{background:rgba(227,90,54,.16);color:var(--arc-primary);border-color:rgba(227,90,54,.28)}
+.today-hero-card .today-status--skipped{background:rgba(255,255,255,.04);color:rgba(255,255,255,.38)}
+.today-hero-card .today-empty{color:rgba(255,255,255,.52)}
+.today-hero-card #today-meal-wrap .today-name{color:#fff}
+.today-hero-card #today-meal-wrap .today-meta{color:rgba(255,255,255,.52)}
+.today-hero-card #today-meal-wrap .today-empty{color:rgba(255,255,255,.52)}
+.today-hero-card .today-hero-prim{box-shadow:0 4px 18px rgba(227,90,54,.32)}
+.today-hero-card .today-hero-prim.secondary{background:rgba(255,255,255,.06);color:#fff;border:1px solid rgba(255,255,255,.14);box-shadow:none}
+.today-hero-card .today-hero-prim.secondary:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2)}
+.today-hero-card .today-hero-alt{color:rgba(255,255,255,.45)}
+.today-hero-card .today-hero-link{color:rgba(255,255,255,.52);text-decoration-color:rgba(255,255,255,.22)}
+.today-hero-card .today-hero-link:hover{color:var(--arc-primary)}
+.today-hero-card .today-replace-note{color:rgba(255,255,255,.48)}
+.today-hero-card .today-cook-cta{background:rgba(255,255,255,.08)!important;color:#fff!important;border:1px solid rgba(255,255,255,.14)!important;box-shadow:none!important}
+.today-hero-card .today-cook-cta:hover{background:rgba(255,255,255,.12)!important;box-shadow:0 8px 24px rgba(0,0,0,.28)!important}
+.today-actions .today-foot-link{color:rgba(255,255,255,.48);text-decoration-color:rgba(255,255,255,.18)}
+.today-actions .today-foot-link:hover{color:var(--arc-primary)}
+.today-actions .today-foot-sep{color:rgba(255,255,255,.28);opacity:1}
 .slbl{font-size:var(--fs-label);font-weight:700;color:var(--arc-subtext);text-transform:uppercase;letter-spacing:.08em;margin-bottom:var(--sp-2)}
 .ubar{display:flex;align-items:center;gap:14px;background:var(--arc-card);padding:16px 22px;flex-shrink:0;box-shadow:0 1px 0 var(--arc-divider)}
 .avatar{width:42px;height:42px;border-radius:50%;background:var(--arc-soft-primary);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--arc-primary);flex-shrink:0}
