@@ -1987,6 +1987,51 @@ button:not(:disabled):active,
   animation:contentFadeUp var(--motion-fast) var(--ease-out) both;
 }
 .today-no-plan-only{display:none}
+#s-today .today-hdr-sun{display:flex;align-items:center;justify-content:center;width:22px;height:22px;flex-shrink:0}
+#s-today .a-hdr-mark{display:none}
+#s-today:not(.today--no-plan){background:linear-gradient(180deg,#0D0A09 0%,#090807 100%)}
+#s-today:not(.today--no-plan) > .a-hdr{padding:58px 28px 0;background:transparent;box-shadow:none;gap:12px}
+#s-today:not(.today--no-plan) > .a-hdr h2{flex:1;flex-grow:1;font-family:"Baskerville","Iowan Old Style",serif;font-size:34px;font-weight:700;color:#F8F4F0;letter-spacing:-.5px}
+#s-today:not(.today--no-plan) > .a-hdr .settings-open-btn{width:44px;height:44px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.05);color:#F5E9E0;font-size:18px;margin-left:0}
+#s-today:not(.today--no-plan) > .a-hdr .settings-open-btn:hover{background:rgba(255,255,255,.1);box-shadow:none}
+#s-today:not(.today--no-plan) .content.today-flow{padding:0 28px var(--sp-5);background:radial-gradient(circle at 75% 12%,rgba(241,101,50,.18),transparent 42%),linear-gradient(180deg,#0D0A09 0%,#090807 100%)}
+#s-today:not(.today--no-plan) .today-hero,
+#s-today:not(.today--no-plan) .today-more-details,
+#s-today:not(.today--no-plan) .prepday-banner{display:none!important}
+.today-plan-ui{display:none}
+#s-today:not(.today--no-plan) .today-plan-ui{display:block}
+.today-status-row{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:22px}
+#s-today:not(.today--no-plan) #week-status-chip{display:inline-flex!important;align-items:center;gap:10px;height:42px;padding:0 22px;margin:0;border-radius:999px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.04);font-family:Inter,system-ui,-apple-system,sans-serif;font-size:18px;font-weight:500;color:#F4F1EE;letter-spacing:0;text-transform:none}
+#s-today:not(.today--no-plan) #week-status-chip::before{content:'';width:10px;height:10px;border-radius:50%;background:#F16532;flex-shrink:0}
+#s-today:not(.today--no-plan) #today-date{display:block!important;margin:0;padding:0;flex:0 0 auto;text-align:right;font-family:Inter,system-ui,-apple-system,sans-serif;font-size:18px;font-weight:500;color:rgba(255,255,255,.55);background:none;border:none}
+.today-meals-heading{margin:34px 0 22px;font-family:"Baskerville","Iowan Old Style",serif;font-size:28px;font-weight:700;color:#F8F4F0;letter-spacing:-.02em;line-height:1.1}
+.today-meals-list{display:flex;flex-direction:column;gap:22px;padding-bottom:8px}
+.today-meal-block{display:flex;flex-direction:column;gap:16px}
+.today-meal-card{position:relative;min-height:170px;border-radius:30px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05);padding:18px;display:flex;gap:22px;align-items:stretch;transition:background .2s ease,transform .2s ease;-webkit-tap-highlight-color:transparent}
+.today-meal-card--link{cursor:pointer}
+.today-meal-card--link:hover{background:rgba(255,255,255,.04);transform:translateY(-2px)}
+.today-meal-img{width:120px;height:120px;border-radius:22px;object-fit:cover;flex-shrink:0;background:rgba(255,255,255,.04)}
+.today-meal-img--placeholder{background:linear-gradient(145deg,rgba(255,255,255,.06),rgba(255,255,255,.02))}
+.today-meal-body{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;padding-right:32px}
+.today-meal-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+.today-meal-type{font-family:Inter,system-ui,-apple-system,sans-serif;font-size:14px;font-weight:600;letter-spacing:2px;color:rgba(255,255,255,.4);text-transform:uppercase}
+.today-meal-now{font-family:Inter,system-ui,-apple-system,sans-serif;font-size:15px;font-weight:700;color:#F16532;flex-shrink:0}
+.today-meal-fav{position:absolute;top:18px;right:18px;width:32px;height:32px;padding:0;border:none;background:none;color:rgba(255,255,255,.55);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:color .2s ease,transform .2s ease;-webkit-tap-highlight-color:transparent;z-index:2}
+.today-meal-fav:hover{color:#F16532;transform:scale(1.05)}
+.today-meal-fav.is-on{color:#F16532}
+.today-meal-title{margin:0;font-family:"Baskerville","Iowan Old Style",serif;font-size:32px;font-weight:700;line-height:1.1;color:#F8F4F0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.today-meal-meta{display:flex;flex-wrap:wrap;align-items:center;gap:18px;margin-top:12px;font-family:Inter,system-ui,-apple-system,sans-serif;font-size:18px;font-weight:500;color:rgba(255,255,255,.72)}
+.today-meal-meta-ic{color:#F16532;font-style:normal}
+.today-meal-actions-row{display:flex;align-items:center;gap:12px}
+.today-meal-eaten-btn{flex:1;height:58px;border:none;border-radius:20px;background:linear-gradient(90deg,#F16532,#F76B38);font-family:Inter,system-ui,-apple-system,sans-serif;font-size:20px;font-weight:700;color:#fff;cursor:pointer;box-shadow:0 20px 50px rgba(241,101,50,.18);transition:transform .2s ease,box-shadow .2s ease;-webkit-tap-highlight-color:transparent}
+.today-meal-eaten-btn:hover{transform:translateY(-2px);box-shadow:0 24px 60px rgba(241,101,50,.25)}
+.today-meal-menu-wrap{position:relative;flex-shrink:0}
+.today-meal-menu-btn{width:48px;height:48px;border-radius:50%;border:none;background:rgba(255,255,255,.04);color:rgba(255,255,255,.72);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s ease;-webkit-tap-highlight-color:transparent}
+.today-meal-menu-btn:hover{background:rgba(255,255,255,.08)}
+.today-meal-menu{display:none;position:absolute;right:0;bottom:calc(100% + 8px);min-width:168px;padding:6px;border-radius:16px;background:#1a1614;border:1px solid rgba(255,255,255,.08);box-shadow:0 16px 40px rgba(0,0,0,.35);flex-direction:column;z-index:5}
+.today-meal-menu-wrap.is-open .today-meal-menu{display:flex}
+.today-meal-menu-item{width:100%;padding:12px 14px;border:none;border-radius:10px;background:none;text-align:left;font-family:Inter,system-ui,-apple-system,sans-serif;font-size:15px;font-weight:500;color:#F4F1EE;cursor:pointer;transition:background .15s ease;-webkit-tap-highlight-color:transparent}
+.today-meal-menu-item:hover{background:rgba(255,255,255,.06)}
 .today-no-plan{padding:0 0 var(--sp-4)}
 .today-no-plan-progress{display:none!important}
 .today-no-plan-empty{max-width:320px;margin:90px auto 0;display:flex;flex-direction:column;align-items:center;text-align:center}
@@ -2533,9 +2578,16 @@ button:not(:disabled):active,
 
 <!-- TODAY -->
 <div class="screen" id="s-today">
-  <div class="a-hdr"><span class="a-hdr-mark" aria-hidden="true"><span class="arc-mark arc-mark--hdr arc-mark--on-light" aria-hidden="true"></span></span><span class="a-hdr-sun today-no-plan-only" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="4" stroke="#F16532" stroke-width="1.5"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2M4.34 4.34l1.41 1.41M16.25 16.25l1.41 1.41M4.34 17.66l1.41-1.41M16.25 5.75l1.41-1.41" stroke="#F16532" stroke-width="1.5" stroke-linecap="round"/></svg></span><h2 style="flex-shrink:0">Today</h2><span style="flex:1;text-align:right;font-size:13px;color:var(--arc-subtext);padding-right:8px" id="today-date">—</span><button type="button" class="settings-open-btn" id="hdr-profile-btn" title="Profile" aria-label="Profile">👤</button></div>
+  <div class="a-hdr"><span class="a-hdr-mark" aria-hidden="true"><span class="arc-mark arc-mark--hdr arc-mark--on-light" aria-hidden="true"></span></span><span class="a-hdr-sun today-hdr-sun" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="4" stroke="#F16532" stroke-width="1.5"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2M4.34 4.34l1.41 1.41M16.25 16.25l1.41 1.41M4.34 17.66l1.41-1.41M16.25 5.75l1.41-1.41" stroke="#F16532" stroke-width="1.5" stroke-linecap="round"/></svg></span><h2 style="flex-shrink:0">Today</h2><button type="button" class="settings-open-btn" id="hdr-profile-btn" title="Profile" aria-label="Profile">👤</button></div>
   <div class="content today-flow">
-    <div class="week-status-chip" id="week-status-chip" style="display:none" aria-live="polite">On track</div>
+    <div class="today-plan-ui">
+      <div class="today-status-row">
+        <div class="week-status-chip" id="week-status-chip" style="display:none" aria-live="polite">On track</div>
+        <p id="today-date">—</p>
+      </div>
+      <h2 class="today-meals-heading">Today's Meals</h2>
+      <div class="today-meals-list" id="today-meals-list" aria-label="Today's meals"></div>
+    </div>
     <div class="prepday-banner" id="prepday-banner" style="display:none" role="region" aria-label="Prep day suggestion">
       <span class="prepday-banner-ic" aria-hidden="true">🍱</span>
       <div class="prepday-banner-body">
@@ -8106,6 +8158,144 @@ function buildTodayTimelineHtml(day, slots, heroSlot, timelineHints) {
   return html;
 }
 
+function isRecipeFavorited(rid) {
+  var id = parseInt(rid, 10);
+  if (!id) return false;
+  ensureArcSavedRecipes(UP);
+  if (UP.arcSavedRecipes.starredRecipeIds.indexOf(id) !== -1) return true;
+  if (UP.mealFeedback && UP.mealFeedback[String(id)] === 1) return true;
+  return false;
+}
+
+function toggleRecipeFavorite(rid) {
+  var idn = parseInt(rid, 10);
+  if (!idn || !findRecipe(idn)) return;
+  ensureArcSavedRecipes(UP);
+  var starred = UP.arcSavedRecipes.starredRecipeIds.indexOf(idn) !== -1;
+  var liked = UP.mealFeedback && UP.mealFeedback[String(idn)] === 1;
+  if (starred || liked) {
+    var ix = UP.arcSavedRecipes.starredRecipeIds.indexOf(idn);
+    if (ix !== -1) UP.arcSavedRecipes.starredRecipeIds.splice(ix, 1);
+    if (UP.mealFeedback && UP.mealFeedback[String(idn)] === 1) delete UP.mealFeedback[String(idn)];
+    saveUserProfile();
+    showToast('Removed from favorites');
+    return;
+  }
+  if (UP.arcSavedRecipes.starredRecipeIds.indexOf(idn) === -1) UP.arcSavedRecipes.starredRecipeIds.push(idn);
+  if (!UP.mealFeedback || typeof UP.mealFeedback !== 'object') UP.mealFeedback = {};
+  UP.mealFeedback[String(idn)] = 1;
+  recordRecipeSavedEngagement(idn, 'select', true);
+  saveUserProfile();
+  showToast('Recipe saved');
+}
+
+function removeTodayMealSlot(day, slot) {
+  if (!day || !slot) return;
+  if (mealPlan[day] && mealPlan[day][slot]) delete mealPlan[day][slot];
+  setSlotJournal(day, slot, null);
+  saveSessionState();
+  renderNutrition();
+  renderPlanner();
+  renderToday();
+  showToast('Meal removed');
+}
+
+function saveTodayRecipe(rid) {
+  var idn = parseInt(rid, 10);
+  if (!idn || !findRecipe(idn)) return;
+  ensureArcSavedRecipes(UP);
+  if (UP.arcSavedRecipes.starredRecipeIds.indexOf(idn) === -1) UP.arcSavedRecipes.starredRecipeIds.push(idn);
+  if (!UP.mealFeedback || typeof UP.mealFeedback !== 'object') UP.mealFeedback = {};
+  UP.mealFeedback[String(idn)] = 1;
+  recordRecipeSavedEngagement(idn, 'select', true);
+  saveUserProfile();
+  renderToday();
+  showToast('Recipe saved');
+}
+
+function todayMealImageHtml(r) {
+  if (r && r.image) {
+    return '<img class="today-meal-img" src="' + shopEsc(r.image) + '" alt="" loading="lazy"/>';
+  }
+  return '<div class="today-meal-img today-meal-img--placeholder" aria-hidden="true"></div>';
+}
+
+function todayMealHeartSvg(filled) {
+  if (filled) {
+    return '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 20.5s-7-4.6-7-9.2c0-2.8 2.2-4.8 4.9-4.8 1.6 0 3.1.8 4.1 2.1 1-1.3 2.5-2.1 4.1-2.1 2.7 0 4.9 2 4.9 4.8 0 4.6-7 9.2-7 9.2z" fill="#F16532" stroke="#F16532" stroke-width="1.2" stroke-linejoin="round"/></svg>';
+  }
+  return '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 20.5s-7-4.6-7-9.2c0-2.8 2.2-4.8 4.9-4.8 1.6 0 3.1.8 4.1 2.1 1-1.3 2.5-2.1 4.1-2.1 2.7 0 4.9 2 4.9 4.8 0 4.6-7 9.2-7 9.2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+}
+
+function buildTodayMealsCardsHtml(day, slots, heroSlot) {
+  var html = '';
+  for (var i = 0; i < slots.length; i++) {
+    var slot = slots[i];
+    var isCurrent = heroSlot && slot === heroSlot;
+    var rid = (mealPlan[day] && mealPlan[day][slot]) ? mealPlan[day][slot] : null;
+    var j = getSlotJournal(day, slot);
+    var r = null;
+    if (j && j.status === 'replaced' && j.actualRid) r = findRecipe(j.actualRid);
+    else if (rid) r = findRecipe(rid);
+    var typeLbl = slotMealTypeLabel(slot).toUpperCase();
+    var dd = shopDataAttr(day);
+    var ds = shopDataAttr(slot);
+    var displayName = r ? r.name : ARC_COPY.today.timeline.nothingPlanned;
+    var calTxt = r ? (r.cal + ' cal') : '—';
+    var protTxt = r ? (r.p + 'g protein') : '—';
+    var timeTxt = r && r.time ? r.time : '—';
+    var favOn = r && isRecipeFavorited(r.id);
+    var fin = isMealFinalized(day, slot);
+    var clickable = !isCurrent && r;
+    var blockCls = 'today-meal-block' + (isCurrent ? ' today-meal-block--current' : '');
+    var cardCls = 'today-meal-card' + (clickable ? ' today-meal-card--link' : '');
+
+    html += '<div class="' + blockCls + '">';
+    html += '<article class="' + cardCls + '"';
+    if (clickable) {
+      html += ' role="button" tabindex="0" data-today-card="1" data-rid="' + r.id + '" data-day="' + dd + '" data-slot="' + ds + '"';
+    } else {
+      html += ' data-day="' + dd + '" data-slot="' + ds + '"';
+    }
+    html += '>';
+
+    html += todayMealImageHtml(r);
+    html += '<div class="today-meal-body">';
+    html += '<div class="today-meal-top"><span class="today-meal-type">' + shopEsc(typeLbl) + '</span>';
+    if (isCurrent) html += '<span class="today-meal-now">NOW</span>';
+    html += '</div>';
+    if (r) {
+      html += '<button type="button" class="today-meal-fav' + (favOn ? ' is-on' : '') + '" data-fav-rid="' + r.id + '" aria-label="' + shopEsc(favOn ? 'Remove favorite' : 'Add favorite') + '" aria-pressed="' + (favOn ? 'true' : 'false') + '">' + todayMealHeartSvg(favOn) + '</button>';
+    }
+    html += '<h3 class="today-meal-title">' + shopEsc(displayName) + '</h3>';
+    html += '<div class="today-meal-meta">';
+    html += '<span><i class="today-meal-meta-ic" aria-hidden="true">🔥</i> ' + shopEsc(calTxt) + '</span>';
+    html += '<span><i class="today-meal-meta-ic" aria-hidden="true">💪</i> ' + shopEsc(protTxt) + '</span>';
+    html += '<span><i class="today-meal-meta-ic" aria-hidden="true">🕒</i> ' + shopEsc(timeTxt) + '</span>';
+    html += '</div></div></article>';
+
+    if (isCurrent) {
+      html += '<div class="today-meal-actions-row">';
+      if (r && !fin) {
+        html += '<button type="button" class="today-meal-eaten-btn" data-today-act="log" data-day="' + dd + '" data-slot="' + ds + '">Mark as eaten</button>';
+      } else if (!r) {
+        html += '<button type="button" class="today-meal-eaten-btn" data-today-act="assign" data-day="' + dd + '" data-slot="' + ds + '">Choose a meal</button>';
+      }
+      html += '<div class="today-meal-menu-wrap">';
+      html += '<button type="button" class="today-meal-menu-btn" aria-label="Meal options" aria-haspopup="true" data-menu-day="' + dd + '" data-menu-slot="' + ds + '">';
+      html += '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true"><circle cx="9" cy="4" r="1.5" fill="currentColor"/><circle cx="9" cy="9" r="1.5" fill="currentColor"/><circle cx="9" cy="14" r="1.5" fill="currentColor"/></svg>';
+      html += '</button><div class="today-meal-menu" role="menu">';
+      html += '<button type="button" class="today-meal-menu-item" role="menuitem" data-today-menu="swap" data-day="' + dd + '" data-slot="' + ds + '">Swap meal</button>';
+      if (r) html += '<button type="button" class="today-meal-menu-item" role="menuitem" data-today-menu="save" data-day="' + dd + '" data-slot="' + ds + '" data-rid="' + r.id + '">Save recipe</button>';
+      html += '<button type="button" class="today-meal-menu-item" role="menuitem" data-today-menu="remove" data-day="' + dd + '" data-slot="' + ds + '">Remove meal</button>';
+      html += '</div></div></div>';
+    }
+
+    html += '</div>';
+  }
+  return html;
+}
+
 function getSlotJournal(day, slot) {
   if (!mealJournal[day] || !mealJournal[day][slot]) return null;
   return mealJournal[day][slot];
@@ -9452,15 +9642,12 @@ function renderToday() {
 
   renderPrepDayBanner();
   renderWeekStatusChip();
-  if (!el('today-meal-wrap')) return;
+  if (!el('today-meals-list')) return;
   var d = new Date();
   var day = todayKey();
   var slots = getSlots();
   var hourNow = d.getHours();
-  var timePhase = getTodayTimePhase(hourNow);
   var heroSlot = resolveTodayHeroSlot(day, slots);
-  var rid = (heroSlot && mealPlan[day]) ? mealPlan[day][heroSlot] : null;
-  var meal = rid ? findRecipe(rid) : null;
   var eff = getEffectiveDailyTargets(day, slots);
   var calTarget = eff.calTarget;
   var macros = eff.macros;
@@ -9477,48 +9664,22 @@ function renderToday() {
     chaosPlan: chaosPlan
   });
   var chaosOut = chaosRecoveryEngine(chaosPlan, behaviorState);
-  var engineOut = adaptiveEngine(behaviorState, chaosOut);
-  var j = heroSlot ? getSlotJournal(day, heroSlot) : null;
+  adaptiveEngine(behaviorState, chaosOut);
 
   syncRecoveryForCurrentWeek();
 
   var dateEl = el('today-date');
   if (dateEl) dateEl.textContent = d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
 
-  var stEl = el('today-meal-status');
-  var actEl = el('today-meal-actions');
-  var cookBtn = el('today-cook-btn');
-
-  if (meal) {
-    var wrap = '<div class="today-name">' + shopEsc(meal.name) + '</div>';
-    wrap += '<div class="today-meta arc-adv-only"><span>' + meal.cal + ' kcal</span><span>P ' + meal.p + 'g</span></div>';
-    el('today-meal-wrap').innerHTML = wrap;
-    if (cookBtn) {
-      cookBtn.disabled = false;
-      cookBtn.textContent = 'Open recipe';
-    }
-    if (stEl) stEl.innerHTML = buildTodayHeroStatusLineHtml(heroSlot, j) + buildTodayReplaceNoteAppend(j);
-    if (actEl) actEl.innerHTML = buildTodayHeroActionsMarkup(day, heroSlot, j, true);
-  } else {
-    el('today-meal-wrap').innerHTML = '<div class="today-empty">' + (heroSlot ? ARC_COPY.today.emptySlot : ARC_COPY.today.emptyDay) + '</div>';
-    if (cookBtn) {
-      cookBtn.disabled = true;
-      cookBtn.textContent = 'Open recipe';
-    }
-    if (stEl && heroSlot) stEl.innerHTML = buildTodayHeroStatusLineHtml(heroSlot, j) + buildTodayReplaceNoteAppend(j);
-    else if (stEl) stEl.innerHTML = '';
-    if (actEl) actEl.innerHTML = heroSlot ? buildTodayHeroActionsMarkup(day, heroSlot, j, false) : '';
-  }
+  var mealsList = el('today-meals-list');
+  if (mealsList) mealsList.innerHTML = slots.length ? buildTodayMealsCardsHtml(day, slots, heroSlot) : '';
 
   var calDenom = calTarget + (eff.flexUpperCal || 0);
   var calPct = calDenom ? Math.min(100, Math.round((consumed.cal / calDenom) * 100)) : 0;
-  var kcalRem = Math.max(0, calTarget - consumed.cal);
-  var protTgt = macros.protein || 0;
-  var protRem = Math.max(0, protTgt - consumed.p);
   var kEl = el('today-kcal-remaining');
   if (kEl) kEl.textContent = arcFmtKcalHeadroom(consumed.cal, calTarget);
   var pEl = el('today-protein-remaining');
-  if (pEl) pEl.textContent = arcFmtProteinHeadroom(consumed.p, protTgt);
+  if (pEl) pEl.textContent = arcFmtProteinHeadroom(consumed.p, macros.protein || 0);
   var ring = el('today-ring-bar');
   if (ring) {
     var rad = 41;
@@ -9539,49 +9700,27 @@ function renderToday() {
     }
   }
 
-  if (cookBtn) cookBtn.dataset.rid = meal ? String(meal.id) : '';
   var swapBtn = el('today-swap-btn');
   if (swapBtn) {
     var swapSlot = heroSlot || (slots[0] || '');
-    if (!meal && firstSlotWithPlannedRecipe(day, slots)) swapSlot = firstSlotWithPlannedRecipe(day, slots);
+    if (!mealPlan[day] || !mealPlan[day][swapSlot]) {
+      var firstPlanned = firstSlotWithPlannedRecipe(day, slots);
+      if (firstPlanned) swapSlot = firstPlanned;
+    }
     swapBtn.dataset.day = day;
     swapBtn.dataset.slot = swapSlot || '';
     var canPickRecipe = recipes && recipes.length > 0;
     swapBtn.disabled = !slots.length || !canPickRecipe;
-    if (!slots.length) swapBtn.title = 'Add meals per day in Settings, then plan your week.';
-    else if (!canPickRecipe) swapBtn.title = 'Build your week first—then you can swap today’s plan.';
-    else swapBtn.title = 'Change the planned recipe for ' + (swapSlot || 'this slot');
   }
 
   var tl = el('today-timeline');
-  if (tl) tl.innerHTML = slots.length ? buildTodayTimelineHtml(day, slots, heroSlot, engineOut.timelineHints) : '';
+  if (tl) tl.innerHTML = '';
 
   var arcStrip = el('today-arc-strip');
-  var arcCards = el('today-arc-cards');
-  if (arcStrip && arcCards) {
-    var arcLines = buildTodayAmbientInsightLines({
-      day: day,
-      slots: slots,
-      calTarget: calTarget,
-      consumed: consumed,
-      planned: planned,
-      hour: hourNow,
-      behaviorState: behaviorState,
-      engineOut: engineOut,
-      chaosPlan: chaosPlan
-    });
-    if (!arcLines.length) {
-      arcStrip.style.display = 'none';
-      arcCards.innerHTML = '';
-    } else {
-      arcStrip.style.display = 'block';
-      var arcH = '';
-      var maxArc = Math.min(2, arcLines.length);
-      for (var ax = 0; ax < maxArc; ax++) {
-        arcH += '<div class="today-arc-card">' + shopEsc(arcLines[ax]) + '</div>';
-      }
-      arcCards.innerHTML = arcH;
-    }
+  if (arcStrip) {
+    arcStrip.style.display = 'none';
+    var arcCards = el('today-arc-cards');
+    if (arcCards) arcCards.innerHTML = '';
   }
 
   updateReflectionBannerUI();
@@ -16133,6 +16272,45 @@ function arcWireApplicationDom() {
   });
 
   el('s-today').addEventListener('click', function(e) {
+    var favBtn = e.target.closest('.today-meal-fav');
+    if (favBtn) {
+      e.stopPropagation();
+      toggleRecipeFavorite(parseInt(favBtn.getAttribute('data-fav-rid'), 10));
+      renderToday();
+      return;
+    }
+    var menuBtn = e.target.closest('.today-meal-menu-btn');
+    if (menuBtn) {
+      e.stopPropagation();
+      var menuWrap = menuBtn.closest('.today-meal-menu-wrap');
+      if (menuWrap) {
+        var wasOpen = menuWrap.classList.contains('is-open');
+        var openMenus = document.querySelectorAll('.today-meal-menu-wrap.is-open');
+        for (var mi = 0; mi < openMenus.length; mi++) openMenus[mi].classList.remove('is-open');
+        if (!wasOpen) menuWrap.classList.add('is-open');
+      }
+      return;
+    }
+    var menuItem = e.target.closest('[data-today-menu]');
+    if (menuItem) {
+      e.stopPropagation();
+      var menuAct = menuItem.getAttribute('data-today-menu');
+      var menuDay = menuItem.getAttribute('data-day');
+      var menuSlot = menuItem.getAttribute('data-slot');
+      var menuRid = parseInt(menuItem.getAttribute('data-rid'), 10);
+      var openMenus2 = document.querySelectorAll('.today-meal-menu-wrap.is-open');
+      for (var mj = 0; mj < openMenus2.length; mj++) openMenus2[mj].classList.remove('is-open');
+      if (menuAct === 'swap') openAssign(menuDay, menuSlot, 'replace');
+      else if (menuAct === 'save') saveTodayRecipe(menuRid);
+      else if (menuAct === 'remove') removeTodayMealSlot(menuDay, menuSlot);
+      return;
+    }
+    var card = e.target.closest('.today-meal-card--link');
+    if (card) {
+      var cardRid = parseInt(card.getAttribute('data-rid'), 10);
+      if (cardRid) openRM(cardRid);
+      return;
+    }
     var row = e.target.closest('.today-tl-row--tap');
     if (row && row.dataset.tlDay) {
       openTodayMealPeek(row.dataset.tlDay, row.dataset.tlSlot);
@@ -16149,6 +16327,12 @@ function arcWireApplicationDom() {
       return;
     }
     applyTodayMealAction(act, day, slot);
+  });
+
+  document.addEventListener('click', function(e) {
+    if (e.target.closest('.today-meal-menu-wrap')) return;
+    var openMenus = document.querySelectorAll('.today-meal-menu-wrap.is-open');
+    for (var i = 0; i < openMenus.length; i++) openMenus[i].classList.remove('is-open');
   });
 
   el('today-regen-btn').addEventListener('click', regenerateTodayPlan);
