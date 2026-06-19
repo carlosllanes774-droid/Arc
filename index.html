@@ -7,6 +7,9 @@
 <link rel="icon" type="image/png" href="assets/branding/Arc_Logo.png" sizes="32x32"/>
 <link rel="apple-touch-icon" href="assets/branding/Arc_Logo.png"/>
 <link rel="preload" as="image" href="assets/branding/arc-mark.png"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet"/>
 <meta name="theme-color" content="#000000"/>
 <style>
 html.splash-active,html.splash-active body{background:#000!important}
@@ -1983,12 +1986,27 @@ button:not(:disabled):active,
 #s-today .today-flow > .today-foot{
   animation:contentFadeUp var(--motion-fast) var(--ease-out) both;
 }
-.today-no-plan{padding:var(--sp-1) 0 var(--sp-4)}
-.today-no-plan-progress{margin-bottom:var(--sp-3)}
-.today-no-plan-card{border-radius:var(--r-xl);padding:var(--sp-3) var(--sp-page-x);background:var(--arc-card);border:1px solid var(--arc-border);text-align:left}
-.today-no-plan-h{margin:0 0 10px;font-family:Georgia,serif;font-size:var(--fs-display);font-weight:700;color:var(--arc-text);line-height:var(--lh-tight);letter-spacing:-.03em}
-.today-no-plan-s{margin:0 0 var(--sp-3);font-size:15px;line-height:1.55;color:var(--arc-subtext);font-weight:500;max-width:32em}
-.today-no-plan-cta{margin-top:4px}
+.today-no-plan-only{display:none}
+.today-no-plan{padding:0 0 var(--sp-4)}
+.today-no-plan-progress{display:none!important}
+.today-no-plan-empty{max-width:320px;margin:90px auto 0;display:flex;flex-direction:column;align-items:center;text-align:center}
+.today-no-plan-illus-area{position:relative;width:220px;height:220px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.today-no-plan-illus-glow{position:absolute;top:50%;left:50%;width:250px;height:250px;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle,rgba(241,101,50,.12) 0%,rgba(241,101,50,.04) 55%,transparent 75%);pointer-events:none}
+.today-no-plan-illus{position:relative;z-index:1;width:220px;height:220px;display:block}
+.today-no-plan-h{margin:40px 0 0;font-family:"Baskerville","Iowan Old Style",serif;font-size:32px;font-weight:700;line-height:1.1;color:#F8F4F0;letter-spacing:-.02em}
+.today-no-plan-s{margin:22px 0 0;font-family:Inter,system-ui,-apple-system,sans-serif;font-size:18px;font-weight:400;line-height:1.65;color:rgba(255,255,255,.65);max-width:320px}
+.today-no-plan-divider{width:56px;height:4px;border-radius:999px;background:#F16532;opacity:.9;margin-top:26px;flex-shrink:0}
+.today-no-plan-cta{margin-top:42px;width:100%;max-width:340px;height:68px;padding:0 24px;border:none;border-radius:22px;background:linear-gradient(90deg,#F16532 0%,#F76B38 100%);box-shadow:0 20px 50px rgba(241,101,50,.18);font-family:Inter,system-ui,-apple-system,sans-serif;font-size:20px;font-weight:700;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .2s ease,box-shadow .2s ease;-webkit-tap-highlight-color:transparent}
+.today-no-plan-cta:hover{transform:translateY(-2px);box-shadow:0 24px 60px rgba(241,101,50,.25)}
+#s-today.today--no-plan{background:linear-gradient(180deg,#0D0A09 0%,#0B0908 40%,#090807 100%)}
+#s-today.today--no-plan > .a-hdr{padding:60px 28px 0;background:transparent;box-shadow:none;gap:12px}
+#s-today.today--no-plan .today-no-plan-only{display:flex;align-items:center;justify-content:center;width:22px;height:22px;flex-shrink:0}
+#s-today.today--no-plan .a-hdr-mark{display:none}
+#s-today.today--no-plan #today-date{display:none}
+#s-today.today--no-plan > .a-hdr h2{flex:1;flex-grow:1;font-family:"Baskerville","Iowan Old Style",serif;font-size:34px;font-weight:700;color:#F8F4F0;letter-spacing:-.5px}
+#s-today.today--no-plan > .a-hdr .settings-open-btn{width:44px;height:44px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.04);color:#F5E9E0;font-size:18px;margin-left:0}
+#s-today.today--no-plan > .a-hdr .settings-open-btn:hover{background:rgba(255,255,255,.12);box-shadow:none}
+#s-today.today--no-plan .content.today-flow{padding:0 28px var(--sp-5);background:radial-gradient(circle at center,rgba(238,98,52,.18) 0%,rgba(238,98,52,.08) 25%,transparent 65%),linear-gradient(180deg,#0D0A09 0%,#0B0908 40%,#090807 100%)}
 #s-today.today--no-plan .today-hero,
 #s-today.today--no-plan .today-more-details{display:none!important}
 #s-today.today--no-plan .prepday-banner{display:none!important}
@@ -2515,7 +2533,7 @@ button:not(:disabled):active,
 
 <!-- TODAY -->
 <div class="screen" id="s-today">
-  <div class="a-hdr"><span class="a-hdr-mark" aria-hidden="true"><span class="arc-mark arc-mark--hdr arc-mark--on-light" aria-hidden="true"></span></span><h2 style="flex-shrink:0">Today</h2><span style="flex:1;text-align:right;font-size:13px;color:var(--arc-subtext);padding-right:8px" id="today-date">—</span><button type="button" class="settings-open-btn" id="hdr-profile-btn" title="Profile" aria-label="Profile">👤</button></div>
+  <div class="a-hdr"><span class="a-hdr-mark" aria-hidden="true"><span class="arc-mark arc-mark--hdr arc-mark--on-light" aria-hidden="true"></span></span><span class="a-hdr-sun today-no-plan-only" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="4" stroke="#F16532" stroke-width="1.5"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2M4.34 4.34l1.41 1.41M16.25 16.25l1.41 1.41M4.34 17.66l1.41-1.41M16.25 5.75l1.41-1.41" stroke="#F16532" stroke-width="1.5" stroke-linecap="round"/></svg></span><h2 style="flex-shrink:0">Today</h2><span style="flex:1;text-align:right;font-size:13px;color:var(--arc-subtext);padding-right:8px" id="today-date">—</span><button type="button" class="settings-open-btn" id="hdr-profile-btn" title="Profile" aria-label="Profile">👤</button></div>
   <div class="content today-flow">
     <div class="week-status-chip" id="week-status-chip" style="display:none" aria-live="polite">On track</div>
     <div class="prepday-banner" id="prepday-banner" style="display:none" role="region" aria-label="Prep day suggestion">
@@ -2526,7 +2544,7 @@ button:not(:disabled):active,
       </div>
     </div>
     <section class="today-no-plan" id="today-no-plan" style="display:none" aria-label="Get started with your meal plan">
-        <div class="today-no-plan-progress arc-adv-only">
+      <div class="today-no-plan-progress arc-adv-only" aria-hidden="true">
         <div class="today-progress-row">
           <div class="today-ring-wrap" aria-hidden="true">
             <svg class="today-ring-svg" viewBox="0 0 100 100" aria-hidden="true">
@@ -2540,10 +2558,31 @@ button:not(:disabled):active,
           </div>
         </div>
       </div>
-      <div class="today-no-plan-card">
+      <div class="today-no-plan-empty">
+        <div class="today-no-plan-illus-area" aria-hidden="true">
+          <div class="today-no-plan-illus-glow"></div>
+          <svg class="today-no-plan-illus" viewBox="0 0 220 220" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect x="72" y="38" width="76" height="108" rx="8" stroke="rgba(248,244,240,.22)" stroke-width="1.2"/>
+            <path d="M88 38h44a6 6 0 0 1 6 6v8H82v-8a6 6 0 0 1 6-6z" stroke="rgba(248,244,240,.18)" stroke-width="1.2"/>
+            <path d="M92 72l10 10 18-22" stroke="rgba(241,101,50,.55)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M92 96l8 8 14-16" stroke="rgba(241,101,50,.42)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M92 118l6 6 10-12" stroke="rgba(241,101,50,.32)" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+            <ellipse cx="110" cy="168" rx="42" ry="14" fill="rgba(241,101,50,.06)"/>
+            <path d="M72 156c8-18 24-28 38-28s30 10 38 28" stroke="rgba(245,233,224,.28)" stroke-width="1.3" fill="rgba(245,233,224,.08)"/>
+            <path d="M68 156h84" stroke="rgba(245,233,224,.22)" stroke-width="1.2" stroke-linecap="round"/>
+            <path d="M98 148c6-4 14-6 22-4" stroke="rgba(232,221,212,.35)" stroke-width="1.1" stroke-linecap="round"/>
+            <path d="M58 132c10-8 18-6 24 2 8-10 18-12 28-4 10-8 22-6 30 4" stroke="rgba(107,143,113,.45)" stroke-width="1.2" stroke-linecap="round" fill="none"/>
+            <circle cx="58" cy="58" r="1.2" fill="rgba(248,244,240,.35)"/>
+            <circle cx="168" cy="72" r="1" fill="rgba(241,101,50,.4)"/>
+            <path d="M164 48l2 4 4 1-3 3 1 4-4-2-3 3v-4l-4-1 4-2z" fill="rgba(248,244,240,.22)"/>
+            <path d="M48 168l1.5 3 3 .8-2.2 2.2.6 3-2.8-1.4-2.4 2.4v-3l-3-.8 2.8-1.4z" fill="rgba(241,101,50,.18)"/>
+            <circle cx="176" cy="148" r="1.1" fill="rgba(248,244,240,.28)"/>
+          </svg>
+        </div>
         <h2 class="today-no-plan-h" id="today-no-plan-h">No meal plan yet.</h2>
         <p class="today-no-plan-s" id="today-no-plan-s">Let’s build one around your goals, budget, schedule, and food preferences.</p>
-        <button type="button" class="btn-green today-no-plan-cta" id="today-personalize-btn">Personalize My Meal Plan</button>
+        <div class="today-no-plan-divider" aria-hidden="true"></div>
+        <button type="button" class="today-no-plan-cta" id="today-personalize-btn">Personalize My Meal Plan</button>
       </div>
     </section>
     <section class="today-hero">
