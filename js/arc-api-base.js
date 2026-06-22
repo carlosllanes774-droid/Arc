@@ -36,8 +36,56 @@
     return apiBaseUrl() + p;
   }
 
+  /**
+   * Supabase access_token for BFF Authorization header (when signed in).
+   * @returns {Promise<string|null>}
+   */
+  function getAccessToken() {
+    var Backend = global.ArcBackend;
+    if (!Backend || typeof Backend.getSession !== 'function') {
+      return Promise.resolve(null);
+    }
+    return Backend.getSession().then(function (res) {
+      var session = res && res.data && res.data.session;
+      return session && session.access_token ? session.access_token : null;
+    }).catch(function () {
+      return null;
+    });
+  }
+
+  /**
+   * Merge Authorization: Bearer when a Supabase session exists.
+   * @param {object} [headers]
+   * @returns {Promise<object>}
+   */
+  function withAuthHeaders(headers) {
+    headers = headers || {};
+    return getAccessToken().then(function (token) {
+      var h = Object.assign({}, headers);
+      if (token) h.Authorization = 'Bearer ' + token;
+      return h;
+    });
+  }
+
+  /**
+   * fetch() with Supabase JWT attached for protected BFF routes.
+   * @param {string} url
+   * @param {object} [options]
+   * @returns {Promise<Response>}
+   */
+  function authFetch(url, options) {
+    options = options || {};
+    return withAuthHeaders(options.headers).then(function (headers) {
+      options.headers = headers;
+      return fetch(url, options);
+    });
+  }
+
   global.ArcApiBase = {
     apiBaseUrl: apiBaseUrl,
-    apiUrl: apiUrl
+    apiUrl: apiUrl,
+    getAccessToken: getAccessToken,
+    withAuthHeaders: withAuthHeaders,
+    authFetch: authFetch
   };
 })(typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : this);
