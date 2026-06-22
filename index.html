@@ -8541,24 +8541,37 @@ function getDayPlannedTotals(day, slots) {
 
 function getDayConsumedTotals(day, slots) {
   var t = { cal: 0, p: 0, c: 0, f: 0 };
-  if (!mealPlan[day]) return t;
-  for (var s = 0; s < slots.length; s++) {
-    var slot = slots[s];
-    var j = getSlotJournal(day, slot);
-    if (!j || j.status === 'skipped') continue;
-    var r = null;
-    if (j.status === 'logged') {
-      var rid = mealPlan[day][slot];
-      r = rid ? findRecipe(rid) : null;
-    } else if (j.status === 'replaced' && j.actualRid) {
-      r = findRecipe(j.actualRid);
+  if (mealPlan[day]) {
+    for (var s = 0; s < slots.length; s++) {
+      var slot = slots[s];
+      var j = getSlotJournal(day, slot);
+      if (!j || j.status === 'skipped') continue;
+      var r = null;
+      if (j.status === 'logged') {
+        var rid = mealPlan[day][slot];
+        r = rid ? findRecipe(rid) : null;
+      } else if (j.status === 'replaced' && j.actualRid) {
+        r = findRecipe(j.actualRid);
+      }
+      if (r) {
+        t.cal += r.cal;
+        t.p += r.p;
+        t.c += r.c;
+        t.f += r.f;
+      }
     }
-    if (r) {
-      t.cal += r.cal;
-      t.p += r.p;
-      t.c += r.c;
-      t.f += r.f;
-    }
+  }
+  ensureRecovery(UP);
+  for (var i = 0; i < UP.foodReports.length; i++) {
+    var fr = UP.foodReports[i];
+    if (!foodReportMatchesDay(fr, day)) continue;
+    if (fr.cal != null && isFinite(fr.cal)) t.cal += fr.cal;
+    var pg = fr.proteinG != null ? fr.proteinG : fr.p;
+    if (pg != null && isFinite(pg)) t.p += pg;
+    var cg = fr.carbsG != null ? fr.carbsG : fr.c;
+    if (cg != null && isFinite(cg)) t.c += cg;
+    var fg = fr.fatG != null ? fr.fatG : fr.f;
+    if (fg != null && isFinite(fg)) t.f += fg;
   }
   return t;
 }
@@ -8707,11 +8720,23 @@ function renderProgressSimplePanel() {
     : 'Tell Coach what you ate on Today — your weekly reflection gathers the bigger picture.';
 }
 
+function foodReportMatchesDay(fr, day) {
+  if (!fr || !day) return false;
+  if (fr.day === day) return true;
+  if (!fr.at) return false;
+  try {
+    var d = new Date(fr.at);
+    return DAYS[d.getDay() === 0 ? 6 : d.getDay() - 1] === day;
+  } catch (e) {
+    return false;
+  }
+}
+
 function getLastFoodReportForDay(day) {
   ensureRecovery(UP);
   day = day || todayKey();
   for (var i = UP.foodReports.length - 1; i >= 0; i--) {
-    if (UP.foodReports[i].day === day) return UP.foodReports[i];
+    if (foodReportMatchesDay(UP.foodReports[i], day)) return UP.foodReports[i];
   }
   return null;
 }
