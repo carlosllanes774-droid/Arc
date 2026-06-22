@@ -1,7 +1,9 @@
 import express from "express";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 import OpenAI from "openai";
+import { createClient } from "@supabase/supabase-js";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -222,8 +224,85 @@ function krogerCredentials() {
 
 const app = express();
 app.set("trust proxy", 1);
-app.use(cors());
+
+/** Comma-separated allowed browser origins (e.g. https://your-app.onrender.com). Same-origin requests omit Origin. */
+function corsAllowedOrigins() {
+  const raw = process.env.ARC_FRONTEND_ORIGIN || process.env.FRONTEND_URL || "";
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin) return callback(null, true);
+      const allowed = corsAllowedOrigins();
+      if (!allowed.length) return callback(null, true);
+      if (allowed.includes(origin)) return callback(null, true);
+      callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: "2mb" }));
+
+function normalizeSupabaseUrl(raw) {
+  return String(raw || "")
+    .trim()
+    .replace(/\/rest\/v1\/?$/i, "")
+    .replace(/\/$/, "");
+}
+
+const supabaseAuthUrl = normalizeSupabaseUrl(process.env.SUPABASE_URL);
+const supabaseAnonKey = (process.env.SUPABASE_ANON_KEY || "").trim();
+const supabaseAuthClient =
+  supabaseAuthUrl && supabaseAnonKey
+    ? createClient(supabaseAuthUrl, supabaseAnonKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      })
+    : null;
+
+/** Validates Supabase JWT from Authorization: Bearer <token>. */
+async function requireAuth(req, res, next) {
+  const authHeader = String(req.headers.authorization || "");
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match || !match[1].trim()) {
+    return res.status(401).json({ error: "Unauthorized", message: "Missing or invalid Authorization header" });
+  }
+  if (!supabaseAuthClient) {
+    return res.status(503).json({ error: "Auth not configured" });
+  }
+  const token = match[1].trim();
+  const { data, error } = await supabaseAuthClient.auth.getUser(token);
+  if (error || !data?.user) {
+    return res.status(401).json({ error: "Unauthorized", message: "Invalid or expired token" });
+  }
+  req.user = data.user;
+  next();
+}
+
+const paidApiRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests", message: "Rate limit exceeded. Try again in a minute." },
+});
+
+const paidApiGuard = [requireAuth, paidApiRateLimiter];
+
+for (const mountPath of [
+  "/api/ai",
+  "/api/week/generate",
+  "/api/edamam",
+  "/api/usda/search",
+  "/api/spoonacular",
+  "/api/kroger",
+]) {
+  app.use(mountPath, paidApiGuard);
+}
 
 /** Public origin for config responses — respects reverse-proxy TLS (Render, etc.). */
 function requestPublicOrigin(req) {
