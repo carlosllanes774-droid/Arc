@@ -309,7 +309,8 @@ body{
 }
 .intro-slide-mark{
   display:flex;justify-content:flex-start;
-  margin-bottom:6px;
+  margin-top:-10px;
+  margin-bottom:4px;
   opacity:.82;
 }
 .intro-slide-mark .arc-mark--intro{width:30px;height:30px}
@@ -426,23 +427,23 @@ body{
   to{opacity:.92;filter:saturate(1.06)}}
 .intro-skip{position:relative;z-index:2;align-self:flex-end;border:none;background:rgba(255,255,255,.08);color:rgba(255,255,255,.72);font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:10px 14px;border-radius:999px;cursor:pointer;transition:background var(--motion-fast) var(--ease-standard),color var(--motion-fast) var(--ease-standard)}
 .intro-skip:hover{background:rgba(255,255,255,.13);color:#fff}
-.intro-deck{position:relative;z-index:1;flex:1;display:flex;flex-direction:column;min-height:0;padding-top:8px}
-.intro-progress{height:2px;border-radius:3px;background:rgba(255,255,255,.1);overflow:hidden;margin-bottom:22px;opacity:.9}
+.intro-deck{position:relative;z-index:1;flex:1;display:flex;flex-direction:column;min-height:0;padding-top:2px}
+.intro-progress{height:2px;border-radius:3px;background:rgba(255,255,255,.1);overflow:hidden;margin-bottom:14px;opacity:.9}
 .intro-progress>span{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--arc-primary),#f4a082);border-radius:3px;box-shadow:0 0 16px rgba(227,90,54,.35);transition:width 720ms var(--intro-ease-smooth)}
 .intro-chip{display:inline-flex;align-items:center;align-self:flex-start;padding:8px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:11px;font-weight:650;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.58);margin-bottom:6px;background:rgba(255,255,255,.035);transition:opacity 360ms var(--intro-ease-out),transform 360ms var(--intro-ease-out)}
-.intro-stage-wrap{flex:1;display:flex;min-height:0;margin-top:-12px;cursor:pointer;-webkit-tap-highlight-color:transparent;perspective:880px}
+.intro-stage-wrap{flex:1;display:flex;min-height:0;margin-top:-24px;padding-bottom:2px;cursor:pointer;-webkit-tap-highlight-color:transparent;perspective:880px}
 .intro-stage{flex:1;display:flex;flex-direction:column;min-height:0;opacity:1;transform:translateY(0) scale(1);filter:blur(0);transition:opacity 420ms var(--intro-ease-smooth),transform 420ms var(--intro-ease-smooth),filter 420ms var(--intro-ease-smooth)}
 .intro-stage.is-exiting{opacity:0;transform:translateY(18px) scale(.988);filter:blur(3px)}
-.intro-copy-block{flex-shrink:0;margin-top:-6px;margin-bottom:6px}
-.intro-visual-canvas{flex:1;display:flex;flex-direction:column;min-height:0;margin-top:auto;padding-top:6px;position:relative}
+.intro-copy-block{flex-shrink:0;margin-top:-10px;margin-bottom:6px}
+.intro-visual-canvas{flex:1;display:flex;flex-direction:column;min-height:0;margin-top:auto;padding-top:0;padding-bottom:16px;position:relative}
 .intro-stage--chaos .intro-canvas-inner{min-height:174px;padding-bottom:2px}
-.intro-stage--chaos .intro-calm-hero{margin-top:-14px}
-.intro-stage--week .intro-visual-canvas{padding-top:14px;padding-bottom:4px}
-.intro-stage--week .intro-week-canvas{margin-top:-6px}
+.intro-stage--chaos .intro-calm-hero{margin-top:-26px}
+.intro-stage--week .intro-visual-canvas{padding-top:6px;padding-bottom:16px}
+.intro-stage--week .intro-week-canvas{margin-top:-18px}
 .intro-stage--adapt .intro-copy-block{margin-bottom:12px}
-.intro-stage--adapt .intro-visual-canvas{margin-top:0;padding-top:16px}
-.intro-stage--outcome .intro-visual-canvas{padding-top:30px}
-.intro-stage--outcome .intro-outcome-stage{margin-top:18px}
+.intro-stage--adapt .intro-visual-canvas{margin-top:0;padding-top:6px;padding-bottom:16px}
+.intro-stage--outcome .intro-visual-canvas{padding-top:14px;padding-bottom:16px}
+.intro-stage--outcome .intro-outcome-stage{margin-top:4px}
 .intro-title{font-family:Georgia,serif;font-size:clamp(30px,6.4vw,38px);line-height:1.1;letter-spacing:-.035em;color:#fff;margin-bottom:14px;max-width:12.2em;font-weight:600}
 .intro-sub{font-size:15px;line-height:1.62;color:rgba(255,255,255,.56);max-width:24em;margin-bottom:0;font-weight:450}
 .intro-quote{margin-top:16px;font-size:13px;line-height:1.55;color:rgba(255,255,255,.48);max-width:22em;font-style:italic;font-weight:450;padding-left:14px;border-left:2px solid rgba(227,90,54,.45)}
@@ -451,7 +452,7 @@ body{
 .intro-stage--adapt .intro-sub{line-height:1.58}
 .intro-stage--adapt .intro-visual-canvas{flex:0 1 auto;min-height:0;max-height:min(42vh,320px);overflow:hidden;justify-content:flex-start}
 .intro-visual--adapt{padding-top:0;margin-top:0;gap:12px}
-.intro-visual--adapt .intro-adapt-stage{max-width:292px;width:100%;margin:14px auto 0}
+.intro-visual--adapt .intro-adapt-stage{max-width:292px;width:100%;margin:6px auto 0}
 .intro-visual--adapt .intro-phone{padding:8px 9px;border-radius:20px}
 .intro-visual--adapt .intro-phone-screen{padding:8px 9px 7px;border-radius:14px}
 .intro-visual--adapt .intro-mock-head{margin-bottom:7px}
@@ -575,18 +576,19 @@ body{
 @media (max-height:720px){
   .intro-welcome{padding-top:22px;padding-bottom:22px}
   .intro-chip{margin-bottom:8px}
-  .intro-stage-wrap{margin-top:-6px}
-  .intro-copy-block{margin-top:-2px}
+  .intro-stage-wrap{margin-top:-16px}
+  .intro-copy-block{margin-top:-6px}
+  .intro-slide-mark{margin-top:-8px}
   .intro-stage--adapt .intro-visual-canvas{max-height:min(34vh,280px)}
   .intro-visual--adapt .intro-adapt-stage{max-width:272px}
-  .intro-stage--adapt .intro-copy-block{margin-top:-2px;margin-bottom:10px}
-  .intro-stage--chaos .intro-calm-hero{margin-top:-10px}
-  .intro-stage--week .intro-visual-canvas{padding-top:10px}
-  .intro-stage--week .intro-week-canvas{margin-top:-4px}
-  .intro-stage--adapt .intro-visual-canvas{padding-top:12px}
-  .intro-visual--adapt .intro-adapt-stage{margin:10px auto 0}
-  .intro-stage--outcome .intro-visual-canvas{padding-top:22px}
-  .intro-stage--outcome .intro-outcome-stage{margin-top:12px}
+  .intro-stage--adapt .intro-copy-block{margin-top:-6px;margin-bottom:10px}
+  .intro-stage--chaos .intro-calm-hero{margin-top:-20px}
+  .intro-stage--week .intro-visual-canvas{padding-top:4px}
+  .intro-stage--week .intro-week-canvas{margin-top:-12px}
+  .intro-stage--adapt .intro-visual-canvas{padding-top:4px}
+  .intro-visual--adapt .intro-adapt-stage{margin:4px auto 0}
+  .intro-stage--outcome .intro-visual-canvas{padding-top:10px}
+  .intro-stage--outcome .intro-outcome-stage{margin-top:2px}
   .intro-title{font-size:clamp(26px,5.8vw,34px)}
 }
 @media (prefers-reduced-motion:reduce){
