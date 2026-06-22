@@ -202,11 +202,18 @@
   }
 
   function postJson(path, body) {
-    return fetch(apiUrl(path), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(body || {})
-    }).then(function (resp) {
+    var baseHeaders = { 'Content-Type': 'application/json', Accept: 'application/json' };
+    var doFetch = function (headers) {
+      return fetch(apiUrl(path), {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(body || {})
+      });
+    };
+    var req = (global.ArcApiBase && global.ArcApiBase.withAuthHeaders)
+      ? global.ArcApiBase.withAuthHeaders(baseHeaders).then(doFetch)
+      : doFetch(baseHeaders);
+    return req.then(function (resp) {
       return resp.json().then(function (json) {
         return { ok: resp.ok, status: resp.status, json: json };
       });
