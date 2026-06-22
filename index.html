@@ -8238,7 +8238,7 @@ function fetchSpoonacularRecipeImage(spoonacularId) {
   var spId = parseInt(spoonacularId, 10);
   if (!spId || todayImageFetchInflight[spId]) return Promise.resolve(null);
   todayImageFetchInflight[spId] = true;
-  return fetch('/api/spoonacular/bulk', {
+  return arcAuthFetch(arcApiPath('/api/spoonacular/bulk'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ids: [spId], includeNutrition: false })
@@ -9898,7 +9898,7 @@ function callAI(system, userMsg, maxTok, callback, taskType) {
     return;
   }
 
-  var req = fetch(arcApiPath('/api/ai'), {
+  var req = arcAuthFetch(arcApiPath('/api/ai'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -14700,6 +14700,34 @@ function arcApiBase() {
 function arcApiPath(path) {
   return arcApiBase() + path;
 }
+
+/** Attach Supabase JWT for protected BFF routes (Bearer token). */
+function arcAuthHeaders(extraHeaders) {
+  extraHeaders = extraHeaders || {};
+  if (typeof ArcApiBase !== 'undefined' && ArcApiBase.withAuthHeaders) {
+    return ArcApiBase.withAuthHeaders(extraHeaders);
+  }
+  if (typeof ArcBackend !== 'undefined' && ArcBackend.getSession) {
+    return ArcBackend.getSession().then(function (result) {
+      var headers = Object.assign({}, extraHeaders);
+      var session = result && result.data && result.data.session;
+      if (session && session.access_token) {
+        headers.Authorization = 'Bearer ' + session.access_token;
+      }
+      return headers;
+    });
+  }
+  return Promise.resolve(Object.assign({}, extraHeaders));
+}
+
+function arcAuthFetch(url, options) {
+  options = options || {};
+  return arcAuthHeaders(options.headers).then(function (headers) {
+    options.headers = headers;
+    return fetch(url, options);
+  });
+}
+
 var GROCERY_LIVE_PRICE_URL = arcApiPath('/api/grocery/prices');
 
 var krogerPriceCache = {};
