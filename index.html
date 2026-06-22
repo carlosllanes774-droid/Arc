@@ -8562,16 +8562,15 @@ function getDayConsumedTotals(day, slots) {
     }
   }
   ensureRecovery(UP);
+  var calTarget = getCalTarget();
   for (var i = 0; i < UP.foodReports.length; i++) {
     var fr = UP.foodReports[i];
     if (!foodReportMatchesDay(fr, day)) continue;
-    if (fr.cal != null && isFinite(fr.cal)) t.cal += fr.cal;
-    var pg = fr.proteinG != null ? fr.proteinG : fr.p;
-    if (pg != null && isFinite(pg)) t.p += pg;
-    var cg = fr.carbsG != null ? fr.carbsG : fr.c;
-    if (cg != null && isFinite(cg)) t.c += cg;
-    var fg = fr.fatG != null ? fr.fatG : fr.f;
-    if (fg != null && isFinite(fg)) t.f += fg;
+    var m = resolveFoodReportConsumed(fr, calTarget);
+    t.cal += m.cal;
+    t.p += m.p;
+    t.c += m.c;
+    t.f += m.f;
   }
   return t;
 }
@@ -9729,17 +9728,21 @@ function renderTodayNoPlanEmptyState() {
   if (sEl) sEl.textContent = copy.noPlanS || '';
   if (ctaEl) ctaEl.textContent = copy.noPlanCta || 'Personalize My Meal Plan';
 
+  var consumed = getDayConsumedTotals(day, slots);
+  var calDenom = calTarget + (eff.flexUpperCal || 0);
+  var calPct = calDenom ? Math.min(100, Math.round((consumed.cal / calDenom) * 100)) : 0;
+
   var kEl = el('today-empty-kcal');
   var pEl = el('today-empty-protein');
-  if (kEl) kEl.textContent = arcFmtTodayCalTarget(calTarget);
-  if (pEl) pEl.textContent = arcFmtTodayProteinTarget(protTgt);
+  if (kEl) kEl.textContent = consumed.cal > 0 ? arcFmtKcalHeadroom(consumed.cal, calTarget) : arcFmtTodayCalTarget(calTarget);
+  if (pEl) pEl.textContent = consumed.p > 0 ? arcFmtProteinHeadroom(consumed.p, protTgt) : arcFmtTodayProteinTarget(protTgt);
 
   var ring = el('today-empty-ring-bar');
   if (ring) {
     var rad = 41;
     var circumference = 2 * Math.PI * rad;
     ring.style.strokeDasharray = String(circumference);
-    ring.style.strokeDashoffset = String(circumference);
+    ring.style.strokeDashoffset = String(circumference * (1 - Math.min(100, calPct) / 100));
   }
 }
 
@@ -15168,6 +15171,46 @@ function normalizeFoodImpactClass(v) {
   return 'moderate';
 }
 
+/** Rough meal macros when Coach triage omits numbers (still logged for progress). */
+function estimateFoodReportNutrition(impactClass, calTarget) {
+  calTarget = calTarget || getCalTarget() || 2000;
+  var slots = getSlots();
+  var mealsPerDay = Math.max(1, slots.length);
+  var mealBase = calTarget / mealsPerDay;
+  var mult = { light: 0.75, moderate: 1.0, heavy: 1.45 };
+  var ic = normalizeFoodImpactClass(impactClass);
+  var cal = Math.round(mealBase * (mult[ic] || mult.moderate));
+  var dailyMacros = UP.macros || getMacroTargets(calTarget);
+  var proteinG = Math.round((dailyMacros.protein || 100) / mealsPerDay * (ic === 'heavy' ? 1.2 : ic === 'light' ? 0.7 : 1));
+  var rem = Math.max(50, cal - proteinG * 4);
+  return {
+    cal: cal,
+    proteinG: proteinG,
+    carbsG: Math.round(rem * 0.5 / 4),
+    fatG: Math.round(rem * 0.5 / 9)
+  };
+}
+
+function resolveFoodReportConsumed(fr, calTarget) {
+  var cal = fr.cal;
+  var pg = fr.proteinG != null ? fr.proteinG : fr.p;
+  var cg = fr.carbsG != null ? fr.carbsG : fr.c;
+  var fg = fr.fatG != null ? fr.fatG : fr.f;
+  if (cal == null || !isFinite(cal)) {
+    var est = estimateFoodReportNutrition(fr.impactClass, calTarget);
+    cal = est.cal;
+    if (pg == null || !isFinite(pg)) pg = est.proteinG;
+    if (cg == null || !isFinite(cg)) cg = est.carbsG;
+    if (fg == null || !isFinite(fg)) fg = est.fatG;
+  }
+  return {
+    cal: cal != null && isFinite(cal) ? cal : 0,
+    p: pg != null && isFinite(pg) ? pg : 0,
+    c: cg != null && isFinite(cg) ? cg : 0,
+    f: fg != null && isFinite(fg) ? fg : 0
+  };
+}
+
 function mapFoodReportConfidence(triage, extraction) {
   if (triage && triage.estimate && triage.estimate.confidence) {
     var c = String(triage.estimate.confidence).toUpperCase();
@@ -15227,12 +15270,20 @@ function foodReportDerivedFromTriage(userText, triage) {
   var replyAdvanced = (triage && triage.replyAdvanced) ? String(triage.replyAdvanced).trim() : replySimple;
   var items = foodReportItemsFromTriage(triage, userText);
   var displayText = items.length ? items.join(', ') : userText;
+  var impactClass = normalizeFoodImpactClass(est.impactClass);
+  var cal = est.calories != null ? est.calories : est.cal;
+  var proteinG = est.proteinG != null ? est.proteinG : est.protein;
+  if (cal == null || !isFinite(cal)) {
+    var fb = estimateFoodReportNutrition(impactClass, getCalTarget());
+    cal = fb.cal;
+    if (proteinG == null || !isFinite(proteinG)) proteinG = fb.proteinG;
+  }
   return {
     text: displayText,
-    impactClass: normalizeFoodImpactClass(est.impactClass),
+    impactClass: impactClass,
     confidence: confidence,
-    cal: est.calories,
-    proteinG: est.proteinG,
+    cal: cal,
+    proteinG: proteinG,
     replySimple: replySimple,
     replyAdvanced: replyAdvanced,
     aiSig: aiSig,
@@ -15246,6 +15297,11 @@ function applyDerivedFieldsToFoodReport(fr, derived) {
   fr.confidence = derived.confidence;
   fr.cal = derived.cal != null && isFinite(derived.cal) ? Math.round(derived.cal) : null;
   fr.proteinG = derived.proteinG != null && isFinite(derived.proteinG) ? Math.round(derived.proteinG) : null;
+  if (fr.cal == null) {
+    var est = estimateFoodReportNutrition(fr.impactClass, getCalTarget());
+    fr.cal = est.cal;
+    if (fr.proteinG == null) fr.proteinG = est.proteinG;
+  }
   fr.replySimple = derived.replySimple || '';
   fr.replyAdvanced = derived.replyAdvanced || '';
 }
@@ -15316,14 +15372,21 @@ function showCoachGeneralStage() {
 
 function storeFoodReportEntry(entry) {
   ensureRecovery(UP);
+  var cal = entry.cal != null && isFinite(entry.cal) ? Math.round(entry.cal) : null;
+  var proteinG = entry.proteinG != null && isFinite(entry.proteinG) ? Math.round(entry.proteinG) : null;
+  if (cal == null) {
+    var est = estimateFoodReportNutrition(entry.impactClass, getCalTarget());
+    cal = est.cal;
+    if (proteinG == null) proteinG = est.proteinG;
+  }
   UP.foodReports.push({
     at: new Date().toISOString(),
     day: entry.day || todayKey(),
     text: String(entry.text || '').trim(),
     impactClass: normalizeFoodImpactClass(entry.impactClass),
     confidence: entry.confidence || 'C4',
-    cal: entry.cal != null && isFinite(entry.cal) ? Math.round(entry.cal) : null,
-    proteinG: entry.proteinG != null && isFinite(entry.proteinG) ? Math.round(entry.proteinG) : null,
+    cal: cal,
+    proteinG: proteinG,
     source: entry.source || 'coach_sheet',
     replySimple: entry.replySimple || '',
     replyAdvanced: entry.replyAdvanced || ''
@@ -15549,6 +15612,7 @@ function commitFoodReport() {
   clearCoachFoodPending();
   saveUserProfile();
   renderToday();
+  renderNutrition();
   renderLog();
   setCoachFoodSheetBusy(false);
   closeCoachFoodSheet();
@@ -15789,6 +15853,7 @@ function saveMealEdit() {
     });
     saveUserProfile();
     renderToday();
+    renderNutrition();
     renderLog();
     closeMealEditSheet();
   });
