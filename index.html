@@ -3176,7 +3176,7 @@ button:not(:disabled):active,
     <!-- SUPPORT -->
     <div class="settings-sec">
       <div class="settings-sec-title">Support</div>
-      <button type="button" class="settings-support-link" id="s-support-privacy" disabled>Privacy Policy</button>
+      <button type="button" class="settings-support-link" id="s-support-privacy">Privacy Policy</button>
       <button type="button" class="settings-support-link" id="s-support-terms" disabled>Terms of Service</button>
       <button type="button" class="settings-support-link" id="s-support-contact" disabled>Contact</button>
     </div>
@@ -3195,6 +3195,20 @@ button:not(:disabled):active,
   </div>
 </div><!-- /settings-sheet -->
 </div><!-- /settings-overlay -->
+<!-- Privacy & AI -->
+<div class="modal-bg" id="privacy-modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="privacy-modal-title">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="ob-info-title" id="privacy-modal-title">Privacy &amp; AI</div>
+    <div class="ob-info-body" id="privacy-modal-body">
+      <p>Arc uses AI to generate personalized meal plans and nutrition recommendations.</p>
+      <p>To provide this feature, Arc may send non-identifiable profile information such as age, biological sex, weight, height, goals, and dietary preferences to AI providers.</p>
+      <p>Arc does not sell personally identifiable information to third parties.</p>
+    </div>
+    <button type="button" class="modal-cancel" id="privacy-modal-close">Close</button>
+  </div>
+</div>
+
 <!-- Reset Arc confirmation -->
 <div class="arc-reset-modal" id="arc-reset-modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="arc-reset-h">
   <div class="arc-reset-sheet">
@@ -3496,8 +3510,8 @@ function appendWeekUserContextBlock(u, intent, ne) {
   var styleMeta = BW_STYLE_META[intent.style] || BW_STYLE_META.balanced;
   var focusMeta = BW_FOCUS_META[intent.focus] || BW_FOCUS_META.balanced;
 
-  u += 'User: ' + UP.name + '\n';
-  u += 'Profile: ' + UP.height + ', ' + UP.weight + ' lbs, ' + UP.activity + ', goal ' + UP.goal + '.\n';
+  u += 'User\n';
+  u += 'Profile: ' + (aiProfileHeightCm() || '?') + ' cm, ' + (aiProfileWeightKg() || '?') + ' kg, ' + UP.activity + ', goal ' + UP.goal + '.\n';
   u += 'Skill: ' + UP.skill + ' — ' + skillNote + '\n';
   u += 'Weekly budget: ' + weeklyBudget + ' (' + budgetNote + ')\n';
   u += 'Cuisines: ' + cuis + '\n';
@@ -7732,11 +7746,12 @@ function buildArcGoalNutritionDirective() {
   var pace = UP.weightGoalPaceLbWeek;
   var lines = [];
   if (pace != null && isFinite(Number(pace)) && (g === 'Lose weight' || g === 'Gain muscle' || g === 'Gain weight')) {
-    lines.push('Weight-change pacing preference: ~' + pace + ' lb/week (already reflected in calorie targets as a rough estimate—not a promise).');
+    var paceKg = Math.round(Number(pace) * 0.453592 * 10) / 10;
+    lines.push('Weight-change pacing preference: ~' + paceKg + ' kg/week (already reflected in calorie targets as a rough estimate—not a promise).');
   }
   var gtw = Number(UP.goalTargetWeightLb);
   if ((g === 'Lose weight' || g === 'Gain weight') && isFinite(gtw) && gtw > 0) {
-    lines.push('Optional anchor weight for gentle horizon planning: ~' + gtw + ' lbs (context only—individual variation is normal).');
+    lines.push('Optional anchor weight for gentle horizon planning: ~' + Math.round(gtw * 0.453592) + ' kg (context only—individual variation is normal).');
   }
   if (g === 'Eat healthier') {
     lines.push('Ingredient emphasis: prioritize minimally processed foods, colorful produce, fiber, and nutrient density while keeping flavors satisfying.');
@@ -9909,9 +9924,61 @@ function extractAiResponseText(data) {
 
 var arcAiInFlight = {};
 
+function aiProfileWeightKg() {
+  var weightKg = Number(UP && UP.weightKg);
+  if (!isFinite(weightKg) || weightKg <= 0) {
+    var weightLb = Number(UP && UP.weightLb);
+    if (!isFinite(weightLb) && UP && UP.weight) {
+      weightLb = parseFloat(String(UP.weight).replace(/[^0-9.]/g, ''));
+    }
+    if (isFinite(weightLb) && weightLb > 0) weightKg = weightLb * 0.453592;
+  }
+  return isFinite(weightKg) && weightKg > 0 ? Math.round(weightKg) : null;
+}
+
+function aiProfileHeightCm() {
+  var cm = Number(UP && UP.heightCm);
+  if (!isFinite(cm) || cm <= 0) {
+    var hp = parseHeightInput(UP && UP.height);
+    if (hp && hp.ok) cm = hp.cm;
+  }
+  return isFinite(cm) && cm > 0 ? Math.round(cm) : null;
+}
+
+function sanitizeAiPromptText(text) {
+  if (!text) return text;
+  var s = String(text);
+  var rawName = ((UP && UP.name) || '').trim();
+  if (rawName && rawName !== 'User' && rawName !== 'Friend') {
+    var esc = rawName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    s = s.replace(new RegExp(esc, 'gi'), 'User');
+  }
+  s = s.replace(/^(User|Name):\s*.+$/gm, 'User');
+  var hDisp = String((UP && UP.height) || '').trim();
+  var hCm = aiProfileHeightCm();
+  if (hDisp && hCm) {
+    var hEsc = hDisp.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    s = s.replace(new RegExp(hEsc, 'g'), hCm + ' cm');
+  }
+  var wLb = parseFloat(String(UP && UP.weight || '').replace(/[^0-9.]/g, ''));
+  var wKg = aiProfileWeightKg();
+  if (isFinite(wLb) && wLb > 0 && wKg) {
+    s = s.replace(new RegExp('\\b' + wLb + '\\s*lbs?\\b', 'gi'), wKg + ' kg');
+  }
+  s = s.replace(/~([\d.]+)\s*lb\/week/gi, function(_, lb) {
+    return '~' + (Math.round(parseFloat(lb) * 0.453592 * 10) / 10) + ' kg/week';
+  });
+  s = s.replace(/~([\d.]+)\s*lbs\b/gi, function(_, lb) {
+    return '~' + Math.round(parseFloat(lb) * 0.453592) + ' kg';
+  });
+  return s;
+}
+
 function callAI(system, userMsg, maxTok, callback, taskType) {
   maxTok = maxTok || 220;
   taskType = taskType || 'optimization';
+  system = sanitizeAiPromptText(system);
+  userMsg = sanitizeAiPromptText(userMsg);
   var messages = [
     { role: 'system', content: system || 'You assist Arc. Propose meal ideas and structure only; Arc Engine owns calorie and macro targets.' },
     { role: 'user', content: userMsg || '' }
@@ -12299,8 +12366,7 @@ function generateRecipes() {
                'CRITICAL: The macros (cal, p, c, f) MUST mathematically align with the ingredients provided. 1g of protein = 4 cal, 1g carb = 4 cal, 1g fat = 9 cal. Do not hallucinate macros that contradict the ingredient list.';
 
   var userMsg = 'Generate exactly 28 personalized recipes for this user profile:\n';
-  userMsg += 'Name: ' + UP.name + '\n';
-  userMsg += 'Body profile: user is ' + UP.height + ' (' + Math.round(UP.heightCm || 0) + ' cm), ' + UP.weight + ' lbs, ' + UP.activity + ' activity, goal is ' + UP.goal + '.\n';
+  userMsg += 'Body profile: user is ' + (aiProfileHeightCm() || '?') + ' cm, ' + (aiProfileWeightKg() || '?') + ' kg, ' + UP.activity + ' activity, goal is ' + UP.goal + '.\n';
   userMsg += 'Goal: ' + UP.goal + '\n';
   userMsg += 'Meals per day setting: ' + (UP.meals || '3') + ' eating occasions (' + mt.n + ' slots: ' + mt.slots.join(', ') + ').\n';
   userMsg += 'Activity: ' + UP.activity + '\n';
@@ -13361,7 +13427,7 @@ function refreshSingleSlotMeal() {
     'Honor all dietary compliance. cat MUST be exactly "' + slotCat + '".';
 
   var userMsg = 'Create ONE fresh ' + slotCat + ' for this user.\n';
-  userMsg += 'Name: ' + UP.name + '\nGoal: ' + UP.goal + ' · Activity: ' + UP.activity + ' · Budget: ' + UP.budget + ' (' + budgetNote + ')\n';
+  userMsg += 'Goal: ' + UP.goal + ' · Activity: ' + UP.activity + ' · Budget: ' + UP.budget + ' (' + budgetNote + ')\n';
   userMsg += 'Skill: ' + UP.skill + ' — ' + skillNote + '\n';
   userMsg += buildMandatoryDietPrompt(UP.restrictions, UP.dislikes);
   userMsg += buildFeedbackPromptBlock();
@@ -16391,6 +16457,25 @@ function arcWireApplicationDom() {
     showScreen('s-gen');
     generateRecipes();
   });
+
+  var privacyBtn = el('s-support-privacy');
+  if (privacyBtn) {
+    privacyBtn.addEventListener('click', function () {
+      openMotion('privacy-modal', 'flex');
+    });
+  }
+  var privacyClose = el('privacy-modal-close');
+  if (privacyClose) {
+    privacyClose.addEventListener('click', function () {
+      closeMotion('privacy-modal');
+    });
+  }
+  var privacyModal = el('privacy-modal');
+  if (privacyModal) {
+    privacyModal.addEventListener('click', function (e) {
+      if (e.target === privacyModal) closeMotion('privacy-modal');
+    });
+  }
 
   var resetArcBtn = el('s-reset-arc');
   if (resetArcBtn) {
