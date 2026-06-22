@@ -307,13 +307,13 @@ body{
   opacity:0;
   animation:introBrandIn 900ms cubic-bezier(0.22,1,0.36,1) 80ms forwards;
 }
-.intro-slide-mark{
-  display:flex;justify-content:flex-start;
-  margin-top:-10px;
-  margin-bottom:4px;
-  opacity:.82;
+.intro-header-brand{
+  display:flex;align-items:center;flex-shrink:0;
+  opacity:0;
+  animation:introBrandIn 900ms cubic-bezier(0.22,1,0.36,1) 80ms forwards;
 }
-.intro-slide-mark .arc-mark--intro{width:30px;height:30px}
+.intro-header-brand .arc-mark--intro{width:30px;height:30px;transition:opacity 360ms var(--ease-standard),transform 360ms var(--ease-standard)}
+.intro-header-brand:hover .arc-mark--intro{opacity:1;transform:scale(1.03)}
 @keyframes introBrandIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 .intro-brand .arc-mark--intro{transition:opacity 360ms var(--ease-standard),transform 360ms var(--ease-standard)}
 .intro-brand:hover .arc-mark--intro{opacity:1;transform:scale(1.03)}
@@ -385,13 +385,14 @@ body{
 .a-hdr:hover .a-hdr-mark{opacity:.95}
 
 @media (prefers-reduced-motion:reduce){
-  .splash-frame,.splash-ambience,.splash-glow,#splash-screen:not(.is-loaded) .splash-frame::after,.arc-mark--breathe,.arc-mark--float,.gen-logo-glow,.gen-logo-wrap .arc-mark--gen,.intro-brand{animation:none!important}
+  .splash-frame,.splash-ambience,.splash-glow,#splash-screen:not(.is-loaded) .splash-frame::after,.arc-mark--breathe,.arc-mark--float,.gen-logo-glow,.gen-logo-wrap .arc-mark--gen,.intro-brand,.intro-header-brand{animation:none!important}
   .splash-brand{transition:none!important}
   .splash-frame{transform:none!important}
   #splash-screen.is-loaded .splash-glow{opacity:.65}
   #splash-screen.is-loaded .splash-brand{opacity:1}
   .screen.arc-splash-handoff{filter:none;transform:none}
   .intro-brand{opacity:1;transform:none}
+  .intro-header-brand{opacity:1;transform:none}
 }
 
 @keyframes cardFadeIn {
@@ -415,7 +416,7 @@ body{
 .intro-welcome{
   --intro-ease-out:cubic-bezier(0.22,1,0.36,1);
   --intro-ease-smooth:cubic-bezier(0.33,0.83,0.38,1);
-  position:relative;flex:1;display:flex;flex-direction:column;padding:28px 22px 28px;overflow:hidden;background:#151210;color:rgba(255,255,255,.92)}
+  position:relative;flex:1;display:flex;flex-direction:column;padding:0 22px 28px;overflow:hidden;background:#151210;color:rgba(255,255,255,.92)}
 .intro-ambience{position:absolute;inset:0;pointer-events:none;background:
   radial-gradient(125% 85% at 50% -5%,rgba(227,90,54,.34) 0%,transparent 56%),
   radial-gradient(68% 52% at 100% 16%,rgba(244,160,130,.18) 0%,transparent 58%),
@@ -425,16 +426,22 @@ body{
 @keyframes introAmbienceDrift{
   from{opacity:1;filter:saturate(1)}
   to{opacity:.92;filter:saturate(1.06)}}
-.intro-skip{position:relative;z-index:2;align-self:flex-end;border:none;background:rgba(255,255,255,.08);color:rgba(255,255,255,.72);font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:10px 14px;border-radius:999px;cursor:pointer;transition:background var(--motion-fast) var(--ease-standard),color var(--motion-fast) var(--ease-standard)}
+.intro-header{
+  position:relative;z-index:2;flex-shrink:0;
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding-top:calc(env(safe-area-inset-top,0px) + 28px);
+  min-height:30px;
+}
+.intro-skip{position:relative;z-index:2;flex-shrink:0;border:none;background:rgba(255,255,255,.08);color:rgba(255,255,255,.72);font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:7px 14px;border-radius:999px;cursor:pointer;transition:background var(--motion-fast) var(--ease-standard),color var(--motion-fast) var(--ease-standard)}
 .intro-skip:hover{background:rgba(255,255,255,.13);color:#fff}
-.intro-deck{position:relative;z-index:1;flex:1;display:flex;flex-direction:column;min-height:0;padding-top:2px}
-.intro-progress{height:2px;border-radius:3px;background:rgba(255,255,255,.1);overflow:hidden;margin-bottom:14px;opacity:.9}
+.intro-deck{position:relative;z-index:1;flex:1;display:flex;flex-direction:column;min-height:0;padding-top:0}
+.intro-progress{height:2px;border-radius:3px;background:rgba(255,255,255,.1);overflow:hidden;margin-top:16px;margin-bottom:18px;opacity:.9}
 .intro-progress>span{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--arc-primary),#f4a082);border-radius:3px;box-shadow:0 0 16px rgba(227,90,54,.35);transition:width 720ms var(--intro-ease-smooth)}
 .intro-chip{display:inline-flex;align-items:center;align-self:flex-start;padding:8px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:11px;font-weight:650;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.58);margin-bottom:6px;background:rgba(255,255,255,.035);transition:opacity 360ms var(--intro-ease-out),transform 360ms var(--intro-ease-out)}
-.intro-stage-wrap{flex:1;display:flex;min-height:0;margin-top:-24px;padding-bottom:2px;cursor:pointer;-webkit-tap-highlight-color:transparent;perspective:880px}
+.intro-stage-wrap{flex:1;display:flex;min-height:0;margin-top:0;padding-bottom:2px;cursor:pointer;-webkit-tap-highlight-color:transparent;perspective:880px}
 .intro-stage{flex:1;display:flex;flex-direction:column;min-height:0;opacity:1;transform:translateY(0) scale(1);filter:blur(0);transition:opacity 420ms var(--intro-ease-smooth),transform 420ms var(--intro-ease-smooth),filter 420ms var(--intro-ease-smooth)}
 .intro-stage.is-exiting{opacity:0;transform:translateY(18px) scale(.988);filter:blur(3px)}
-.intro-copy-block{flex-shrink:0;margin-top:-10px;margin-bottom:6px}
+.intro-copy-block{flex-shrink:0;margin-top:0;margin-bottom:6px}
 .intro-visual-canvas{flex:1;display:flex;flex-direction:column;min-height:0;margin-top:auto;padding-top:0;padding-bottom:16px;position:relative}
 .intro-stage--chaos .intro-canvas-inner{min-height:174px;padding-bottom:2px}
 .intro-stage--chaos .intro-calm-hero{margin-top:-26px}
@@ -574,14 +581,14 @@ body{
 .intro-next:hover{background:var(--arc-primary-dark)}
 .intro-foot{font-size:11px;text-align:center;color:rgba(255,255,255,.38);margin-top:10px;line-height:1.45}
 @media (max-height:720px){
-  .intro-welcome{padding-top:22px;padding-bottom:22px}
+  .intro-welcome{padding-bottom:22px}
+  .intro-header{padding-top:calc(env(safe-area-inset-top,0px) + 22px)}
+  .intro-progress{margin-top:14px;margin-bottom:16px}
   .intro-chip{margin-bottom:8px}
-  .intro-stage-wrap{margin-top:-16px}
-  .intro-copy-block{margin-top:-6px}
-  .intro-slide-mark{margin-top:-8px}
+  .intro-copy-block{margin-top:0}
   .intro-stage--adapt .intro-visual-canvas{max-height:min(34vh,280px)}
   .intro-visual--adapt .intro-adapt-stage{max-width:272px}
-  .intro-stage--adapt .intro-copy-block{margin-top:-6px;margin-bottom:10px}
+  .intro-stage--adapt .intro-copy-block{margin-top:0;margin-bottom:10px}
   .intro-stage--chaos .intro-calm-hero{margin-top:-20px}
   .intro-stage--week .intro-visual-canvas{padding-top:4px}
   .intro-stage--week .intro-week-canvas{margin-top:-12px}
@@ -2163,7 +2170,12 @@ button:not(:disabled):active,
 <div class="screen" id="s-welcome">
   <div class="intro-welcome">
     <div class="intro-ambience" aria-hidden="true"></div>
-    <button type="button" class="intro-skip" id="intro-skip-btn">Skip</button>
+    <header class="intro-header">
+      <div class="intro-header-brand" aria-hidden="true">
+        <span class="arc-mark arc-mark--intro arc-mark--on-dark" style="width:30px;height:30px" aria-hidden="true"></span>
+      </div>
+      <button type="button" class="intro-skip" id="intro-skip-btn">Skip</button>
+    </header>
     <div class="intro-deck">
       <div class="intro-progress" aria-hidden="true"><span id="intro-progress-fill"></span></div>
       <div class="intro-chip" id="intro-chip">Arc first look</div>
@@ -16221,7 +16233,6 @@ function renderIntroSlide() {
   var adaptExtra = slide.visual === 'adapt' ? ' intro-visual--adapt' : '';
   stage.innerHTML =
     '<div class="intro-copy-block">' +
-    '<div class="intro-slide-mark intro-reveal-0" aria-hidden="true">' + arcLogoImgHtml('intro', { width: 32, height: 32 }) + '</div>' +
     '<h1 class="intro-title intro-reveal-1">' + shopEsc(slide.title).replace(/\n/g, '<br>') + '</h1>' +
     '<p class="intro-sub intro-reveal-2">' + shopEsc(slide.sub).replace(/\n/g, '<br>') + '</p>' +
     quoteHtmlBefore +
