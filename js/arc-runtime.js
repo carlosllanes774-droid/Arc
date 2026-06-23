@@ -190,8 +190,19 @@
     return computeCalorieRecommendation(maintenance, goalRaw, paceLbWeek, opts).target;
   }
 
-  function calcTDEEForProfile(p) {
+  /** Goal-adjusted daily calorie target (deficit/surplus applied). */
+  function calcTargetCaloriesForProfile(p) {
     return generateNutritionTargets(p).targetCalories;
+  }
+
+  /** Maintenance calories (Mifflin–St Jeor × activity) before goal adjustment. */
+  function calcMaintenanceCaloriesForProfile(p) {
+    return generateNutritionTargets(p).maintenanceCalories;
+  }
+
+  /** @deprecated Misnamed — returns goal-adjusted targetCalories, not maintenance TDEE. */
+  function calcTDEEForProfile(p) {
+    return calcTargetCaloriesForProfile(p);
   }
 
   function getMacroTargetsForProfile(p, cals) {
@@ -295,6 +306,8 @@
     computeMaintenanceCalories: computeMaintenanceCalories,
     computeCalorieRecommendation: computeCalorieRecommendation,
     computeRecommendedCalories: computeRecommendedCalories,
+    calcTargetCaloriesForProfile: calcTargetCaloriesForProfile,
+    calcMaintenanceCaloriesForProfile: calcMaintenanceCaloriesForProfile,
     calcTDEEForProfile: calcTDEEForProfile,
     getMacroTargetsForProfile: getMacroTargetsForProfile,
     mergeProfileState: mergeProfileState,

@@ -4786,7 +4786,9 @@ function applyProfileToUIBar() {
   if (uav) uav.textContent = initials;
   if (un) un.textContent = 'Hey ' + name.split(' ')[0] + '!';
   if (ug) ug.textContent = 'Goal: ' + (UP.goal || '') + ' · ' + (UP.activity || '');
-  var calDisplay = (UP.useCustom && UP.customCal) ? (UP.customCal + ' cal') : ((UP.tdee || 1800) + ' cal');
+  var calDisplay = (UP.useCustom && UP.customCal)
+    ? (UP.customCal + ' cal target')
+    : (getStoredTargetCalories().toLocaleString() + ' cal target');
   if (uc) uc.textContent = calDisplay;
   var ab = el('api-badge');
   if (ab) { ab.style.display = 'block'; ab.textContent = ARC_COPY.badge.assisted; }
@@ -5206,14 +5208,19 @@ function renderPersonalizationTargetsSummary() {
   var wrap = el('s-personalization-targets');
   if (!wrap) return;
   applySafeProfileDefaults(UP);
-  if (!UP.tdee && !UP.customCal) {
+  if (!hasComputedCalorieTargets()) {
     wrap.innerHTML = '<p style="color:var(--arc-subtext);font-size:13px;line-height:1.45;margin:4px 0 0">Save your profile to see calorie and protein targets.</p>';
     return;
   }
   var calT = getCalTarget();
+  var maintenance = getStoredMaintenanceCalories();
   var macros = UP.macros || getMacroTargets(calT);
-  wrap.innerHTML =
-    '<div class="info-row"><span class="info-lbl">Calories</span><span class="info-val">' + calT + ' kcal</span></div>' +
+  var calRows = (UP.useCustom && UP.customCal)
+    ? '<div class="info-row"><span class="info-lbl">Calories</span><span class="info-val">' + calT + ' kcal (custom)</span></div>'
+    : '<div class="info-row"><span class="info-lbl">Maintenance</span><span class="info-val">' + maintenance.toLocaleString() + ' kcal/day</span></div>' +
+      '<div class="info-row"><span class="info-lbl">Target</span><span class="info-val">' + calT.toLocaleString() + ' kcal/day</span></div>' +
+      '<div class="info-row"><span class="info-lbl">Goal adjustment</span><span class="info-val">' + formatCalorieAdjustmentLine(maintenance, calT) + '</span></div>';
+  wrap.innerHTML = calRows +
     '<div class="info-row"><span class="info-lbl">Protein target</span><span class="info-val">' + macros.protein + 'g</span></div>';
 }
 
@@ -6113,9 +6120,47 @@ function computeRecommendedCalories(maintenance, goalRaw, paceLbWeek, opts) {
   return ArcRuntime.computeRecommendedCalories(maintenance, goalRaw, paceLbWeek, opts);
 }
 
-/** Stored daily calorie guide (goal- and pace-aware) — Arc Engine. */
+/** Sync maintenance + goal-adjusted targets onto profile (keeps UP.tdee as target alias). */
+function syncProfileNutritionTargets(p) {
+  p = p || UP;
+  var targets = ArcRuntime.generateNutritionTargets(p);
+  p.maintenanceCalories = targets.maintenanceCalories;
+  p.targetCalories = targets.targetCalories;
+  p.tdee = targets.targetCalories;
+  return targets;
+}
+
+/** @deprecated Use syncProfileNutritionTargets — returns goal-adjusted target, not maintenance. */
 function calcTDEE() {
-  return ArcRuntime.calcTDEEForProfile(UP);
+  return ArcRuntime.calcTargetCaloriesForProfile(UP);
+}
+
+function getStoredMaintenanceCalories() {
+  var m = Number(UP.maintenanceCalories);
+  if (isFinite(m) && m > 0) return Math.round(m);
+  return Math.round(ArcRuntime.calcMaintenanceCaloriesForProfile(UP));
+}
+
+function getStoredTargetCalories() {
+  var t = Number(UP.targetCalories);
+  if (isFinite(t) && t > 0) return Math.round(t);
+  t = Number(UP.tdee);
+  if (isFinite(t) && t > 0) return Math.round(t);
+  return Math.round(ArcRuntime.calcTargetCaloriesForProfile(UP));
+}
+
+function formatCalorieAdjustmentLine(maintenance, target, paceLbWeek) {
+  var m = Math.round(Number(maintenance));
+  var t = Math.round(Number(target));
+  var delta = t - m;
+  if (!isFinite(delta) || delta === 0) return 'At maintenance (no deficit or surplus)';
+  var paceLabel = formatPaceLbWeekForCopy(paceLbWeek != null ? paceLbWeek : UP.weightGoalPaceLbWeek);
+  if (delta < 0) return Math.abs(delta).toLocaleString() + ' cal deficit for ' + paceLabel + ' loss';
+  return Math.abs(delta).toLocaleString() + ' cal surplus for ' + paceLabel + ' gain';
+}
+
+function hasComputedCalorieTargets() {
+  return !!(UP.customCal || UP.targetCalories || UP.tdee);
 }
 
 /** Daily macro targets in grams — Arc Engine. */
@@ -6127,6 +6172,10 @@ function getCalTarget() {
   var c = null;
   if (useCustom && UP.customCal != null && UP.customCal !== '') {
     c = Number(UP.customCal);
+    if (!isFinite(c) || c <= 0) c = null;
+  }
+  if (c == null && UP.targetCalories != null && UP.targetCalories !== '') {
+    c = Number(UP.targetCalories);
     if (!isFinite(c) || c <= 0) c = null;
   }
   if (c == null && UP.tdee != null && UP.tdee !== '') {
@@ -7911,7 +7960,15 @@ function renderProfileTab() {
   if (pa) pa.textContent = initials;
   if (pn) pn.textContent = first;
   if (pg) pg.textContent = (UP.goal || ARC_COPY.tagline) + ' · ' + (UP.activity || '');
-  if (pc) pc.textContent = (UP.useCustom && UP.customCal) ? (UP.customCal + ' kcal / day') : ((UP.tdee || 1800) + ' kcal / day');
+  if (pc) {
+    if (UP.useCustom && UP.customCal) {
+      pc.textContent = UP.customCal + ' kcal/day (custom target)';
+    } else {
+      var profMaint = getStoredMaintenanceCalories();
+      var profTarget = getStoredTargetCalories();
+      pc.innerHTML = 'Maintenance: ' + profMaint.toLocaleString() + ' kcal/day<br>Target: ' + profTarget.toLocaleString() + ' kcal/day';
+    }
+  }
 
   applySafeProfileDefaults(UP);
   var cookEl = el('profile-cooking-line');
@@ -11081,7 +11138,7 @@ function finishOB() {
 
   applySafeProfileDefaults(UP);
   UP.meals = inferMealsDefault(UP.goal, UP.activity, UP.muscleGainEmphasis);
-  UP.tdee = calcTDEE();
+  syncProfileNutritionTargets(UP);
   UP.macros = getMacroTargets(getCalTarget());
 
   DAYS.forEach(function(d) { mealPlan[d] = {}; });
@@ -11405,9 +11462,16 @@ function applySafeProfileDefaults(p) {
   var cc = Number(p.customCal);
   if (useCustom && (!isFinite(cc) || cc <= 0)) p.customCal = null;
 
+  var maintN = Number(p.maintenanceCalories);
+  var targetN = Number(p.targetCalories);
   var tdeeN = Number(p.tdee);
-  if (!isFinite(tdeeN) || tdeeN <= 0) {
-    p.tdee = calcTDEE();
+  if ((!isFinite(maintN) || maintN <= 0) || (!isFinite(targetN) || targetN <= 0)) {
+    if (isFinite(tdeeN) && tdeeN > 0 && (!isFinite(targetN) || targetN <= 0)) {
+      p.targetCalories = Math.round(tdeeN);
+    }
+    syncProfileNutritionTargets(p);
+  } else {
+    p.tdee = Math.round(targetN);
   }
   if (!p.macros || typeof p.macros !== 'object') {
     p.macros = getMacroTargets(getCalTarget());
@@ -13998,20 +14062,24 @@ function renderNutrition() {
     ctHtml += '<div><div style="font-size:16px;font-weight:700;color:var(--arc-primary)">' + (UP.customFat     ? UP.customFat     + 'g' : '—') + '</div><div style="font-size:10px;color:var(--arc-primary);font-weight:700">FAT</div></div>';
     ctHtml += '</div></div>';
     ctWrap.innerHTML = ctHtml;
-  } else if (UP.tdee) {
-    // Show computed TDEE summary
+  } else if (hasComputedCalorieTargets()) {
     var macros = UP.macros || getMacroTargets(calTarget);
-    var tdeeHtml = '<div style="background:var(--arc-soft-primary);border-radius:16px;padding:16px;margin-bottom:16px">';
-    tdeeHtml += '<div style="font-size:11px;font-weight:700;color:var(--arc-primary-dark);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">Your adaptive guide</div>';
-    tdeeHtml += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center">';
-    tdeeHtml += '<div><div style="font-size:16px;font-weight:700;color:var(--arc-primary)">' + calTarget + '</div><div style="font-size:10px;color:var(--arc-primary);font-weight:700">KCAL</div></div>';
-    tdeeHtml += '<div><div style="font-size:16px;font-weight:700;color:var(--arc-primary)">' + macros.protein + 'g</div><div style="font-size:10px;color:var(--arc-primary);font-weight:700">PROTEIN</div></div>';
-    tdeeHtml += '<div><div style="font-size:16px;font-weight:700;color:var(--arc-primary)">' + macros.carbs   + 'g</div><div style="font-size:10px;color:var(--arc-primary);font-weight:700">CARBS</div></div>';
-    tdeeHtml += '<div><div style="font-size:16px;font-weight:700;color:var(--arc-primary)">' + macros.fat     + 'g</div><div style="font-size:10px;color:var(--arc-primary);font-weight:700">FAT</div></div>';
-    tdeeHtml += '</div>';
-    tdeeHtml += '<div style="font-size:11px;color:var(--arc-primary);margin-top:8px">Calculated using Mifflin-St Jeor formula for ' + UP.goal + '</div>';
-    tdeeHtml += '</div>';
-    ctWrap.innerHTML = tdeeHtml;
+    var guideMaint = getStoredMaintenanceCalories();
+    var guideHtml = '<div style="background:var(--arc-soft-primary);border-radius:16px;padding:16px;margin-bottom:16px">';
+    guideHtml += '<div style="font-size:11px;font-weight:700;color:var(--arc-primary-dark);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">Your adaptive guide</div>';
+    guideHtml += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;text-align:center">';
+    guideHtml += '<div><div style="font-size:14px;font-weight:700;color:var(--arc-primary)">' + guideMaint.toLocaleString() + '</div><div style="font-size:10px;color:var(--arc-primary);font-weight:700">MAINTENANCE</div></div>';
+    guideHtml += '<div><div style="font-size:14px;font-weight:700;color:var(--arc-primary)">' + calTarget.toLocaleString() + '</div><div style="font-size:10px;color:var(--arc-primary);font-weight:700">TARGET</div></div>';
+    guideHtml += '</div>';
+    guideHtml += '<div style="font-size:11px;color:var(--arc-primary);margin-bottom:12px;text-align:center">' + formatCalorieAdjustmentLine(guideMaint, calTarget) + '</div>';
+    guideHtml += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center">';
+    guideHtml += '<div><div style="font-size:16px;font-weight:700;color:var(--arc-primary)">' + macros.protein + 'g</div><div style="font-size:10px;color:var(--arc-primary);font-weight:700">PROTEIN</div></div>';
+    guideHtml += '<div><div style="font-size:16px;font-weight:700;color:var(--arc-primary)">' + macros.carbs   + 'g</div><div style="font-size:10px;color:var(--arc-primary);font-weight:700">CARBS</div></div>';
+    guideHtml += '<div><div style="font-size:16px;font-weight:700;color:var(--arc-primary)">' + macros.fat     + 'g</div><div style="font-size:10px;color:var(--arc-primary);font-weight:700">FAT</div></div>';
+    guideHtml += '</div>';
+    guideHtml += '<div style="font-size:11px;color:var(--arc-primary);margin-top:8px">Maintenance from Mifflin–St Jeor; target adjusted for ' + (UP.goal || 'your goal') + '</div>';
+    guideHtml += '</div>';
+    ctWrap.innerHTML = guideHtml;
   } else {
     ctWrap.innerHTML = '';
   }
@@ -16062,15 +16130,20 @@ function wireSettingsChips() {
 
 function renderSettingsTargets() {
   var wrap = el('s-targets');
-  if (!UP.tdee && !UP.customCal) {
+  if (!hasComputedCalorieTargets()) {
     wrap.innerHTML = '<p style="color:#9ca3af;font-size:13px">Save your profile to see calorie and macro targets.</p>';
     return;
   }
   var calT   = getCalTarget();
+  var maintenance = getStoredMaintenanceCalories();
   var macros = UP.macros || getMacroTargets(calT);
   var reg    = (REGIONS[UP.region] || {}).label || '—';
-  wrap.innerHTML =
-    '<div class="info-row"><span class="info-lbl">Daily calories</span><span class="info-val">' + calT + ' kcal</span></div>' +
+  var calSection = (UP.useCustom && UP.customCal)
+    ? '<div class="info-row"><span class="info-lbl">Daily calories</span><span class="info-val">' + calT + ' kcal (custom)</span></div>'
+    : '<div class="info-row"><span class="info-lbl">Maintenance</span><span class="info-val">' + maintenance.toLocaleString() + ' kcal/day</span></div>' +
+      '<div class="info-row"><span class="info-lbl">Target</span><span class="info-val">' + calT.toLocaleString() + ' kcal/day</span></div>' +
+      '<div class="info-row"><span class="info-lbl">Goal adjustment</span><span class="info-val">' + formatCalorieAdjustmentLine(maintenance, calT) + '</span></div>';
+  wrap.innerHTML = calSection +
     '<div class="info-row"><span class="info-lbl">Protein target</span><span class="info-val">' + macros.protein + 'g</span></div>' +
     '<div class="info-row"><span class="info-lbl">Carbs target</span><span class="info-val">' + macros.carbs + 'g</span></div>' +
     '<div class="info-row"><span class="info-lbl">Fat target</span><span class="info-val">' + macros.fat + 'g</span></div>' +
@@ -16090,8 +16163,8 @@ function applySettingsProfile() {
   UP.cuisines     = sGetMulti('sg-cuisine');
   var dispAdv = el('s-display-advanced');
   if (dispAdv) UP.displayMode = dispAdv.checked ? ARC_DISPLAY_ADVANCED : ARC_DISPLAY_SIMPLE;
-  // Recalculate TDEE with new profile
-  UP.tdee   = calcTDEE();
+  // Recalculate calorie targets with new profile
+  syncProfileNutritionTargets(UP);
   UP.macros = getMacroTargets(getCalTarget());
 
   applyProfileToUIBar();
