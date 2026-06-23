@@ -12376,7 +12376,8 @@ function renderLibrary() {
 
     html += '<div class="rc">';
     html += '<div class="rc-name">' + tagHtml + shopEsc(r.name) + '</div>';
-    html += '<div class="rc-meta"><span class="diff diff-' + diff + '">' + diff + '</span><span>' + shopEsc(r.time) + '</span><span>' + shopEsc(r.cat) + '</span></div>';
+    var diffCls = String(diff).replace(/[^a-zA-Z]/g, '') || 'Easy';
+    html += '<div class="rc-meta"><span class="diff diff-' + diffCls + '">' + shopEsc(diff) + '</span><span>' + shopEsc(r.time) + '</span><span>' + shopEsc(r.cat) + '</span></div>';
     html += '<div class="macros arc-adv-only">';
     html += '<span class="m m-cal">' + r.cal + ' kcal</span>';
     html += '<span class="m m-p">'   + r.p   + 'g protein</span>';
@@ -12945,7 +12946,7 @@ function openRM(id) {
 
   var tagArr  = [curRecipe.time, curRecipe.difficulty || 'Easy', curRecipe.cat].concat(curRecipe.tags || []);
   var tagHtml = '';
-  for (var t = 0; t < tagArr.length; t++) tagHtml += '<span class="rm-tag">' + tagArr[t] + '</span>';
+  for (var t = 0; t < tagArr.length; t++) tagHtml += '<span class="rm-tag">' + shopEsc(tagArr[t]) + '</span>';
   el('rm-tags').innerHTML = tagHtml;
 
   var needsInstructionFetch = recipeStepsNeedEnhancement(curRecipe.steps);
@@ -13107,9 +13108,9 @@ function openSwap(ing, rid) {
       var diffHtml = '';
       if (diff > 0) diffHtml = '<span class="swap-cal swap-cal-up">+' + diff + ' cal</span>';
       else if (diff < 0) diffHtml = '<span class="swap-cal swap-cal-dn">' + diff + ' cal</span>';
-      html += '<div class="swap-opt" data-name="' + (o.name || '') + '" data-qty="' + (o.qty || '') + '">';
-      html += '<div class="swap-opt-name">' + (o.name || '—') + (o.qty ? ' — ' + o.qty : '') + diffHtml + '</div>';
-      html += '<div class="swap-opt-reason">' + (o.reason || '') + '</div>';
+      html += '<div class="swap-opt" data-name="' + shopDataAttr(o.name || '') + '" data-qty="' + shopDataAttr(o.qty || '') + '">';
+      html += '<div class="swap-opt-name">' + shopEsc(o.name || '—') + (o.qty ? ' — ' + shopEsc(o.qty) : '') + diffHtml + '</div>';
+      html += '<div class="swap-opt-reason">' + shopEsc(o.reason || '') + '</div>';
       html += '</div>';
     }
     el('swap-opts').innerHTML = html;
@@ -13385,7 +13386,7 @@ function buildAssignRowHtml(r, focus, isPrep, chip) {
   var html = '';
   html += '<div class="modal-opt" data-id="' + r.id + '">';
   html += '<div style="min-width:0;flex:1">' + chipHtml + '<div style="font-size:14px;font-weight:600;color:#111;font-family:Georgia,serif">' + prepTag + shopEsc(r.name) + '</div>';
-  html += '<div style="font-size:12px;color:#9ca3af;margin-top:2px">' + meta + '</div></div>';
+  html += '<div style="font-size:12px;color:#9ca3af;margin-top:2px">' + shopEsc(meta) + '</div></div>';
   html += '<div style="text-align:right"><div style="font-weight:700;color:var(--arc-primary-dark);font-size:14px">' + fmtPrice(r.price) + '</div>';
   html += '<div style="font-size:11.5px;color:#9ca3af">' + (isAdvancedMode() ? (r.cal + ' cal · ' + bias) : r.time) + '</div></div>';
   html += '</div>';
