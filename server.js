@@ -179,6 +179,10 @@ function hasLikelyDuplicatedObjects(raw) {
   return /}\s*,\s*{/.test(raw) && /"type"\s*:\s*"text"[\s\S]*"type"\s*:\s*"text"/.test(raw);
 }
 
+const isDebugOpenAiEnabled =
+  process.env.NODE_ENV !== "production" ||
+  process.env.ARC_DEBUG_OPENAI === "1";
+
 function debugSendAiJson(res, payload, sourceLabel) {
   const raw = JSON.stringify(payload);
   const rawLength = raw.length;
@@ -196,21 +200,23 @@ function debugSendAiJson(res, payload, sourceLabel) {
     (multipleConcatenatedPayloads || mergedPayloadFragments || duplicatedObjects)
   );
 
-  writeFileSync(path.join(__dirname, "arc-debug-response.json"), raw, "utf8");
+  if (isDebugOpenAiEnabled) {
+    writeFileSync(path.join(__dirname, "arc-debug-response.json"), raw, "utf8");
 
-  console.log("[ARC DEBUG] exact response source:", sourceLabel);
-  console.log("[ARC DEBUG] exact response length:", rawLength);
-  console.log("[ARC DEBUG] exact response raw:", raw);
-  console.log("[ARC DEBUG] validation:", {
-    validJsonStringifyOutput: typeof raw === "string",
-    payloadEndsCorrectly: endsCorrectly,
-    containsMultipleConcatenatedPayloads: multipleConcatenatedPayloads,
-    containsIncompleteJson: incompleteJson,
-    hasPartialArrays,
-    hasMergedPayloadFragments: mergedPayloadFragments,
-    hasDuplicatedObjects: duplicatedObjects,
-    enhancementPayloadMergedIncorrectly,
-  });
+    console.log("[ARC DEBUG] exact response source:", sourceLabel);
+    console.log("[ARC DEBUG] exact response length:", rawLength);
+    console.log("[ARC DEBUG] exact response raw:", raw);
+    console.log("[ARC DEBUG] validation:", {
+      validJsonStringifyOutput: typeof raw === "string",
+      payloadEndsCorrectly: endsCorrectly,
+      containsMultipleConcatenatedPayloads: multipleConcatenatedPayloads,
+      containsIncompleteJson: incompleteJson,
+      hasPartialArrays,
+      hasMergedPayloadFragments: mergedPayloadFragments,
+      hasDuplicatedObjects: duplicatedObjects,
+      enhancementPayloadMergedIncorrectly,
+    });
+  }
 
   return res.type("application/json").send(raw);
 }
@@ -297,9 +303,11 @@ for (const mountPath of [
   "/api/ai",
   "/api/week/generate",
   "/api/edamam",
-  "/api/usda/search",
+  "/api/usda",
   "/api/spoonacular",
   "/api/kroger",
+  "/api/nutrition",
+  "/api/grocery",
 ]) {
   app.use(mountPath, paidApiGuard);
 }
@@ -1282,12 +1290,14 @@ app.post("/api/nutrition/pipeline", async (req, res) => {
     const rawIngr = Array.isArray(req.body?.ingr) ? req.body.ingr : [];
     const cleanIngr = EdamamHelpers.normalizeIngredientLines(rawIngr);
     const spoonacularRecipeId = req.body?.spoonacularRecipeId || req.body?.recipeId || null;
-    edamamDiagnosticLog("ingredient lines sent", {
-      title,
-      spoonacularRecipeId: spoonacularRecipeId != null ? spoonacularRecipeId : null,
-      lineCount: cleanIngr.length,
-      lines: cleanIngr.slice(0, 12),
-    });
+    if (process.env.ARC_PIPELINE_TRACE_VERBOSE === "1") {
+      edamamDiagnosticLog("ingredient lines sent", {
+        title,
+        spoonacularRecipeId: spoonacularRecipeId != null ? spoonacularRecipeId : null,
+        lineCount: cleanIngr.length,
+        lines: cleanIngr.slice(0, 12),
+      });
+    }
     if (!cleanIngr.length) {
       EdamamHelpers.logEdamamFailure(ArcTrace, "payload", {
         httpStatus: 400,

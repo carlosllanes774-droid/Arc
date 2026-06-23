@@ -15365,6 +15365,15 @@ function resolveFoodReportConsumed(fr, calTarget) {
     if (cg == null || !isFinite(cg)) cg = est.carbsG;
     if (fg == null || !isFinite(fg)) fg = est.fatG;
   }
+  if ((cg == null || !isFinite(cg) || fg == null || !isFinite(fg)) && cal != null && isFinite(cal)) {
+    var rem = Math.max(50, cal - (pg || 0) * 4);
+    if (cg == null || !isFinite(cg)) {
+      cg = Math.round(rem * 0.5 / 4);
+    }
+    if (fg == null || !isFinite(fg)) {
+      fg = Math.round(rem * 0.5 / 9);
+    }
+  }
   return {
     cal: cal != null && isFinite(cal) ? cal : 0,
     p: pg != null && isFinite(pg) ? pg : 0,
