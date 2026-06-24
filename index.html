@@ -1881,13 +1881,48 @@ body{
 .assign-refresh-btn:hover{background:var(--arc-soft-primary)}
 .assign-refresh-hint{font-size:12px;color:var(--arc-subtext);line-height:1.45;margin-bottom:4px}
 
-/* RECIPE MODAL */
-.rm-bg{position:absolute;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;z-index:30;border-radius:28px;overflow:hidden;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);opacity:0;pointer-events:none;transition:opacity var(--motion-sheet) var(--ease-standard)}
-.rm-bg.is-open{opacity:1;pointer-events:auto}
-.rm-bg.is-closing{opacity:0;pointer-events:none}
-.rm-sheet{background:#fff;border-radius:var(--r-xl) var(--r-xl) 0 0;width:100%;max-height:92%;display:flex;flex-direction:column;box-shadow:var(--shadow-lg);transform:translateY(var(--sheet-offset));transition:transform var(--motion-sheet) var(--ease-out)}
-.rm-bg.is-open .rm-sheet{transform:translateY(0)}
-.rm-bg.is-closing .rm-sheet{transform:translateY(var(--sheet-offset))}
+/* RECIPE EXPERIENCE — full-screen */
+.rx-overlay{position:absolute;inset:0;z-index:35;border-radius:28px;overflow:hidden;display:none;flex-direction:column;background:#151210;color:#fff;opacity:0;pointer-events:none;transition:opacity var(--motion-sheet) var(--ease-standard)}
+.rx-overlay.is-open{opacity:1;pointer-events:auto}
+.rx-overlay.is-closing{opacity:0;pointer-events:none}
+.rx-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:0;padding-bottom:calc(76px + env(safe-area-inset-bottom,0px))}
+.rx-hero-wrap{position:relative;width:100%;flex-shrink:0}
+.rx-hdr{position:absolute;top:0;left:0;right:0;z-index:3;display:flex;align-items:center;justify-content:space-between;padding:12px 14px;padding-top:calc(12px + env(safe-area-inset-top,0px))}
+.rx-hdr-actions{display:flex;align-items:center;gap:8px}
+.rx-icon-btn{width:40px;height:40px;border:none;border-radius:50%;background:rgba(21,18,16,.52);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background var(--motion-fast) var(--ease-standard),transform var(--motion-instant) var(--ease-out);-webkit-tap-highlight-color:transparent}
+.rx-icon-btn:hover{background:rgba(21,18,16,.68)}
+.rx-hero{width:100%;aspect-ratio:16/9;overflow:hidden;border-radius:0 0 24px 24px;background:linear-gradient(165deg,rgba(255,255,255,.07) 0%,rgba(255,255,255,.02) 100%)}
+.rx-hero img{width:100%;height:100%;object-fit:cover;display:block}
+.rx-hero--placeholder{display:flex;align-items:center;justify-content:center}
+.rx-hero-fallback{font-size:52px;line-height:1;opacity:.32;pointer-events:none;user-select:none}
+.rx-content{padding:20px var(--sp-page-x) 28px}
+.rx-meal-badge{display:inline-flex;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--arc-primary);margin-bottom:10px}
+.rx-title{font-family:Georgia,"Baskerville",serif;font-size:clamp(24px,5.8vw,28px);font-weight:700;line-height:1.15;letter-spacing:-.03em;color:#f8f4f0;margin:0 0 14px}
+.rx-meta-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px}
+.rx-meta-chip{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;font-size:13px;font-weight:500;color:rgba(255,255,255,.72);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)}
+.rx-meta-chip-ic{color:var(--arc-primary);font-style:normal;line-height:1;font-size:14px}
+.rx-nut-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:28px;padding:16px 10px;border-radius:var(--r-xl);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+.rx-nut-item{display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center;min-width:0}
+.rx-nut-ic{color:var(--arc-primary);font-size:17px;line-height:1}
+.rx-nut-val{font-size:15px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;line-height:1.2}
+.rx-nut-lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,.42);line-height:1.2}
+.rx-section{margin-bottom:28px}
+.rx-sec-h{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.38);margin:0 0 14px}
+.rx-overlay .ing-row{box-shadow:0 1px 0 rgba(255,255,255,.08)}
+.rx-overlay .ing-name{color:#f4f1ee}
+.rx-overlay .ing-qty{color:rgba(255,255,255,.52)}
+.rx-overlay .swap-btn{background:rgba(255,255,255,.08);color:rgba(255,255,255,.52);border:1px solid rgba(255,255,255,.1)}
+.rx-overlay .swap-btn:hover{color:var(--arc-primary);background:rgba(227,90,54,.12)}
+.rx-overlay .step-txt{color:rgba(255,255,255,.88)}
+.rx-overlay .step-phase-h{color:rgba(255,255,255,.42)}
+.rx-overlay .step-phase-dot{background:var(--arc-primary)}
+.rx-steps-loading{text-align:center;padding:32px 0;color:rgba(255,255,255,.42);font-size:14px}
+.rx-action-bar{position:absolute;bottom:0;left:0;right:0;z-index:4;display:flex;gap:10px;padding:12px var(--sp-page-x) calc(12px + env(safe-area-inset-bottom,0px));background:linear-gradient(180deg,rgba(21,18,16,0) 0%,rgba(21,18,16,.94) 30%,#151210 58%);border-top:1px solid rgba(255,255,255,.08);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.rx-btn{flex:1;min-height:48px;border-radius:16px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;border:none;transition:background var(--motion-fast) var(--ease-standard),transform var(--motion-instant) var(--ease-out),box-shadow var(--motion-fast) var(--ease-standard);-webkit-tap-highlight-color:transparent}
+.rx-btn--outline{background:rgba(255,255,255,.06);color:#f4f1ee;border:1px solid rgba(255,255,255,.14)}
+.rx-btn--outline:hover{background:rgba(255,255,255,.1)}
+.rx-btn--primary{background:linear-gradient(90deg,var(--arc-primary) 0%,var(--arc-primary-dark) 100%);color:#fff;box-shadow:0 12px 30px rgba(227,90,54,.18)}
+.rx-btn--primary:hover{box-shadow:0 14px 34px rgba(227,90,54,.24)}
 /* Today meal peek — lightweight inspect sheet (stays on Today) */
 .tm-peek-bg{position:absolute;inset:0;background:rgba(0,0,0,.48);display:flex;align-items:flex-end;z-index:25;border-radius:28px;overflow:hidden;backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity var(--motion-sheet) var(--ease-standard)}
 .tm-peek-bg.is-open{opacity:1;pointer-events:auto}
@@ -1918,10 +1953,6 @@ body{
 .tm-peek-secondary:hover{background:#fff;border-color:rgba(31,31,31,.18)}
 .tm-peek-secondary:disabled{opacity:.45;cursor:not-allowed}
 .tm-peek-muted{font-size:13px;color:var(--arc-subtext);line-height:1.5;margin:0 0 8px}
-.rm-hdr{background:var(--arc-primary);border-radius:24px 24px 0 0;padding:22px 22px 18px}
-.rm-close{background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:999px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;float:right;margin-top:-2px;transition:background var(--motion-fast) var(--ease-standard)}
-.rm-close:hover{background:rgba(255,255,255,.25)}
-.rm-title{font-size:20px;font-weight:700;color:#fff;font-family:Georgia,serif;letter-spacing:-.3px;clear:both;line-height:1.3;margin-bottom:8px}
 .rm-nut-badge{display:inline-flex;align-items:center;gap:6px;max-width:100%;font-size:11px;font-weight:600;line-height:1.35;padding:5px 11px;border-radius:999px;background:rgba(255,255,255,.14);color:rgba(255,255,255,.95);margin-bottom:10px}
 .rm-nut-badge--verified{background:rgba(255,255,255,.22)}
 .rm-nut-badge--estimate{background:rgba(255,255,255,.16)}
@@ -1938,10 +1969,6 @@ body{
 .nut-trust--profile{background:#fff8ef;color:#7a4e12;border:1px solid rgba(122,78,18,.12)}
 .nut-trust--unverified{background:#fff5f2;color:#9a4a36;border:1px solid rgba(154,74,54,.1)}
 .rm-tag{font-size:12px;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.12);color:rgba(255,255,255,.9);font-weight:500}
-.rm-tabs{display:flex;background:#fff;flex-shrink:0;box-shadow:0 1px 0 var(--arc-divider)}
-.rm-tab{flex:1;padding:14px;font-size:13px;font-weight:600;color:var(--arc-subtext);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;transition:all var(--motion-fast) var(--ease-standard)}
-.rm-tab.active{color:var(--arc-primary);border-bottom-color:var(--arc-primary)}
-.rm-body{flex:1;overflow-y:auto;padding:22px}
 .tab-p{display:none}.tab-p.active{display:block}
 .step-row{display:flex;gap:14px;align-items:flex-start;margin-bottom:16px}
 .step-num{width:28px;height:28px;border-radius:50%;background:var(--arc-primary);color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:var(--shadow-xs)}
@@ -2930,36 +2957,43 @@ button:not(:disabled):active,
   </div>
 </div>
 
-<!-- RECIPE MODAL -->
-<div class="rm-bg" id="rm-bg" style="display:none">
-  <div class="rm-sheet">
-    <div class="rm-hdr">
-      <button class="rm-close" id="rm-close">✕ Close</button>
-      <div class="rm-title" id="rm-title">—</div>
-      <div class="rm-nut-badge rm-nut-badge--unverified arc-adv-only" id="rm-nut-badge" aria-live="polite"></div>
-      <div class="rm-tags" id="rm-tags"></div>
-      <div class="rm-servings" id="rm-servings" style="display:none">
-        <div class="rm-servings-body">
-          <div class="rm-servings-h" id="rm-servings-h">Cook for 1 serving</div>
-          <div class="rm-servings-s" id="rm-servings-s">Scales the shopping list automatically</div>
+<!-- RECIPE EXPERIENCE — full-screen -->
+<div class="rx-overlay" id="rx-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="rx-title">
+  <div class="rx-scroll" id="rx-scroll">
+    <div class="rx-hero-wrap">
+      <header class="rx-hdr">
+        <button type="button" class="rx-icon-btn" id="rx-back" aria-label="Back">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="rx-hdr-actions">
+          <button type="button" class="rx-icon-btn" id="rx-fav" aria-label="Favorite">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 20.5s-7-4.6-7-9.2c0-2.8 2.2-4.8 4.9-4.8 1.6 0 3.1.8 4.1 2.1 1-1.3 2.5-2.1 4.1-2.1 2.7 0 4.9 2 4.9 4.8 0 4.6-7 9.2-7 9.2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          </button>
+          <button type="button" class="rx-icon-btn" id="rx-menu" aria-label="More options">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="6" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="18" r="1.5" fill="currentColor"/></svg>
+          </button>
         </div>
-        <div class="rm-stepper" role="group" aria-label="Servings">
-          <button type="button" id="rm-srv-dec" aria-label="Decrease servings">−</button>
-          <span class="rm-stepper-val" id="rm-srv-val">1</span>
-          <button type="button" id="rm-srv-inc" aria-label="Increase servings">+</button>
-        </div>
-      </div>
+      </header>
+      <div class="rx-hero" id="rx-hero" aria-hidden="true"></div>
     </div>
-    <div class="rm-tabs">
-      <button class="rm-tab active" data-tab="ing">Ingredients</button>
-      <button class="rm-tab" data-tab="steps">Instructions</button>
-      <button class="rm-tab arc-adv-only" data-tab="nut">Nutrition</button>
+    <div class="rx-content">
+      <div class="rx-meal-badge" id="rx-cat">—</div>
+      <h1 class="rx-title" id="rx-title">—</h1>
+      <div class="rx-meta-chips" id="rx-meta-chips"></div>
+      <div class="rx-nut-row" id="rx-nut-row" aria-label="Nutrition summary"></div>
+      <section class="rx-section" aria-labelledby="rx-ing-h">
+        <h2 class="rx-sec-h" id="rx-ing-h">Ingredients</h2>
+        <div id="rx-ing"></div>
+      </section>
+      <section class="rx-section" aria-labelledby="rx-steps-h">
+        <h2 class="rx-sec-h" id="rx-steps-h">Instructions</h2>
+        <div id="rx-steps"></div>
+      </section>
     </div>
-    <div class="rm-body">
-      <div class="tab-p active" id="tab-ing"></div>
-      <div class="tab-p" id="tab-steps"></div>
-      <div class="tab-p arc-adv-only" id="tab-nut"></div>
-    </div>
+  </div>
+  <div class="rx-action-bar">
+    <button type="button" class="rx-btn rx-btn--outline" id="rx-swap-btn">Swap Ingredients</button>
+    <button type="button" class="rx-btn rx-btn--primary" id="rx-log-btn">Log Meal</button>
   </div>
 </div>
 
@@ -7429,7 +7463,7 @@ function isArcFlowBlockingAutoRecap() {
   if (el('s-welcome') && el('s-welcome').classList.contains('active')) return true;
   if (el('s-auth') && el('s-auth').classList.contains('active')) return true;
   if (el('s-gen') && el('s-gen').classList.contains('active')) return true;
-  var ids = ['settings-overlay', 'assign-modal', 'tm-peek-bg', 'saved-modal', 'rm-bg', 'swap-bg', 'coach-food-bg', 'coach-launcher-bg', 'meal-edit-bg', 'ai-overlay', 'loc-modal'];
+  var ids = ['settings-overlay', 'assign-modal', 'tm-peek-bg', 'saved-modal', 'rx-overlay', 'swap-bg', 'coach-food-bg', 'coach-launcher-bg', 'meal-edit-bg', 'ai-overlay', 'loc-modal'];
   for (var bi = 0; bi < ids.length; bi++) {
     var n = el(ids[bi]);
     if (n && n.classList.contains('is-open')) return true;
@@ -12899,15 +12933,70 @@ function renderRMServings(r) {
     : 'Shopping list scales automatically';
 }
 
+function isRecipeExperienceOpen() {
+  var rx = el('rx-overlay');
+  return !!(rx && rx.classList.contains('is-open'));
+}
+
+function closeRecipeExperience() {
+  closeMotion('rx-overlay', function() { curRecipe = null; });
+}
+
+function buildRecipeHeroHtml(r) {
+  if (r && r.image) {
+    return '<img src="' + shopEsc(r.image) + '" alt="" loading="lazy"/>';
+  }
+  return '<div class="rx-hero--placeholder" aria-hidden="true"><span class="rx-hero-fallback">🍽</span></div>';
+}
+
+function buildRecipeMetaChipsHtml(r) {
+  var chips = [
+    { ic: '🕒', text: r.time || '20 min' },
+    { ic: '◎', text: r.difficulty || 'Easy' },
+    { ic: '🍽', text: r.cat || 'Meal' }
+  ];
+  var html = '';
+  for (var i = 0; i < chips.length; i++) {
+    html += '<span class="rx-meta-chip"><i class="rx-meta-chip-ic" aria-hidden="true">' + chips[i].ic + '</i>' + shopEsc(chips[i].text) + '</span>';
+  }
+  return html;
+}
+
+function buildRecipeNutritionRowHtml(r) {
+  var items = [
+    { ic: '🔥', val: String(r.cal), lbl: 'Calories' },
+    { ic: '💪', val: r.p + 'g', lbl: 'Protein' },
+    { ic: '🌾', val: r.c + 'g', lbl: 'Carbs' },
+    { ic: '🥑', val: r.f + 'g', lbl: 'Fat' }
+  ];
+  var html = '';
+  for (var i = 0; i < items.length; i++) {
+    html += '<div class="rx-nut-item">';
+    html += '<span class="rx-nut-ic" aria-hidden="true">' + items[i].ic + '</span>';
+    html += '<span class="rx-nut-val">' + shopEsc(items[i].val) + '</span>';
+    html += '<span class="rx-nut-lbl">' + shopEsc(items[i].lbl) + '</span>';
+    html += '</div>';
+  }
+  return html;
+}
+
+function recipeStepsLoadingHtml() {
+  return '<div class="rx-steps-loading"><div class="ai-spinner" style="margin:0 auto 14px"></div><div>Generating instructions...</div></div>';
+}
+
+function renderRecipeExperience(r) {
+  el('rx-hero').innerHTML = buildRecipeHeroHtml(r);
+  el('rx-cat').textContent = String(r.cat || 'Meal').toUpperCase();
+  el('rx-title').textContent = r.name;
+  el('rx-meta-chips').innerHTML = buildRecipeMetaChipsHtml(r);
+  el('rx-nut-row').innerHTML = buildRecipeNutritionRowHtml(r);
+  el('rx-ing').innerHTML = buildIngredientsTab(r);
+}
+
 function refreshScaledIngredientsUI() {
   if (!curRecipe) return;
-  var rm = el('rm-bg');
-  if (rm && rm.style.display === 'flex') {
-    el('tab-ing').innerHTML = buildIngredientsTab(curRecipe);
-    var swapBtns = el('tab-ing').querySelectorAll('.swap-btn');
-    for (var s = 0; s < swapBtns.length; s++) {
-      swapBtns[s].addEventListener('click', function() { openSwap(this.dataset.ing, curRecipe.id); });
-    }
+  if (isRecipeExperienceOpen()) {
+    el('rx-ing').innerHTML = buildIngredientsTab(curRecipe);
   }
   var pb = el('tm-peek-bg');
   if (pb && pb.classList.contains('is-open') && todayPeekContext && todayPeekContext.rid === curRecipe.id) {
@@ -12936,14 +13025,6 @@ function openRM(id) {
   }
   if (!curRecipe) return;
 
-  el('rm-title').textContent = curRecipe.name;
-  renderRMNutritionBadge(curRecipe);
-
-  var tagArr  = [curRecipe.time, curRecipe.difficulty || 'Easy', curRecipe.cat].concat(curRecipe.tags || []);
-  var tagHtml = '';
-  for (var t = 0; t < tagArr.length; t++) tagHtml += '<span class="rm-tag">' + shopEsc(tagArr[t]) + '</span>';
-  el('rm-tags').innerHTML = tagHtml;
-
   var needsInstructionFetch = recipeStepsNeedEnhancement(curRecipe.steps);
   if (!needsInstructionFetch) {
     stepCache[id] = normalizeRecipeSteps(curRecipe.steps);
@@ -12951,29 +13032,15 @@ function openRM(id) {
     if (stepSrc) arcLogInstructions(stepSrc, id, stepCache[id].length);
   }
 
-  el('tab-ing').innerHTML   = buildIngredientsTab(curRecipe);
-  el('tab-steps').innerHTML = needsInstructionFetch
-    ? '<div style="text-align:center;padding:32px;color:#9ca3af"><div class="ai-spinner" style="margin:0 auto 14px"></div><div style="font-size:14px">Generating instructions...</div></div>'
+  renderRecipeExperience(curRecipe);
+  el('rx-steps').innerHTML = needsInstructionFetch
+    ? recipeStepsLoadingHtml()
     : buildStepsTab(stepCache[id]);
-  el('tab-nut').innerHTML   = buildNutTab(curRecipe);
 
-  renderRMServings(curRecipe);
+  var scroll = el('rx-scroll');
+  if (scroll) scroll.scrollTop = 0;
 
-  // Wire swap buttons
-  var swapBtns = el('tab-ing').querySelectorAll('.swap-btn');
-  for (var s = 0; s < swapBtns.length; s++) {
-    swapBtns[s].addEventListener('click', function() { openSwap(this.dataset.ing, id); });
-  }
-
-  // Reset to ingredients tab
-  var rmTabs = document.querySelectorAll('.rm-tab');
-  var tabPs  = document.querySelectorAll('.tab-p');
-  for (var x = 0; x < rmTabs.length; x++) rmTabs[x].classList.remove('active');
-  for (var y = 0; y < tabPs.length;  y++) tabPs[y].classList.remove('active');
-  document.querySelector('.rm-tab[data-tab="ing"]').classList.add('active');
-  el('tab-ing').classList.add('active');
-
-  openMotion('rm-bg');
+  openMotion('rx-overlay');
 
   if (needsInstructionFetch) {
     arcLogInstructions('placeholder', id, normalizeRecipeSteps(curRecipe.steps || []).length);
@@ -12997,8 +13064,8 @@ function fetchSteps(id) {
     stepCache[id] = storedSteps;
     var storedSrc = instructionSourceForRecipe(r, r.steps);
     if (storedSrc) arcLogInstructions(storedSrc, id, storedSteps.length);
-    if (curRecipe && curRecipe.id === id && el('rm-bg').style.display === 'flex') {
-      el('tab-steps').innerHTML = buildStepsTab(storedSteps);
+    if (curRecipe && curRecipe.id === id && isRecipeExperienceOpen()) {
+      el('rx-steps').innerHTML = buildStepsTab(storedSteps);
     }
     syncTodayPeekStepsIfOpen(id, storedSteps);
     return;
@@ -13042,25 +13109,11 @@ function fetchSteps(id) {
     } else {
       stepCache[id] = steps;
     }
-    if (curRecipe && curRecipe.id === id && el('rm-bg').style.display === 'flex') {
-      el('tab-steps').innerHTML = buildStepsTab(steps);
+    if (curRecipe && curRecipe.id === id && isRecipeExperienceOpen()) {
+      el('rx-steps').innerHTML = buildStepsTab(steps);
     }
     syncTodayPeekStepsIfOpen(id, steps);
   }, 2, 'instruction_enhancement');
-}
-
-function setupRMTabs() {
-  var tabs = document.querySelectorAll('.rm-tab');
-  for (var i = 0; i < tabs.length; i++) {
-    tabs[i].addEventListener('click', function() {
-      var allTabs = document.querySelectorAll('.rm-tab');
-      var allPanes= document.querySelectorAll('.tab-p');
-      for (var j = 0; j < allTabs.length; j++) allTabs[j].classList.remove('active');
-      for (var k = 0; k < allPanes.length; k++) allPanes[k].classList.remove('active');
-      this.classList.add('active');
-      el('tab-' + this.dataset.tab).classList.add('active');
-    });
-  }
 }
 
 // ── Ingredient swap ───────────────────────────────────────────
@@ -16817,17 +16870,12 @@ function arcWireApplicationDom() {
   });
   el('tm-peek-close').addEventListener('click', function() { closeTodayMealPeek(); });
 
-  // Recipe modal close
-  el('rm-close').addEventListener('click', function() { closeMotion('rm-bg', function() { curRecipe = null; }); });
-  el('rm-bg').addEventListener('click', function(e)   { if (e.target === this) closeMotion('rm-bg', function() { curRecipe = null; }); });
-
-  // Recipe modal tabs
-  setupRMTabs();
-
-  // Recipe modal — servings stepper
-  var dec = el('rm-srv-dec'), inc = el('rm-srv-inc');
-  if (dec) dec.addEventListener('click', function() { bumpRMServings(-1); });
-  if (inc) inc.addEventListener('click', function() { bumpRMServings(1); });
+  // Recipe experience — open / close (actions wired in a later phase)
+  el('rx-back').addEventListener('click', closeRecipeExperience);
+  el('rx-fav').addEventListener('click', function() {});
+  el('rx-menu').addEventListener('click', function() {});
+  el('rx-swap-btn').addEventListener('click', function() {});
+  el('rx-log-btn').addEventListener('click', function() {});
 
   // Swap modal
   el('swap-cancel').addEventListener('click', function() { closeMotion('swap-bg'); });
