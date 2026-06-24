@@ -15028,7 +15028,7 @@ function enrichShoppingWithKroger(lines) {
   if (UP.krogerLocationId) body.locationId = UP.krogerLocationId;
   else if (UP.krogerZip) body.zipCode = UP.krogerZip;
 
-  fetch(GROCERY_LIVE_PRICE_URL, {
+  arcAuthFetch(GROCERY_LIVE_PRICE_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)

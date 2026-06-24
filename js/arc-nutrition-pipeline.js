@@ -100,12 +100,20 @@
     var operation = Trace ? Trace.pathOperation(path) : path;
     var startedAt = Trace ? Trace.nowIso() : null;
     var t0 = Trace ? Trace.timeStart() : 0;
+    var baseHeaders = { 'Content-Type': 'application/json', Accept: 'application/json' };
 
-    return fetch(apiUrl(path), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(body || {})
-    }).then(function (resp) {
+    var doFetch = function (headers) {
+      return fetch(apiUrl(path), {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(body || {})
+      });
+    };
+    var req = (global.ArcApiBase && global.ArcApiBase.withAuthHeaders)
+      ? global.ArcApiBase.withAuthHeaders(baseHeaders).then(doFetch)
+      : doFetch(baseHeaders);
+
+    return req.then(function (resp) {
       return resp.json().then(function (json) {
         var res = { ok: resp.ok, status: resp.status, json: json };
         if (Trace && providerId) Trace.logProxy(providerId, operation, res, startedAt, t0);
