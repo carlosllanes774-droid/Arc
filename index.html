@@ -8434,7 +8434,7 @@ function buildTodayMealsCardsHtml(day, slots, heroSlot) {
     var timeTxt = r && r.time ? r.time : '—';
     var favOn = r && isRecipeFavorited(r.id);
     var fin = isMealFinalized(day, slot);
-    var clickable = !isCurrent && r;
+    var clickable = !!r;
     var blockCls = 'today-meal-block' + (isCurrent ? ' today-meal-block--current' : '');
     var cardCls = 'today-meal-card' + (clickable ? ' today-meal-card--link' : '');
 
