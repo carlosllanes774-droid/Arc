@@ -94,9 +94,19 @@
     var likedIds = {};
     var dislikedIds = {};
     var fb = profile.mealFeedback || {};
+    function mealFeedbackSentiment(entry) {
+      if (entry == null) return 0;
+      if (typeof entry === 'number') return entry === 1 ? 1 : (entry === -1 ? -1 : 0);
+      if (typeof entry === 'object' && entry.sentiment != null) {
+        var s = Number(entry.sentiment);
+        return s === 1 ? 1 : (s === -1 ? -1 : 0);
+      }
+      return 0;
+    }
     Object.keys(fb).forEach(function (rid) {
-      if (fb[rid] === 1) likedIds[rid] = true;
-      else if (fb[rid] === -1) dislikedIds[rid] = true;
+      var sent = mealFeedbackSentiment(fb[rid]);
+      if (sent === 1) likedIds[rid] = true;
+      else if (sent === -1) dislikedIds[rid] = true;
     });
 
     var likedNames = [];
