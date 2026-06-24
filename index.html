@@ -1927,6 +1927,27 @@ body{
 .rx-btn--outline:hover{background:rgba(255,255,255,.1)}
 .rx-btn--primary{background:linear-gradient(90deg,var(--arc-primary) 0%,var(--arc-primary-dark) 100%);color:#fff;box-shadow:0 12px 30px rgba(227,90,54,.18)}
 .rx-btn--primary:hover{box-shadow:0 14px 34px rgba(227,90,54,.24)}
+.rx-btn--primary:disabled{opacity:.45;cursor:not-allowed;box-shadow:none;transform:none}
+.rx-menu-wrap{position:relative}
+.rx-menu-pop{position:absolute;top:calc(100% + 8px);right:0;min-width:168px;padding:6px;border-radius:14px;background:rgba(28,24,22,.96);border:1px solid rgba(255,255,255,.12);box-shadow:0 12px 32px rgba(0,0,0,.45);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);z-index:6;opacity:0;visibility:hidden;pointer-events:none;transform:translateY(-4px);transition:opacity var(--motion-fast) var(--ease-standard),transform var(--motion-fast) var(--ease-standard),visibility var(--motion-fast)}
+.rx-menu-pop.is-open{opacity:1;visibility:visible;pointer-events:auto;transform:translateY(0)}
+.rx-menu-item{display:block;width:100%;padding:11px 14px;border:none;border-radius:10px;background:transparent;color:#f4f1ee;font-size:14px;font-weight:600;text-align:left;cursor:pointer;font-family:inherit;-webkit-tap-highlight-color:transparent;transition:background var(--motion-fast) var(--ease-standard)}
+.rx-menu-item:hover,.rx-menu-item:focus-visible{background:rgba(255,255,255,.08);outline:none}
+.rx-report-bg{position:absolute;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:46;border-radius:28px;padding:24px;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);opacity:0;pointer-events:none;transition:opacity var(--motion-sheet) var(--ease-standard)}
+.rx-report-bg.is-open{opacity:1;pointer-events:auto}
+.rx-report-bg.is-closing{opacity:0;pointer-events:none}
+.rx-report-card{background:#1c1816;border-radius:var(--r-xl);border:1px solid rgba(255,255,255,.12);padding:22px var(--sp-page-x);width:100%;max-height:80%;overflow-y:auto;box-shadow:0 18px 48px rgba(0,0,0,.5);transform:translateY(var(--sheet-offset));transition:transform var(--motion-sheet) var(--ease-out)}
+.rx-report-bg.is-open .rx-report-card{transform:translateY(0)}
+.rx-report-bg.is-closing .rx-report-card{transform:translateY(var(--sheet-offset))}
+.rx-report-title{font-family:Georgia,"Baskerville",serif;font-size:20px;font-weight:700;color:#f8f4f0;margin:0 0 8px;letter-spacing:-.02em}
+.rx-report-body{font-size:14px;color:rgba(255,255,255,.62);margin:0 0 16px;line-height:1.45}
+.rx-report-textarea{width:100%;min-height:120px;max-height:220px;padding:14px 16px;border-radius:16px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);color:#f4f1ee;font-size:14px;font-family:inherit;line-height:1.5;resize:vertical;box-sizing:border-box}
+.rx-report-textarea::placeholder{color:rgba(255,255,255,.36)}
+.rx-report-textarea:focus{outline:none;border-color:rgba(227,90,54,.45);box-shadow:0 0 0 2px rgba(227,90,54,.15)}
+.rx-report-actions{display:flex;gap:10px;margin-top:18px}
+.rx-report-actions .rx-btn{flex:1;min-height:48px}
+.rx-report-error{font-size:13px;color:#f0a898;margin-top:12px;line-height:1.45}
+.rx-report-error[hidden]{display:none}
 /* Today meal peek — lightweight inspect sheet (stays on Today) */
 .tm-peek-bg{position:absolute;inset:0;background:rgba(0,0,0,.48);display:flex;align-items:flex-end;z-index:25;border-radius:28px;overflow:hidden;backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity var(--motion-sheet) var(--ease-standard)}
 .tm-peek-bg.is-open{opacity:1;pointer-events:auto}
@@ -2978,9 +2999,14 @@ button:not(:disabled):active,
           <button type="button" class="rx-icon-btn" id="rx-dislike" aria-label="Dislike" aria-pressed="false">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M17 2v11M22 11V3a1 1 0 00-1-1h-4M17 11l-4 8.5a1.5 1.5 0 01-2.8-.5V14H4.8a2 2 0 01-2-1.7l1.4-8.4a1 1 0 011-.9H17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
-          <button type="button" class="rx-icon-btn" id="rx-menu" aria-label="More options">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="6" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="18" r="1.5" fill="currentColor"/></svg>
-          </button>
+          <div class="rx-menu-wrap">
+            <button type="button" class="rx-icon-btn" id="rx-menu" aria-label="More options" aria-haspopup="menu" aria-expanded="false" aria-controls="rx-menu-pop">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="6" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="18" r="1.5" fill="currentColor"/></svg>
+            </button>
+            <div class="rx-menu-pop" id="rx-menu-pop" role="menu" aria-label="Recipe options">
+              <button type="button" class="rx-menu-item" id="rx-menu-report" role="menuitem">Report Issue</button>
+            </div>
+          </div>
         </div>
       </header>
       <div class="rx-hero" id="rx-hero" aria-hidden="true"></div>
@@ -3002,6 +3028,20 @@ button:not(:disabled):active,
   </div>
   <div class="rx-action-bar">
     <button type="button" class="rx-btn rx-btn--primary" id="rx-log-btn">Log Meal</button>
+  </div>
+</div>
+
+<!-- RECIPE ISSUE REPORT -->
+<div class="rx-report-bg" id="rx-report-bg" style="display:none" role="dialog" aria-modal="true" aria-labelledby="rx-report-title">
+  <div class="rx-report-card">
+    <h2 class="rx-report-title" id="rx-report-title">Report an Issue</h2>
+    <p class="rx-report-body">What's wrong with this recipe?</p>
+    <textarea class="rx-report-textarea" id="rx-report-text" maxlength="1000" rows="5" placeholder="Tell us what seems wrong..." aria-describedby="rx-report-error"></textarea>
+    <p class="rx-report-error" id="rx-report-error" hidden></p>
+    <div class="rx-report-actions">
+      <button type="button" class="rx-btn rx-btn--outline" id="rx-report-cancel">Cancel</button>
+      <button type="button" class="rx-btn rx-btn--primary" id="rx-report-submit" disabled>Submit</button>
+    </div>
   </div>
 </div>
 
@@ -3328,6 +3368,7 @@ button:not(:disabled):active,
 <script src="js/arc-adaptive-recipe-scoring.js"></script>
 <script src="js/arc-nutrition-pipeline.js"></script>
 <script src="js/arc-backend.js"></script>
+<script src="js/recipe-issue-report.js"></script>
 <script src="js/arc-frontend-contract.js"></script>
 <script src="js/arc-ingredient-qty-repair.js"></script>
 <script src="js/week-library-targets.js"></script>
@@ -13226,6 +13267,8 @@ function isRecipeExperienceOpen() {
 }
 
 function closeRecipeExperience() {
+  closeRxMenu();
+  closeRecipeIssueReportModal();
   closeMotion('rx-overlay', function() {
     curRecipe = null;
     recipeExperienceContext = null;
@@ -13321,6 +13364,111 @@ function renderRecipeExperience(r) {
   el('rx-ing').innerHTML = buildIngredientsTab(r);
   bindRecipeIngredientActions(r);
   renderRecipeFeedbackState(r.id);
+  closeRxMenu();
+}
+
+var rxMenuOpen = false;
+
+function closeRxMenu() {
+  rxMenuOpen = false;
+  var pop = el('rx-menu-pop');
+  if (pop) pop.classList.remove('is-open');
+  var btn = el('rx-menu');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+
+function toggleRxMenu(e) {
+  if (e) e.stopPropagation();
+  rxMenuOpen = !rxMenuOpen;
+  var pop = el('rx-menu-pop');
+  var btn = el('rx-menu');
+  if (!pop || !btn) return;
+  pop.classList.toggle('is-open', rxMenuOpen);
+  btn.setAttribute('aria-expanded', rxMenuOpen ? 'true' : 'false');
+}
+
+function buildRecipeIssueReportPayload(reportText) {
+  if (!curRecipe) return null;
+  var report = {
+    recipeId: curRecipe.id,
+    recipeName: curRecipe.name,
+    reportText: reportText,
+    userId: (arcAuthUser && arcAuthUser.id) ? arcAuthUser.id : null,
+    createdAt: Date.now()
+  };
+  if (curRecipe.spoonacularId != null && curRecipe.spoonacularId !== '') {
+    report.spoonacularId = curRecipe.spoonacularId;
+  }
+  return report;
+}
+
+function updateRecipeIssueSubmitState() {
+  var ta = el('rx-report-text');
+  var btn = el('rx-report-submit');
+  if (!ta || !btn) return;
+  var val = String(ta.value || '').trim();
+  var len = String(ta.value || '').length;
+  btn.disabled = !val || len > 1000;
+}
+
+function openRecipeIssueReportModal() {
+  closeRxMenu();
+  var ta = el('rx-report-text');
+  var err = el('rx-report-error');
+  if (ta) {
+    ta.value = '';
+    ta.removeAttribute('aria-invalid');
+  }
+  if (err) {
+    err.textContent = '';
+    err.hidden = true;
+  }
+  updateRecipeIssueSubmitState();
+  openMotion('rx-report-bg');
+  if (ta) {
+    setTimeout(function() { ta.focus(); }, MOTION_SHEET + 40);
+  }
+}
+
+function closeRecipeIssueReportModal() {
+  closeMotion('rx-report-bg');
+}
+
+function submitRecipeIssueFromModal() {
+  if (!curRecipe) return;
+  var ta = el('rx-report-text');
+  var btn = el('rx-report-submit');
+  var err = el('rx-report-error');
+  if (!ta || !btn) return;
+  var text = String(ta.value || '').trim();
+  if (!text || text.length > 1000) return;
+
+  btn.disabled = true;
+  if (err) {
+    err.textContent = '';
+    err.hidden = true;
+  }
+
+  var report = buildRecipeIssueReportPayload(text);
+  if (!report) {
+    updateRecipeIssueSubmitState();
+    return;
+  }
+
+  var submitFn = (typeof submitRecipeIssueReport === 'function') ? submitRecipeIssueReport : null;
+  var p = submitFn ? submitFn(report) : Promise.reject(new Error('unavailable'));
+
+  p.then(function() {
+    closeRecipeIssueReportModal();
+    showToast('Thanks for the feedback.');
+  }).catch(function() {
+    if (err) {
+      err.textContent = 'Unable to submit report. Please try again.';
+      err.hidden = false;
+    }
+    if (ta) ta.setAttribute('aria-invalid', 'true');
+    updateRecipeIssueSubmitState();
+  });
 }
 
 function refreshScaledIngredientsUI() {
@@ -17294,7 +17442,25 @@ function arcWireApplicationDom() {
     toggleRecipeDislikeFeedback(curRecipe.id);
     renderRecipeFeedbackState(curRecipe.id);
   });
-  el('rx-menu').addEventListener('click', function() {});
+  el('rx-menu').addEventListener('click', function(e) {
+    e.stopPropagation();
+    toggleRxMenu(e);
+  });
+  el('rx-menu-report').addEventListener('click', function(e) {
+    e.stopPropagation();
+    openRecipeIssueReportModal();
+  });
+  el('rx-report-cancel').addEventListener('click', function() { closeRecipeIssueReportModal(); });
+  el('rx-report-bg').addEventListener('click', function(e) {
+    if (e.target === this) closeRecipeIssueReportModal();
+  });
+  el('rx-report-text').addEventListener('input', updateRecipeIssueSubmitState);
+  el('rx-report-submit').addEventListener('click', submitRecipeIssueFromModal);
+  document.addEventListener('click', function(e) {
+    if (!rxMenuOpen) return;
+    if (e.target.closest && e.target.closest('.rx-menu-wrap')) return;
+    closeRxMenu();
+  });
   el('rx-log-btn').addEventListener('click', logMealFromRecipeExperience);
 
   // Swap modal
