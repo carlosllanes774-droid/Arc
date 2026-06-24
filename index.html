@@ -12102,17 +12102,34 @@ function requestIngredientQtyRepair(recipe, missingIngredients, callback) {
   callAIWithRetry(built.sysMsg, built.userMsg, 320, function (err, raw, meta) {
     if (err) { callback(err, null); return; }
     var payloadSource = (meta && meta.source) ? String(meta.source) : '';
-    if (payloadSource === 'enhancement') {
-      callback(new Error('ingredient_qty_repair_enhancement_response'), null);
-      return;
-    }
+    console.log('[ARC PIPELINE] Ingredient quantity repair response received', {
+      recipe: recipe && recipe.name,
+      source: payloadSource,
+      rawType: typeof raw,
+      rawPreview: typeof raw === 'string'
+        ? raw.slice(0, 280)
+        : (raw && raw.ingQty && typeof raw.ingQty === 'object' ? raw.ingQty : raw)
+    });
     var patch = Repair.parseIngredientQtyRepairPatch(raw, function (text) {
       return parseJSON(text, { context: 'ingredient_qty_repair' });
     });
-    if (!patch) {
+    var hasQty = patch && typeof patch === 'object' && Object.keys(patch).some(function (k) {
+      return String(patch[k] == null ? '' : patch[k]).trim();
+    });
+    if (!hasQty) {
+      console.log('[ARC PIPELINE] Ingredient quantity repair parse failed', {
+        recipe: recipe && recipe.name,
+        source: payloadSource
+      });
       callback(new Error('ingredient_qty_repair_parse_failed'), null);
       return;
     }
+    console.log('[ARC PIPELINE] Ingredient quantity repair parsed', {
+      recipe: recipe && recipe.name,
+      source: payloadSource,
+      keys: Object.keys(patch),
+      patch: patch
+    });
     callback(null, patch);
   }, 1, 'ingredient_qty_repair');
 }
@@ -12168,7 +12185,19 @@ function repairWeekLibraryIngredientQuantities(recipes, meta, done) {
           err: String(err)
         });
       } else {
+        var ingQtyBefore = {};
+        if (recipe.ingQty && typeof recipe.ingQty === 'object') {
+          Object.keys(recipe.ingQty).forEach(function (k) {
+            ingQtyBefore[k] = recipe.ingQty[k];
+          });
+        }
         Repair.mergeRepairedIngredientQty(recipe, patch, missing);
+        console.log('[ARC PIPELINE] Ingredient quantity repair merged', {
+          recipe: recipe.name,
+          ingQtyBefore: ingQtyBefore,
+          ingQtyAfter: recipe.ingQty,
+          patch: patch
+        });
         var after = Repair.auditRecipeIngredientQuantities(recipe);
         console.log('[ARC PIPELINE] Ingredient quantity repair applied', {
           recipe: recipe.name,

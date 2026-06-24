@@ -70,6 +70,17 @@ describe('mergeRepairedIngredientQty', () => {
   });
 });
 
+describe('parseIngredientQtyRepairPatch', () => {
+  const R = loadArcIngredientQtyRepair();
+
+  test('parses ingQty wrapper from JSON string (enhancement-style raw)', () => {
+    const raw = '{"ingQty":{"Chicken breast":"6 oz","Rice":"1/2 cup"}}';
+    const patch = R.parseIngredientQtyRepairPatch(raw);
+    assert.equal(patch['Chicken breast'], '6 oz');
+    assert.equal(patch.Rice, '1/2 cup');
+  });
+});
+
 describe('isOpenAiWeekLibraryMeta', () => {
   const R = loadArcIngredientQtyRepair();
 
