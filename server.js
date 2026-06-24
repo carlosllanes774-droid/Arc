@@ -989,6 +989,7 @@ function openAiTaskTokenLimit(taskType) {
   const task = String(taskType || "optimization").toLowerCase();
   if (task === "week_generation") return 6000;
   if (task === "week_recipe_library") return 2000;
+  if (task === "ingredient_qty_repair") return 320;
   if (task === "week_meal_assignment") return 1200;
   if (task === "instruction_enhancement") return 250;
   if (task === "tagging" || task === "classification" || task === "optimization_classification") return 90;

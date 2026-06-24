@@ -3329,6 +3329,7 @@ button:not(:disabled):active,
 <script src="js/arc-nutrition-pipeline.js"></script>
 <script src="js/arc-backend.js"></script>
 <script src="js/arc-frontend-contract.js"></script>
+<script src="js/arc-ingredient-qty-repair.js"></script>
 <script src="js/week-library-targets.js"></script>
 <script src="js/spoonacular-week-library.js"></script>
 <script>
@@ -3614,7 +3615,7 @@ function buildWeekRecipeLibraryPrompt(intent) {
 
   var sysMsg = 'You are an expert nutritionist. Respond with ONLY valid JSON. No markdown. Start with { end with }. ' +
     'Build a SMALL core recipe library (' + totalCapNote + ') for one week. ' +
-    'Each recipe: name, cat, cal, p, c, f, servings, ing (max 6 items), required ingQty (one realistic amount per ing item), price (USD/serving). ' +
+    'Each recipe: name, cat, cal, p, c, f, servings, ing (max 6 items), required ingQty (exactly one realistic amount per ing item — recipes with missing or mismatched quantities are INVALID), price (USD/serving). ' +
     'Do NOT include steps or long instructions. Do NOT assign days. ' +
     'Macros must align with ingredients. Comply with MANDATORY DIETARY COMPLIANCE.';
 
@@ -3624,7 +3625,8 @@ function buildWeekRecipeLibraryPrompt(intent) {
   u += 'Total recipes: ' + targets.total + ' (' + totalCapNote + ').\n';
   u += 'Share ingredients across recipes where possible (fewer grocery items). Prefer overlap over variety.\n';
   u += 'Each recipe servings = expected weekly uses (typically 2-4 for batch-friendly meals).\n';
-  u += 'ingQty must list EVERY item in ing with a realistic amount.\n\n';
+  u += 'CRITICAL: Every ingredient in ing MUST have a matching entry in ingQty. The number of ingQty entries must exactly equal the number of ing entries.\n';
+  u += 'ingQty keys MUST exactly match ing strings (same spelling and capitalization). Recipes with missing quantities are INVALID.\n\n';
   u += 'OUTPUT JSON ONLY:\n';
   u += '{"recipes":[{"id":1,"name":"Italian Omelette","cat":"Breakfast","cal":380,"p":28,"c":12,"f":22,"servings":2,"ing":["Eggs","Spinach","Cheese"],"ingQty":{"Eggs":"3 large","Spinach":"1 cup","Cheese":"1/4 cup"},"price":4.5}]}\n';
 
@@ -12089,6 +12091,98 @@ function dispatchWeekLibraryFetch(built, applyLibraryFn) {
   });
 }
 
+/** Request ingQty-only patch for missing ingredients (does not regenerate the recipe). */
+function requestIngredientQtyRepair(recipe, missingIngredients, callback) {
+  var Repair = typeof ArcIngredientQtyRepair !== 'undefined' ? ArcIngredientQtyRepair : null;
+  if (!Repair || !missingIngredients || !missingIngredients.length) {
+    callback(null, {});
+    return;
+  }
+  var built = Repair.buildIngredientQtyRepairPrompt(recipe, missingIngredients);
+  callAIWithRetry(built.sysMsg, built.userMsg, 320, function (err, raw, meta) {
+    if (err) { callback(err, null); return; }
+    var payloadSource = (meta && meta.source) ? String(meta.source) : '';
+    if (payloadSource === 'enhancement') {
+      callback(new Error('ingredient_qty_repair_enhancement_response'), null);
+      return;
+    }
+    var patch = Repair.parseIngredientQtyRepairPatch(raw, function (text) {
+      return parseJSON(text, { context: 'ingredient_qty_repair' });
+    });
+    if (!patch) {
+      callback(new Error('ingredient_qty_repair_parse_failed'), null);
+      return;
+    }
+    callback(null, patch);
+  }, 1, 'ingredient_qty_repair');
+}
+
+/**
+ * Audit OpenAI week-library recipes and repair missing ingQty via targeted AI calls.
+ * Spoonacular libraries skip repair (quantities built in mapper).
+ */
+function repairWeekLibraryIngredientQuantities(recipes, meta, done) {
+  var Repair = typeof ArcIngredientQtyRepair !== 'undefined' ? ArcIngredientQtyRepair : null;
+  if (!Repair || !Repair.isOpenAiWeekLibraryMeta(meta)) {
+    done(recipes);
+    return;
+  }
+  recipes = Array.isArray(recipes) ? recipes : [];
+  var queue = Repair.recipesNeedingQuantityRepair(recipes);
+  for (var a = 0; a < recipes.length; a++) {
+    var auditAll = Repair.auditRecipeIngredientQuantities(recipes[a]);
+    console.log('[ARC PIPELINE] Ingredient quantity audit', {
+      recipe: recipes[a].name,
+      ingCount: auditAll.ingCount,
+      ingQtyCount: auditAll.ingQtyCount,
+      needsQuantityRepair: auditAll.needsQuantityRepair,
+      missing: auditAll.missing
+    });
+  }
+  if (!queue.length) {
+    console.log('[ARC PIPELINE] Ingredient quantities complete — no repair needed');
+    done(recipes);
+    return;
+  }
+  console.log('[ARC PIPELINE] Ingredient quantity repair queued', {
+    recipeCount: recipes.length,
+    repairCount: queue.length
+  });
+  var pos = 0;
+  function next() {
+    if (pos >= queue.length) {
+      done(recipes);
+      return;
+    }
+    var item = queue[pos++];
+    var recipe = item.recipe;
+    var missing = item.audit.missing.slice();
+    console.log('[ARC PIPELINE] Ingredient quantity repair started', {
+      recipe: recipe.name,
+      missing: missing
+    });
+    requestIngredientQtyRepair(recipe, missing, function (err, patch) {
+      if (err) {
+        console.log('[ARC PIPELINE] Ingredient quantity repair failed', {
+          recipe: recipe.name,
+          err: String(err)
+        });
+      } else {
+        Repair.mergeRepairedIngredientQty(recipe, patch, missing);
+        var after = Repair.auditRecipeIngredientQuantities(recipe);
+        console.log('[ARC PIPELINE] Ingredient quantity repair applied', {
+          recipe: recipe.name,
+          complete: after.complete,
+          ingQtyCount: after.ingQtyCount,
+          stillMissing: after.missing
+        });
+      }
+      next();
+    });
+  }
+  next();
+}
+
 function generateWeeklyPlan(intent) {
   var ok = validateProfileForGeneration();
   if (!ok.ok) {
@@ -12148,15 +12242,19 @@ function generateWeeklyPlan(intent) {
       failWeekGeneration('Core library must include at least 4 recipes', raw);
       return;
     }
-    console.log('[ARC PIPELINE] Week recipe library ready', { count: weekLibraryRecipes.length });
-    setGenPhase('balancing');
-    UP.arcWeekPlanner = 'scg';
-    var weekPayload = buildDeterministicWeekMealPlan(weekLibraryRecipes, built.slots, intent);
-    if (!weekPayload) {
-      failWeekGeneration('Could not build week assignment from library', raw);
-      return;
-    }
-    applyWeek(weekPayload);
+    repairWeekLibraryIngredientQuantities(weekLibraryRecipes, meta, function (repairedRecipes) {
+      if (myGen !== recipeGenId) return;
+      weekLibraryRecipes = repairedRecipes;
+      console.log('[ARC PIPELINE] Week recipe library ready', { count: weekLibraryRecipes.length });
+      setGenPhase('balancing');
+      UP.arcWeekPlanner = 'scg';
+      var weekPayload = buildDeterministicWeekMealPlan(weekLibraryRecipes, built.slots, intent);
+      if (!weekPayload) {
+        failWeekGeneration('Could not build week assignment from library', raw);
+        return;
+      }
+      applyWeek(weekPayload);
+    });
   }
 
   function applyWeek(weekPayload) {

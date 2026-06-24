@@ -21,7 +21,8 @@
     "test:arc-food-log-signals": "node --test tests/arc-food-log-signals.test.js",
     "test:arc-spine": "node --test tests/arc-spine.test.js",
     "test:arc-v2-contract": "node --test tests/arc-v2-contract.test.js",
-    "test:arc-adaptive-recipe-scoring": "node --test tests/arc-adaptive-recipe-scoring.test.js"
+    "test:arc-adaptive-recipe-scoring": "node --test tests/arc-adaptive-recipe-scoring.test.js",
+    "test:ingredient-qty-repair": "node --test tests/ingredient-qty-repair.test.js"
   },
   "keywords": [],
   "author": "",
