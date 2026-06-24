@@ -1203,8 +1203,6 @@ body{
 .recap-win-body{font-family:Georgia,serif;font-size:19px;line-height:1.5;color:rgba(255,255,255,.82);font-style:italic;margin:4px 0 0}
 .recap-win-accent{display:inline-block;width:28px;height:2px;background:linear-gradient(90deg,var(--arc-primary),transparent);margin:18px auto 0;border-radius:2px}
 .recap-presence-foot{margin-top:22px;margin-bottom:0}
-/* Arc moment — calm Today pulse (not achievement spam) */
-.week-status-chip{margin:0 var(--sp-page-x) var(--sp-2);padding:8px 14px;border-radius:999px;font-size:12px;font-weight:600;letter-spacing:.04em;display:inline-block;background:var(--arc-surface-2);border:1px solid var(--arc-border);color:var(--arc-subtext)}
 /* Today — single-focus hero + progressive disclosure */
 #s-today .content.today-flow{padding:var(--sp-2) var(--sp-page-x) var(--sp-5);background:var(--arc-surface)}
 .today-hero{padding:var(--sp-2) 0 var(--sp-4);text-align:left}
@@ -2022,10 +2020,8 @@ button:not(:disabled):active,
 #s-today:not(.today--no-plan) .prepday-banner{display:none!important}
 .today-plan-ui{display:none}
 #s-today:not(.today--no-plan) .today-plan-ui{display:block}
-.today-status-row{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:22px}
-#s-today:not(.today--no-plan) #week-status-chip{display:inline-flex!important;align-items:center;gap:10px;height:42px;padding:0 22px;margin:0;border-radius:999px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.04);font-family:Inter,system-ui,-apple-system,sans-serif;font-size:18px;font-weight:500;color:#F4F1EE;letter-spacing:0;text-transform:none}
-#s-today:not(.today--no-plan) #week-status-chip::before{content:'';width:10px;height:10px;border-radius:50%;background:#F16532;flex-shrink:0}
-#s-today:not(.today--no-plan) #today-date{display:block!important;margin:0;padding:0;flex:0 0 auto;text-align:right;font-family:Inter,system-ui,-apple-system,sans-serif;font-size:18px;font-weight:500;color:rgba(255,255,255,.55);background:none;border:none}
+.today-status-row{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:22px}
+#s-today:not(.today--no-plan) #today-date{display:block!important;margin:0;padding:0;flex:0 0 auto;text-align:center;font-family:Inter,system-ui,-apple-system,sans-serif;font-size:18px;font-weight:500;color:rgba(255,255,255,.55);background:none;border:none}
 .today-meals-list{display:flex;flex-direction:column;gap:12px;margin-top:28px;padding-bottom:8px}
 .today-meal-block{display:flex;flex-direction:column;gap:10px}
 .today-meal-card{position:relative;height:135px;border-radius:24px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05);padding:14px;display:flex;gap:16px;align-items:center;transition:background .2s ease,transform .2s ease;-webkit-tap-highlight-color:transparent;overflow:hidden}
@@ -2609,7 +2605,6 @@ button:not(:disabled):active,
   <div class="content today-flow">
     <div class="today-plan-ui">
       <div class="today-status-row">
-        <div class="week-status-chip" id="week-status-chip" style="display:none" aria-live="polite">On track</div>
         <p id="today-date">—</p>
       </div>
       <div class="today-meals-list" id="today-meals-list" aria-label="Today's meals"></div>
