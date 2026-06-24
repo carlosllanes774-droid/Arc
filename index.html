@@ -12984,6 +12984,21 @@ function logMealFromRecipeExperience() {
   applyTodayMealAction('log', target.day, target.slot);
 }
 
+function openIngredientSwapFromRecipeExperience() {
+  if (!curRecipe) return;
+  var ings = curRecipe.ing || [];
+  if (!ings.length) {
+    showToast('No ingredients to swap.');
+    return;
+  }
+  var scroll = el('rx-scroll');
+  var hdr = el('rx-ing-h');
+  if (scroll && hdr) {
+    scroll.scrollTo({ top: Math.max(0, hdr.offsetTop - 24), behavior: 'smooth' });
+  }
+  openSwap(ings[0], curRecipe.id);
+}
+
 function buildRecipeHeroHtml(r) {
   if (r && r.image) {
     return '<img src="' + shopEsc(r.image) + '" alt="" loading="lazy"/>';
@@ -13033,12 +13048,20 @@ function renderRecipeExperience(r) {
   el('rx-meta-chips').innerHTML = buildRecipeMetaChipsHtml(r);
   el('rx-nut-row').innerHTML = buildRecipeNutritionRowHtml(r);
   el('rx-ing').innerHTML = buildIngredientsTab(r);
+  var swapBtns = el('rx-ing').querySelectorAll('.swap-btn');
+  for (var s = 0; s < swapBtns.length; s++) {
+    swapBtns[s].addEventListener('click', function() { openSwap(this.dataset.ing, r.id); });
+  }
 }
 
 function refreshScaledIngredientsUI() {
   if (!curRecipe) return;
   if (isRecipeExperienceOpen()) {
     el('rx-ing').innerHTML = buildIngredientsTab(curRecipe);
+    var swapBtns = el('rx-ing').querySelectorAll('.swap-btn');
+    for (var s = 0; s < swapBtns.length; s++) {
+      swapBtns[s].addEventListener('click', function() { openSwap(this.dataset.ing, curRecipe.id); });
+    }
   }
   var pb = el('tm-peek-bg');
   if (pb && pb.classList.contains('is-open') && todayPeekContext && todayPeekContext.rid === curRecipe.id) {
@@ -16920,7 +16943,7 @@ function arcWireApplicationDom() {
   el('rx-back').addEventListener('click', closeRecipeExperience);
   el('rx-fav').addEventListener('click', function() {});
   el('rx-menu').addEventListener('click', function() {});
-  el('rx-swap-btn').addEventListener('click', function() {});
+  el('rx-swap-btn').addEventListener('click', openIngredientSwapFromRecipeExperience);
   el('rx-log-btn').addEventListener('click', logMealFromRecipeExperience);
 
   // Swap modal
