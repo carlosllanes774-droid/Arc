@@ -1915,6 +1915,8 @@ body{
 .rx-overlay .ing-qty{color:rgba(255,255,255,.52)}
 .rx-overlay .swap-btn{background:rgba(255,255,255,.08);color:rgba(255,255,255,.52);border:1px solid rgba(255,255,255,.1)}
 .rx-overlay .swap-btn:hover{color:var(--arc-primary);background:rgba(227,90,54,.12)}
+.rx-overlay .swap-undo-btn{background:rgba(255,255,255,.08);color:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.14)}
+.rx-overlay .swap-undo-btn:hover{color:var(--arc-primary);background:rgba(227,90,54,.12)}
 .rx-overlay .step-txt{color:rgba(255,255,255,.88)}
 .rx-overlay .step-phase-h{color:rgba(255,255,255,.42)}
 .rx-overlay .step-phase-dot{background:var(--arc-primary)}
@@ -1981,6 +1983,8 @@ body{
 .ing-qty{color:var(--arc-subtext);font-size:13px}
 .swap-btn{font-size:11px;font-weight:600;padding:5px 11px;border-radius:999px;border:none;background:var(--arc-surface-2);color:var(--arc-subtext);cursor:pointer;transition:all var(--motion-fast) var(--ease-standard)}
 .swap-btn:hover{color:var(--arc-primary);background:var(--arc-soft-primary)}
+.swap-undo-btn{width:30px;height:30px;padding:0;border-radius:999px;border:none;background:var(--arc-surface-2);color:var(--arc-subtext);font-size:15px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;transition:all var(--motion-fast) var(--ease-standard)}
+.swap-undo-btn:hover{color:var(--arc-primary);background:var(--arc-soft-primary)}
 
 /* SWAP MODAL */
 .swap-bg{position:absolute;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center;z-index:40;border-radius:28px;padding:24px;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);opacity:0;pointer-events:none;transition:opacity var(--motion-sheet) var(--ease-standard)}
@@ -2997,7 +3001,6 @@ button:not(:disabled):active,
     </div>
   </div>
   <div class="rx-action-bar">
-    <button type="button" class="rx-btn rx-btn--outline" id="rx-swap-btn">Swap Ingredients</button>
     <button type="button" class="rx-btn rx-btn--primary" id="rx-log-btn">Log Meal</button>
   </div>
 </div>
@@ -4643,6 +4646,8 @@ var stepCache   = {};
 var lastShopLines = [];
 var swapIng     = null;
 var swapRid     = null;
+/** Recipe-only ingredient swaps: { [recipeId]: { [originalIng]: { originalName, originalQty, substituteName, substituteQty } } } */
+var recipeIngredientSwaps = {};
 var assignDay   = null;
 var assignSlot  = null;
 var assignIntent = 'plan';
@@ -4865,6 +4870,7 @@ function arcResetInMemoryAppState() {
   locDetected = false;
   recipeGenId++;
   arcRestoredFromStorage = false;
+  recipeIngredientSwaps = {};
 }
 
 function arcAuthDescribeProvider(user) {
@@ -12785,6 +12791,32 @@ function buildIngredientsPeek(r) {
   return html;
 }
 
+function getIngredientSwapRecord(rid, displayedIng) {
+  var swaps = recipeIngredientSwaps[rid];
+  if (!swaps) return null;
+  for (var orig in swaps) {
+    if (!Object.prototype.hasOwnProperty.call(swaps, orig)) continue;
+    if (swaps[orig].substituteName === displayedIng) {
+      return { originalName: orig, record: swaps[orig] };
+    }
+  }
+  return null;
+}
+
+function bindRecipeIngredientActions(r) {
+  if (!r) return;
+  var root = el('rx-ing');
+  if (!root) return;
+  var swapBtns = root.querySelectorAll('.swap-btn');
+  for (var s = 0; s < swapBtns.length; s++) {
+    swapBtns[s].addEventListener('click', function() { openSwap(this.dataset.ing, r.id); });
+  }
+  var undoBtns = root.querySelectorAll('.swap-undo-btn');
+  for (var u = 0; u < undoBtns.length; u++) {
+    undoBtns[u].addEventListener('click', function() { undoIngredientSwap(r.id, this.dataset.orig); });
+  }
+}
+
 function buildIngredientsTab(r) {
   var iq   = r.ingQty || {};
   var html = '';
@@ -12794,11 +12826,16 @@ function buildIngredientsTab(r) {
     var ing = ings[i];
     var qraw = iq[ing] || '—';
     var qdisp = qraw === '—' ? qraw : scaleIngredientQtyString(qraw, mult);
+    var swapInfo = getIngredientSwapRecord(r.id, ing);
     html += '<div class="ing-row">';
     html += '<span class="ing-name">' + shopEsc(ing) + '</span>';
     html += '<div class="ing-right">';
     html += '<span class="ing-qty">' + shopEsc(qdisp) + '</span>';
-    html += '<button class="swap-btn" data-ing="' + shopDataAttr(ing) + '">Swap</button>';
+    if (swapInfo) {
+      html += '<button type="button" class="swap-undo-btn" data-orig="' + shopDataAttr(swapInfo.originalName) + '" aria-label="Undo swap">↺</button>';
+    } else {
+      html += '<button type="button" class="swap-btn" data-ing="' + shopDataAttr(ing) + '">Swap</button>';
+    }
     html += '</div></div>';
   }
   html += '<div style="height:8px"></div>';
@@ -13057,21 +13094,6 @@ function logMealFromRecipeExperience() {
   applyTodayMealAction('log', target.day, target.slot);
 }
 
-function openIngredientSwapFromRecipeExperience() {
-  if (!curRecipe) return;
-  var ings = curRecipe.ing || [];
-  if (!ings.length) {
-    showToast('No ingredients to swap.');
-    return;
-  }
-  var scroll = el('rx-scroll');
-  var hdr = el('rx-ing-h');
-  if (scroll && hdr) {
-    scroll.scrollTo({ top: Math.max(0, hdr.offsetTop - 24), behavior: 'smooth' });
-  }
-  openSwap(ings[0], curRecipe.id);
-}
-
 function buildRecipeHeroHtml(r) {
   if (r && r.image) {
     return '<img src="' + shopEsc(r.image) + '" alt="" loading="lazy"/>';
@@ -13121,10 +13143,7 @@ function renderRecipeExperience(r) {
   el('rx-meta-chips').innerHTML = buildRecipeMetaChipsHtml(r);
   el('rx-nut-row').innerHTML = buildRecipeNutritionRowHtml(r);
   el('rx-ing').innerHTML = buildIngredientsTab(r);
-  var swapBtns = el('rx-ing').querySelectorAll('.swap-btn');
-  for (var s = 0; s < swapBtns.length; s++) {
-    swapBtns[s].addEventListener('click', function() { openSwap(this.dataset.ing, r.id); });
-  }
+  bindRecipeIngredientActions(r);
   renderRecipeFeedbackState(r.id);
 }
 
@@ -13132,10 +13151,7 @@ function refreshScaledIngredientsUI() {
   if (!curRecipe) return;
   if (isRecipeExperienceOpen()) {
     el('rx-ing').innerHTML = buildIngredientsTab(curRecipe);
-    var swapBtns = el('rx-ing').querySelectorAll('.swap-btn');
-    for (var s = 0; s < swapBtns.length; s++) {
-      swapBtns[s].addEventListener('click', function() { openSwap(this.dataset.ing, curRecipe.id); });
-    }
+    bindRecipeIngredientActions(curRecipe);
   }
   var pb = el('tm-peek-bg');
   if (pb && pb.classList.contains('is-open') && todayPeekContext && todayPeekContext.rid === curRecipe.id) {
@@ -13258,15 +13274,48 @@ function fetchSteps(id) {
 }
 
 // ── Ingredient swap ───────────────────────────────────────────
+function resetSwapModalForPicker(ing) {
+  var sub = el('swap-sub');
+  var opts = el('swap-opts');
+  var cancel = el('swap-cancel');
+  el('swap-title').textContent = 'Swap: ' + ing;
+  if (sub) {
+    sub.style.display = '';
+    sub.textContent = 'Finding alternatives...';
+  }
+  if (opts) opts.style.display = '';
+  if (cancel) {
+    cancel.textContent = 'Cancel';
+    cancel.className = 'btn-outline';
+    cancel.style.marginTop = '4px';
+  }
+}
+
+function showNoSubstitutionsModal() {
+  var sub = el('swap-sub');
+  var opts = el('swap-opts');
+  var cancel = el('swap-cancel');
+  el('swap-title').textContent = 'No substitutions found';
+  if (sub) sub.style.display = 'none';
+  if (opts) {
+    opts.innerHTML = '';
+    opts.style.display = 'none';
+  }
+  if (cancel) {
+    cancel.textContent = 'Got it';
+    cancel.className = 'btn-green';
+    cancel.style.marginTop = '0';
+  }
+}
+
 function openSwap(ing, rid) {
   swapIng = ing;
   swapRid = rid;
   var r = null;
   for (var i = 0; i < recipes.length; i++) { if (recipes[i].id === rid) { r = recipes[i]; break; } }
 
-  el('swap-title').textContent = 'Swap: ' + ing;
-  el('swap-sub').textContent   = 'Finding alternatives...';
-  el('swap-opts').innerHTML    = '<div style="text-align:center;padding:20px"><div class="ai-spinner" style="margin:0 auto"></div></div>';
+  resetSwapModalForPicker(ing);
+  el('swap-opts').innerHTML = '<div style="text-align:center;padding:20px"><div class="ai-spinner" style="margin:0 auto"></div></div>';
   openMotion('swap-bg');
 
   var iqStr   = (r && r.ingQty && r.ingQty[ing]) ? r.ingQty[ing] : '1 serving';
@@ -13277,16 +13326,27 @@ function openSwap(ing, rid) {
   var userMsg = 'Recipe: "' + rName + '". Swap ingredient: "' + ing + '" (qty: ' + iqStr + '). ';
   userMsg    += 'User dietary restrictions: ' + restStr + '. Foods to avoid: ' + (UP.dislikes || 'none') + '. ';
   userMsg    += 'Suggest exactly 3 practical grocery-store substitutes that work in this dish. ';
+  userMsg    += 'If no meaningful substitute exists, return an empty array []. ';
   userMsg    += 'Return a JSON array with this exact format: ';
   userMsg    += '[{"name":"Substitute Name","qty":"same amount","reason":"why it works","calDiff":-50}] ';
   userMsg    += 'calDiff is estimated calorie difference vs original (negative = fewer calories). ';
   userMsg    += 'Start with [ and end with ]';
 
   callAIWithRetry(sysMsg, userMsg, 90, function(err, raw) {
-    var opts = [{name: ing + ' alternative', qty: iqStr, reason: 'Try a similar ingredient from your pantry.', calDiff: 0}];
+    var opts = [];
     if (!err && raw) {
       var parsed = parseJSON(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) opts = parsed;
+      if (Array.isArray(parsed)) {
+        for (var pi = 0; pi < parsed.length; pi++) {
+          var item = parsed[pi];
+          if (item && item.name && String(item.name).trim()) opts.push(item);
+        }
+      }
+    }
+
+    if (!opts.length) {
+      showNoSubstitutionsModal();
+      return;
     }
 
     el('swap-sub').textContent = 'Choose a substitute for ' + ing + ':';
@@ -13312,22 +13372,55 @@ function openSwap(ing, rid) {
 }
 
 function applySwap(newName, newQty) {
-  var r = null;
-  for (var i = 0; i < recipes.length; i++) { if (recipes[i].id === swapRid) { r = recipes[i]; break; } }
+  var r = findRecipe(swapRid);
   if (!r) return;
 
   var idx = r.ing.indexOf(swapIng);
-  if (idx !== -1) {
-    r.ing[idx] = newName;
-    if (r.ingQty) {
-      delete r.ingQty[swapIng];
-      if (newQty) r.ingQty[newName] = newQty;
-    }
+  if (idx === -1) {
+    closeMotion('swap-bg');
+    return;
+  }
+
+  var originalQty = (r.ingQty && r.ingQty[swapIng]) ? r.ingQty[swapIng] : null;
+  if (!recipeIngredientSwaps[swapRid]) recipeIngredientSwaps[swapRid] = {};
+  recipeIngredientSwaps[swapRid][swapIng] = {
+    originalName: swapIng,
+    originalQty: originalQty,
+    substituteName: newName,
+    substituteQty: newQty || null
+  };
+
+  r.ing[idx] = newName;
+  if (r.ingQty) {
+    delete r.ingQty[swapIng];
+    if (newQty) r.ingQty[newName] = newQty;
   }
   stepCache[swapRid] = null;
   closeMotion('swap-bg');
-  showToast('Ingredient swapped ✓');
-  if (curRecipe && curRecipe.id === swapRid) openRM(swapRid);
+  refreshScaledIngredientsUI();
+  renderShopping();
+}
+
+function undoIngredientSwap(rid, originalName) {
+  var swaps = recipeIngredientSwaps[rid];
+  if (!swaps || !swaps[originalName]) return;
+  var rec = swaps[originalName];
+  var r = findRecipe(rid);
+  if (!r) return;
+
+  var idx = r.ing.indexOf(rec.substituteName);
+  if (idx !== -1) r.ing[idx] = rec.originalName;
+  if (r.ingQty) {
+    delete r.ingQty[rec.substituteName];
+    if (rec.originalQty) r.ingQty[rec.originalName] = rec.originalQty;
+    else delete r.ingQty[rec.originalName];
+  }
+
+  delete swaps[originalName];
+  if (!Object.keys(swaps).length) delete recipeIngredientSwaps[rid];
+
+  stepCache[rid] = null;
+  refreshScaledIngredientsUI();
   renderShopping();
 }
 
@@ -17026,7 +17119,6 @@ function arcWireApplicationDom() {
     renderRecipeFeedbackState(curRecipe.id);
   });
   el('rx-menu').addEventListener('click', function() {});
-  el('rx-swap-btn').addEventListener('click', openIngredientSwapFromRecipeExperience);
   el('rx-log-btn').addEventListener('click', logMealFromRecipeExperience);
 
   // Swap modal
