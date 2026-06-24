@@ -3614,7 +3614,7 @@ function buildWeekRecipeLibraryPrompt(intent) {
 
   var sysMsg = 'You are an expert nutritionist. Respond with ONLY valid JSON. No markdown. Start with { end with }. ' +
     'Build a SMALL core recipe library (' + totalCapNote + ') for one week. ' +
-    'Each recipe: name, cat, cal, p, c, f, servings, ing (max 6 items), optional ingQty, price (USD/serving). ' +
+    'Each recipe: name, cat, cal, p, c, f, servings, ing (max 6 items), required ingQty (one realistic amount per ing item), price (USD/serving). ' +
     'Do NOT include steps or long instructions. Do NOT assign days. ' +
     'Macros must align with ingredients. Comply with MANDATORY DIETARY COMPLIANCE.';
 
@@ -3623,9 +3623,10 @@ function buildWeekRecipeLibraryPrompt(intent) {
   u += '\nGenerate exactly these category counts:\n' + catLines + '\n';
   u += 'Total recipes: ' + targets.total + ' (' + totalCapNote + ').\n';
   u += 'Share ingredients across recipes where possible (fewer grocery items). Prefer overlap over variety.\n';
-  u += 'Each recipe servings = expected weekly uses (typically 2-4 for batch-friendly meals).\n\n';
+  u += 'Each recipe servings = expected weekly uses (typically 2-4 for batch-friendly meals).\n';
+  u += 'ingQty must list EVERY item in ing with a realistic amount.\n\n';
   u += 'OUTPUT JSON ONLY:\n';
-  u += '{"recipes":[{"id":1,"name":"Italian Omelette","cat":"Breakfast","cal":380,"p":28,"c":12,"f":22,"servings":2,"ing":["Eggs","Spinach","Cheese"],"ingQty":{"Eggs":"3 large"},"price":4.5}]}\n';
+  u += '{"recipes":[{"id":1,"name":"Italian Omelette","cat":"Breakfast","cal":380,"p":28,"c":12,"f":22,"servings":2,"ing":["Eggs","Spinach","Cheese"],"ingQty":{"Eggs":"3 large","Spinach":"1 cup","Cheese":"1/4 cup"},"price":4.5}]}\n';
 
   console.log('[ARC PIPELINE] Week library prompt estimate', {
     taskType: 'week_recipe_library',
@@ -12772,10 +12773,59 @@ function scaleIngredientQtyString(qtyStr, factor) {
   return head + rest;
 }
 
+/** Strip ingredient name from an Edamam-style line to recover a display quantity. */
+function qtyFromEdamamLine(line, ingName) {
+  var s = String(line == null ? '' : line).trim();
+  var n = String(ingName == null ? '' : ingName).trim();
+  if (!s) return '';
+  if (!n) return s;
+  var sl = s.toLowerCase();
+  var nl = n.toLowerCase();
+  if (sl === nl) return '';
+  var idx = sl.lastIndexOf(nl);
+  if (idx > 0) {
+    var qty = s.slice(0, idx).trim();
+    if (qty) return qty;
+  }
+  if (sl.endsWith(nl) && s.length > n.length) {
+    return s.slice(0, s.length - n.length).trim();
+  }
+  return s;
+}
+
+/**
+ * Resolve display quantity for recipe.ing[index].
+ * Lookup: ingQty[ingKeys[i]] → ingQty[ing[i]] → parsed ingEdamam[i] → '—'
+ */
+function resolveIngredientQty(recipe, index) {
+  recipe = recipe || {};
+  index = parseInt(index, 10);
+  if (!(index >= 0)) return '—';
+  var ings = Array.isArray(recipe.ing) ? recipe.ing : [];
+  var ingName = ings[index];
+  if (!ingName) return '—';
+  var iq = (recipe.ingQty && typeof recipe.ingQty === 'object') ? recipe.ingQty : {};
+  var keys = Array.isArray(recipe.ingKeys) ? recipe.ingKeys : [];
+  var qtyKey = keys[index];
+  if (qtyKey && Object.prototype.hasOwnProperty.call(iq, qtyKey)) {
+    var byKey = String(iq[qtyKey] == null ? '' : iq[qtyKey]).trim();
+    if (byKey) return byKey;
+  }
+  if (Object.prototype.hasOwnProperty.call(iq, ingName)) {
+    var byName = String(iq[ingName] == null ? '' : iq[ingName]).trim();
+    if (byName) return byName;
+  }
+  var edamam = Array.isArray(recipe.ingEdamam) ? recipe.ingEdamam : [];
+  if (edamam[index]) {
+    var fromLine = qtyFromEdamamLine(edamam[index], ingName);
+    if (fromLine) return fromLine;
+  }
+  return '—';
+}
+
 // ── Recipe modal ──────────────────────────────────────────────
 function buildIngredientsPeek(r) {
   if (!r) return '';
-  var iq = r.ingQty || {};
   var ings = r.ing || [];
   var mult = getServingsFor(r.id);
   if (!ings.length) {
@@ -12784,7 +12834,7 @@ function buildIngredientsPeek(r) {
   var html = '';
   for (var i = 0; i < ings.length; i++) {
     var ing = ings[i];
-    var qraw = iq[ing] || '—';
+    var qraw = resolveIngredientQty(r, i);
     var qdisp = qraw === '—' ? qraw : scaleIngredientQtyString(qraw, mult);
     html += '<div class="ing-row"><span class="ing-name">' + shopEsc(ing) + '</span><span class="ing-qty">' + shopEsc(qdisp) + '</span></div>';
   }
@@ -12818,13 +12868,12 @@ function bindRecipeIngredientActions(r) {
 }
 
 function buildIngredientsTab(r) {
-  var iq   = r.ingQty || {};
   var html = '';
   var ings = r.ing || [];
   var mult = getServingsFor(r.id);
   for (var i = 0; i < ings.length; i++) {
     var ing = ings[i];
-    var qraw = iq[ing] || '—';
+    var qraw = resolveIngredientQty(r, i);
     var qdisp = qraw === '—' ? qraw : scaleIngredientQtyString(qraw, mult);
     var swapInfo = getIngredientSwapRecord(r.id, ing);
     html += '<div class="ing-row">';
