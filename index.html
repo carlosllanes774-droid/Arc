@@ -4633,6 +4633,7 @@ var householdInventory = {};
 var activeCat   = 'All';
 var curRecipe   = null;
 var todayPeekContext = null;
+var recipeExperienceContext = null;
 var stepCache   = {};
 var lastShopLines = [];
 var swapIng     = null;
@@ -12939,7 +12940,48 @@ function isRecipeExperienceOpen() {
 }
 
 function closeRecipeExperience() {
-  closeMotion('rx-overlay', function() { curRecipe = null; });
+  closeMotion('rx-overlay', function() {
+    curRecipe = null;
+    recipeExperienceContext = null;
+  });
+}
+
+function resolveRecipeExperienceLogTarget(rid) {
+  if (!rid) return null;
+  var slots = getSlots();
+  var day = todayKey();
+
+  if (recipeExperienceContext && recipeExperienceContext.day === day && recipeExperienceContext.slot) {
+    var ctxSlot = recipeExperienceContext.slot;
+    var ctxRid = mealPlan[day] && mealPlan[day][ctxSlot];
+    if (ctxRid && parseInt(ctxRid, 10) === rid && !isMealFinalized(day, ctxSlot)) {
+      return { day: day, slot: ctxSlot };
+    }
+  }
+
+  var heroSlot = resolveTodayHeroSlot(day, slots);
+  if (heroSlot && mealPlan[day] && parseInt(mealPlan[day][heroSlot], 10) === rid && !isMealFinalized(day, heroSlot)) {
+    return { day: day, slot: heroSlot };
+  }
+
+  for (var i = 0; i < slots.length; i++) {
+    var slot = slots[i];
+    var plannedRid = mealPlan[day] && mealPlan[day][slot];
+    if (plannedRid && parseInt(plannedRid, 10) === rid && !isMealFinalized(day, slot)) {
+      return { day: day, slot: slot };
+    }
+  }
+  return null;
+}
+
+function logMealFromRecipeExperience() {
+  if (!curRecipe) return;
+  var target = resolveRecipeExperienceLogTarget(curRecipe.id);
+  if (!target) {
+    showToast(ARC_COPY.toast.nothingPlanned);
+    return;
+  }
+  applyTodayMealAction('log', target.day, target.slot);
 }
 
 function buildRecipeHeroHtml(r) {
@@ -13018,7 +13060,9 @@ function bumpRMServings(delta) {
   saveSessionState();
 }
 
-function openRM(id) {
+function openRM(id, opts) {
+  opts = opts || {};
+  recipeExperienceContext = (opts.day && opts.slot) ? { day: opts.day, slot: opts.slot } : null;
   curRecipe = null;
   for (var i = 0; i < recipes.length; i++) {
     if (recipes[i].id === id) { curRecipe = recipes[i]; break; }
@@ -16758,7 +16802,7 @@ function arcWireApplicationDom() {
     var card = e.target.closest('.today-meal-card--link');
     if (card) {
       var cardRid = parseInt(card.getAttribute('data-rid'), 10);
-      if (cardRid) openRM(cardRid);
+      if (cardRid) openRM(cardRid, { day: card.getAttribute('data-day'), slot: card.getAttribute('data-slot') });
       return;
     }
     var row = e.target.closest('.today-tl-row--tap');
@@ -16861,9 +16905,11 @@ function arcWireApplicationDom() {
       return;
     }
     if (act === 'recipe' && rid) {
+      var peekDay = todayPeekContext ? todayPeekContext.day : null;
+      var peekSlot = todayPeekContext ? todayPeekContext.slot : null;
       closeMotion('tm-peek-bg', function() {
         todayPeekContext = null;
-        openRM(rid);
+        openRM(rid, { day: peekDay, slot: peekSlot });
       });
       return;
     }
@@ -16875,7 +16921,7 @@ function arcWireApplicationDom() {
   el('rx-fav').addEventListener('click', function() {});
   el('rx-menu').addEventListener('click', function() {});
   el('rx-swap-btn').addEventListener('click', function() {});
-  el('rx-log-btn').addEventListener('click', function() {});
+  el('rx-log-btn').addEventListener('click', logMealFromRecipeExperience);
 
   // Swap modal
   el('swap-cancel').addEventListener('click', function() { closeMotion('swap-bg'); });
