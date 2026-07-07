@@ -44,11 +44,13 @@ function loadSandbox(extraUp = {}) {
           Snack: { cal: 250, p: 15, c: 25, f: 8 }
         }
       };
-    }
+    },
+    logArcWeekPlannerTrace() {},
+    logArcWeekPlannerAssignmentCompare() {}
   };
   const ctx = vm.createContext(sandbox);
   const chunks = [
-    sliceIndexLines(3735, 4290)
+    sliceIndexLines(3798, 4278)
   ];
   for (const src of chunks) vm.runInContext(src, ctx);
   return sandbox;

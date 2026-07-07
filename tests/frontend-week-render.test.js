@@ -118,11 +118,12 @@ function loadFrontendWeekSandbox() {
   };
 
   const chunks = [
-    sliceIndexLines(3558, 3586),
-    sliceIndexLines(3598, 3616),
-    sliceIndexLines(4217, 4294),
-    sliceIndexLines(7963, 8010),
-    sliceIndexLines(8060, 8092)
+    sliceIndexLines(3621, 3649),
+    sliceIndexLines(3661, 3679),
+    sliceIndexLines(4280, 4357),
+    sliceIndexLines(8130, 8135),
+    sliceIndexLines(8152, 8177),
+    sliceIndexLines(8227, 8259)
   ];
 
   loadArcFrontendContractInto(sandbox);
