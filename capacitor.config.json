@@ -1,0 +1,9 @@
+{
+  "appId": "com.arc.nutrition",
+  "appName": "Arc",
+  "webDir": "www",
+  "server": {
+    "url": "https://nutriai-qevt.onrender.com",
+    "cleartext": false
+  }
+}

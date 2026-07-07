@@ -285,6 +285,7 @@
       .then(function (res) {
         var json = res.json || {};
         applySupabasePublicConfig(json);
+        global.ARC_PUBLIC_CONFIG = json;
         return json;
       })
       .catch(function () {
