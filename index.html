@@ -1241,6 +1241,8 @@ body{
 .coach-food-confirm{display:none;margin-bottom:12px}
 .coach-food-confirm.is-visible{display:block}
 .coach-food-confirm-lead{font-size:17px;font-weight:650;color:var(--arc-text);margin:0 0 6px;line-height:1.35}
+.coach-food-assumptions{font-size:13px;color:var(--arc-subtext);margin:0 0 12px;line-height:1.45;font-weight:500;letter-spacing:.01em}
+.coach-food-assumptions:empty{display:none}
 .coach-food-confirm-q{font-size:15px;color:var(--arc-subtext);margin:0 0 16px;line-height:1.45;font-weight:400}
 .coach-food-confirm .btn-green{margin-bottom:8px}
 .coach-food-confirm .btn-outline{margin-bottom:8px}
@@ -1739,6 +1741,29 @@ body{
 #s-shopping .shop-export-wrap{background:linear-gradient(180deg,rgba(21,18,16,0) 0%,rgba(21,18,16,.92) 28%,#151210 55%);border-top:1px solid rgba(255,255,255,.08);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
 #s-shopping .btn-shop-export{background:linear-gradient(165deg,var(--arc-primary) 0%,var(--arc-primary-dark) 100%);border-radius:var(--r-xl);box-shadow:0 4px 18px rgba(227,90,54,.32),var(--shadow-primary);font-weight:650;padding:16px 20px;transition:background var(--motion-fast) var(--ease-standard),box-shadow var(--motion-fast) var(--ease-standard),transform var(--motion-instant) var(--ease-out)}
 #s-shopping .btn-shop-export:hover{background:linear-gradient(165deg,var(--arc-primary-dark) 0%,var(--arc-primary-dark) 100%);box-shadow:0 6px 24px rgba(227,90,54,.38),var(--shadow-primary)}
+#s-shop-gate.screen{background:#151210;color:rgba(255,255,255,.92);display:flex;flex-direction:column;min-height:0}
+#s-shop-gate .shop-gate-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:28px 24px calc(24px + env(safe-area-inset-bottom,0px))}
+#s-shop-gate .shop-gate-kicker{font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.42);margin:0 0 12px}
+#s-shop-gate .shop-gate-h{margin:0 0 14px;font-family:Georgia,serif;font-size:clamp(28px,6vw,34px);font-weight:700;line-height:1.12;letter-spacing:-.03em;color:#fff}
+#s-shop-gate .shop-gate-s{margin:0 0 28px;font-size:16px;line-height:1.6;color:rgba(255,255,255,.58);max-width:36ch}
+#s-shop-gate .shop-gate-steps{display:flex;flex-direction:column;gap:12px;margin-bottom:28px}
+#s-shop-gate .shop-gate-step{display:flex;gap:14px;align-items:flex-start;padding:14px 16px;border-radius:var(--r-xl);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1)}
+#s-shop-gate .shop-gate-step-n{width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:rgba(227,90,54,.16);color:var(--arc-primary);font-size:13px;font-weight:700}
+#s-shop-gate .shop-gate-step-t{font-size:15px;font-weight:600;color:#fff;margin:0 0 4px}
+#s-shop-gate .shop-gate-step-d{font-size:13px;line-height:1.45;color:rgba(255,255,255,.5);margin:0}
+#s-shop-gate .shop-gate-foot{padding:16px 24px calc(16px + env(safe-area-inset-bottom,0px));border-top:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(21,18,16,0) 0%,#151210 40%)}
+#s-shop-gate .shop-gate-cta{width:100%;padding:16px 20px;border:none;border-radius:var(--r-xl);background:linear-gradient(165deg,var(--arc-primary) 0%,var(--arc-primary-dark) 100%);color:#fff;font-size:16px;font-weight:650;cursor:pointer;box-shadow:0 4px 18px rgba(227,90,54,.32);min-height:var(--tap-min)}
+#s-shop-gate .shop-gate-preview{width:100%;margin-top:12px;padding:10px;border:none;background:none;color:rgba(255,255,255,.52);font-size:14px;font-weight:500;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+#s-shop-gate .shop-gate-preview:hover{color:rgba(255,255,255,.78)}
+.shop-gate-banner{margin:0 0 16px;padding:14px 16px;border-radius:var(--r-xl);background:rgba(227,90,54,.1);border:1px solid rgba(227,90,54,.2);font-size:14px;line-height:1.5;color:rgba(255,255,255,.78)}
+.shop-gate-banner strong{color:#fff;font-weight:600}
+.shop-gate-banner a{color:var(--arc-primary);font-weight:600;text-decoration:none}
+.shop-gate-banner a:hover{text-decoration:underline}
+.btn-shop-gate-today{width:100%;padding:16px 20px;border:none;border-radius:var(--r-xl);font-size:16px;font-weight:650;min-height:var(--tap-min);cursor:pointer;transition:opacity .2s ease,background .2s ease,box-shadow .2s ease}
+.btn-shop-gate-today.is-ready{background:linear-gradient(165deg,var(--arc-primary) 0%,var(--arc-primary-dark) 100%);color:#fff;box-shadow:0 4px 18px rgba(227,90,54,.32)}
+.btn-shop-gate-today.is-locked{background:rgba(255,255,255,.06);color:rgba(255,255,255,.32);cursor:not-allowed;box-shadow:none}
+#s-shopping .btn-shop-gate-today.is-ready{background:linear-gradient(165deg,var(--arc-primary) 0%,var(--arc-primary-dark) 100%)}
+#s-shopping .btn-shop-gate-today.is-locked{background:rgba(255,255,255,.06);color:rgba(255,255,255,.32)}
 #s-shopping > .nav{background:#151210;box-shadow:0 -1px 0 rgba(255,255,255,.08)}
 #s-shopping > .nav .nbtn{color:rgba(255,255,255,.42)}
 #s-shopping > .nav .nbtn:hover:not(.active){color:rgba(255,255,255,.72);background:rgba(255,255,255,.05)}
@@ -2096,6 +2121,16 @@ button:not(:disabled):active,
 .today-meal-card{position:relative;height:135px;border-radius:24px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05);padding:14px;display:flex;gap:16px;align-items:center;transition:background .2s ease,transform .2s ease;-webkit-tap-highlight-color:transparent;overflow:hidden}
 .today-meal-card--link{cursor:pointer}
 .today-meal-card--link:hover{background:rgba(255,255,255,.04);transform:translateY(-2px)}
+.today-meal-card--logged{opacity:.58;background:rgba(255,255,255,.015);border-color:rgba(255,255,255,.04)}
+.today-meal-card--logged.today-meal-card--link:hover{opacity:.68;transform:none}
+.today-meal-card--logged .today-meal-title{color:rgba(248,244,240,.68)}
+.today-meal-card--logged .today-meal-meta{color:rgba(255,255,255,.42)}
+.today-meal-card--skipped{opacity:.48;border-style:dashed;border-color:rgba(255,255,255,.1);background:rgba(255,255,255,.01)}
+.today-meal-card--skipped .today-meal-title{color:rgba(248,244,240,.55)}
+.today-meal-status-badge{position:absolute;top:12px;right:12px;z-index:3;padding:4px 10px;border-radius:999px;font-family:Inter,system-ui,-apple-system,sans-serif;font-size:11px;font-weight:650;letter-spacing:.02em;text-transform:uppercase;pointer-events:none}
+.today-meal-status-badge--logged{background:rgba(34,160,107,.18);color:#3ecf8e;border:1px solid rgba(34,160,107,.28)}
+.today-meal-status-badge--skipped{background:rgba(255,255,255,.06);color:rgba(255,255,255,.42);border:1px solid rgba(255,255,255,.1)}
+.today-meal-logged-label{flex:1;height:42px;padding:0 18px;border-radius:16px;background:rgba(34,160,107,.12);border:1px solid rgba(34,160,107,.22);font-family:Inter,system-ui,-apple-system,sans-serif;font-size:15px;font-weight:600;color:#3ecf8e;display:flex;align-items:center;justify-content:center;gap:6px}
 .today-meal-img{width:92px;height:92px;border-radius:18px;object-fit:cover;flex-shrink:0;background:rgba(255,255,255,.04)}
 .today-meal-img--placeholder{display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(255,255,255,.03),rgba(255,255,255,.01))}
 .today-meal-img-fallback{font-size:28px;line-height:1;opacity:.45;pointer-events:none;user-select:none}
@@ -2674,6 +2709,33 @@ button:not(:disabled):active,
   <p class="gen-insight" id="gen-insight" aria-live="polite" hidden></p>
 </div>
 
+<!-- FIRST SHOP GATE (after first week build) -->
+<div class="screen" id="s-shop-gate">
+  <div class="shop-gate-body">
+    <p class="shop-gate-kicker">Your week is ready</p>
+    <h1 class="shop-gate-h" id="shop-gate-h">Start with groceries</h1>
+    <p class="shop-gate-s" id="shop-gate-s">Arc built your meals for the week. A quick shop first makes Today feel effortless — check items off as you go.</p>
+    <div class="shop-gate-steps" aria-hidden="true">
+      <div class="shop-gate-step">
+        <span class="shop-gate-step-n">1</span>
+        <div><p class="shop-gate-step-t">Walk your list</p><p class="shop-gate-step-d">Grouped the way stores are laid out — produce, protein, dairy, pantry.</p></div>
+      </div>
+      <div class="shop-gate-step">
+        <span class="shop-gate-step-n">2</span>
+        <div><p class="shop-gate-step-t">Check off what you grab</p><p class="shop-gate-step-d">Mark “at home” for anything you already have.</p></div>
+      </div>
+      <div class="shop-gate-step">
+        <span class="shop-gate-step-n">3</span>
+        <div><p class="shop-gate-step-t">Open Today</p><p class="shop-gate-step-d">Your first meal day unlocks when you’re stocked.</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="shop-gate-foot">
+    <button type="button" class="shop-gate-cta" id="shop-gate-start">I'm ready to shop</button>
+    <button type="button" class="shop-gate-preview" id="shop-gate-preview">Preview Today first</button>
+  </div>
+</div>
+
 <!-- TODAY -->
 <div class="screen" id="s-today">
   <div class="a-hdr"><span class="a-hdr-mark" aria-hidden="true"><span class="arc-mark arc-mark--hdr arc-mark--on-light" aria-hidden="true"></span></span><span class="a-hdr-sun today-hdr-sun" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="4" stroke="#F16532" stroke-width="1.5"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2M4.34 4.34l1.41 1.41M16.25 16.25l1.41 1.41M4.34 17.66l1.41-1.41M16.25 5.75l1.41-1.41" stroke="#F16532" stroke-width="1.5" stroke-linecap="round"/></svg></span><h2 style="flex-shrink:0">Today</h2><button type="button" class="settings-open-btn" id="hdr-profile-btn" title="Profile" aria-label="Profile">👤</button></div>
@@ -2960,10 +3022,11 @@ button:not(:disabled):active,
       <button type="button" class="btn-green" id="coach-food-send" style="width:100%;margin-bottom:10px">Send to Coach</button>
     </div>
     <div class="coach-food-confirm" id="coach-food-confirm" aria-live="polite">
-      <p class="coach-food-confirm-lead">Got it.</p>
-      <p class="coach-food-confirm-q">Anything else?</p>
-      <button type="button" class="btn-green" id="coach-food-log" style="width:100%">Log Meal</button>
-      <button type="button" class="btn-outline" id="coach-food-more" style="width:100%">Tell Coach More</button>
+      <p class="coach-food-confirm-lead" id="coach-food-confirm-lead">Got it.</p>
+      <p class="coach-food-assumptions" id="coach-food-assumptions"></p>
+      <p class="coach-food-confirm-q" id="coach-food-confirm-q">Sound right?</p>
+      <button type="button" class="btn-green" id="coach-food-log" style="width:100%">Yes, log it</button>
+      <button type="button" class="btn-outline" id="coach-food-more" style="width:100%">Adjust</button>
       <button type="button" class="modal-cancel" id="coach-food-nevermind" style="width:100%;margin-top:4px">Nevermind</button>
     </div>
     <div class="coach-food-response" id="coach-skip-stage" aria-live="polite">
@@ -5720,6 +5783,110 @@ function arcNavigateToTodayHome() {
   updatePlannerBar();
 }
 
+function arcShopGateActive() {
+  return !!(UP.arcShopGate && UP.arcShopGate.phase && UP.arcShopGate.phase !== 'done');
+}
+
+function arcShopGateProgress(lines) {
+  if (!lines || !lines.length) return { handled: 0, total: 0, ready: true };
+  var handled = 0;
+  for (var i = 0; i < lines.length; i++) {
+    var id = lines[i].key;
+    if (checked[id] || shopPantry[id]) handled++;
+  }
+  var total = lines.length;
+  var minHandled = Math.min(3, total);
+  var ratioHandled = Math.ceil(total * 0.25);
+  var ready = handled >= minHandled || handled >= ratioHandled;
+  return { handled: handled, total: total, ready: ready };
+}
+
+function arcNavigateToShopWelcome() {
+  if (!UP.arcShopGate) UP.arcShopGate = { phase: 'welcome' };
+  UP.arcShopGate.phase = 'welcome';
+  saveUserProfile();
+  showScreen('s-shop-gate');
+  renderShopGateScreen();
+}
+
+function arcStartFirstShopFlow() {
+  if (!UP.arcShopGate) UP.arcShopGate = {};
+  UP.arcShopGate.phase = 'shopping';
+  UP.arcShopGate.previewing = false;
+  saveUserProfile();
+  showScreen('s-shopping');
+  tab('grocery');
+  renderShopping();
+}
+
+function arcPreviewTodayDuringShopGate() {
+  if (!UP.arcShopGate) UP.arcShopGate = {};
+  UP.arcShopGate.previewing = true;
+  saveUserProfile();
+  showScreen('s-today');
+  tab('today');
+  renderToday();
+}
+
+function arcCompleteShopGate() {
+  if (!UP.arcShopGate) UP.arcShopGate = {};
+  UP.arcShopGate.phase = 'done';
+  UP.arcShopGate.previewing = false;
+  saveUserProfile();
+  showScreen('s-today');
+  tab('today');
+  renderToday();
+  scheduleWeeklyRecapAutoCheck();
+}
+
+function renderShopGateScreen() {
+  var itemN = lastShopLines && lastShopLines.length ? lastShopLines.length : 0;
+  var sub = el('shop-gate-s');
+  if (sub) {
+    sub.textContent = itemN
+      ? ('Arc built your meals for the week — ' + itemN + ' grocery items are ready. A quick shop first makes Today feel effortless.')
+      : 'Arc built your meals for the week. A quick shop first makes Today feel effortless — check items off as you go.';
+  }
+}
+
+function renderShopGateBanner() {
+  if (!arcShopGateActive() || UP.arcShopGate.phase !== 'shopping') return '';
+  var prog = arcShopGateProgress(lastShopLines);
+  var copy = prog.ready
+    ? 'Nice — you\'re stocked. Head to Today when you\'re ready.'
+    : ('Check off items as you shop (' + prog.handled + ' of ' + prog.total + ' handled). Today unlocks after a few.');
+  return '<div class="shop-gate-banner" role="status"><strong>Shopping first.</strong> ' + shopEsc(copy) +
+    ' <a href="#" data-shop-gate-back>Back to list</a></div>';
+}
+
+function renderTodayShopPreviewBanner() {
+  if (!arcShopGateActive() || UP.arcShopGate.phase !== 'shopping' || !UP.arcShopGate.previewing) return;
+  var mealsList = el('today-meals-list');
+  if (!mealsList) return;
+  var existing = el('today-shop-preview-banner');
+  if (existing) existing.remove();
+  var banner = document.createElement('div');
+  banner.className = 'shop-gate-banner';
+  banner.id = 'today-shop-preview-banner';
+  banner.setAttribute('role', 'status');
+  banner.innerHTML = '<strong>Preview mode.</strong> You\'re peeking at Today — finish shopping to start your day. ' +
+    '<a href="#" data-shop-gate-back>Back to groceries</a>';
+  mealsList.parentNode.insertBefore(banner, mealsList);
+}
+
+function arcWireShopGateDom() {
+  var startBtn = el('shop-gate-start');
+  if (startBtn && !startBtn._arcBound) {
+    startBtn._arcBound = true;
+    startBtn.addEventListener('click', arcStartFirstShopFlow);
+  }
+  var previewBtn = el('shop-gate-preview');
+  if (previewBtn && !previewBtn._arcBound) {
+    previewBtn._arcBound = true;
+    previewBtn.addEventListener('click', arcPreviewTodayDuringShopGate);
+  }
+}
+
 function arcEnterAppAfterOnboarding() {
   applySafeProfileDefaults(UP);
   arcBehaviorRecomputeScores(UP);
@@ -8412,6 +8579,8 @@ function tab(t, opts) {
     renderProgressSimplePanel();
     renderNutrition();
     renderLog();
+  } else if (t === 'grocery') {
+    renderShopping();
   } else if (t === 'profile') {
     renderProfileTab();
   }
@@ -8770,9 +8939,14 @@ function buildTodayMealsCardsHtml(day, slots, heroSlot) {
     var timeTxt = r && r.time ? r.time : '—';
     var favOn = r && isRecipeFavorited(r.id);
     var fin = isMealFinalized(day, slot);
+    var jStatus = j ? j.status : null;
+    var isLogged = jStatus === 'logged';
+    var isSkipped = jStatus === 'skipped';
     var clickable = !!r;
     var blockCls = 'today-meal-block' + (isCurrent ? ' today-meal-block--current' : '');
     var cardCls = 'today-meal-card' + (clickable ? ' today-meal-card--link' : '');
+    if (isLogged) cardCls += ' today-meal-card--logged';
+    if (isSkipped) cardCls += ' today-meal-card--skipped';
 
     html += '<div class="' + blockCls + '">';
     html += '<article class="' + cardCls + '"';
@@ -8782,6 +8956,9 @@ function buildTodayMealsCardsHtml(day, slots, heroSlot) {
       html += ' data-day="' + dd + '" data-slot="' + ds + '"';
     }
     html += '>';
+
+    if (isLogged) html += '<span class="today-meal-status-badge today-meal-status-badge--logged">✓ Logged</span>';
+    else if (isSkipped) html += '<span class="today-meal-status-badge today-meal-status-badge--skipped">Skipped</span>';
 
     html += todayMealImageHtml(r);
     html += '<div class="today-meal-body">';
@@ -8800,7 +8977,11 @@ function buildTodayMealsCardsHtml(day, slots, heroSlot) {
 
     if (isCurrent) {
       html += '<div class="today-meal-actions-row">';
-      if (r && !fin) {
+      if (r && isLogged) {
+        html += '<div class="today-meal-logged-label" aria-live="polite"><span aria-hidden="true">✓</span> Logged</div>';
+      } else if (r && isSkipped) {
+        html += '<div class="today-meal-logged-label" style="background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1);color:rgba(255,255,255,.45)">Skipped</div>';
+      } else if (r && !fin) {
         html += '<button type="button" class="today-meal-eaten-btn" data-today-act="log" data-day="' + dd + '" data-slot="' + ds + '">Mark as eaten</button>';
       } else if (!r) {
         html += '<button type="button" class="today-meal-eaten-btn" data-today-act="assign" data-day="' + dd + '" data-slot="' + ds + '">Choose a meal</button>';
@@ -8809,6 +8990,9 @@ function buildTodayMealsCardsHtml(day, slots, heroSlot) {
       html += '<button type="button" class="today-meal-menu-btn" aria-label="Meal options" aria-haspopup="true" data-menu-day="' + dd + '" data-menu-slot="' + ds + '">';
       html += '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true"><circle cx="9" cy="4" r="1.5" fill="currentColor"/><circle cx="9" cy="9" r="1.5" fill="currentColor"/><circle cx="9" cy="14" r="1.5" fill="currentColor"/></svg>';
       html += '</button><div class="today-meal-menu" role="menu">';
+      if (isLogged || isSkipped) {
+        html += '<button type="button" class="today-meal-menu-item" role="menuitem" data-today-menu="undo" data-day="' + dd + '" data-slot="' + ds + '">Undo status</button>';
+      }
       html += '<button type="button" class="today-meal-menu-item" role="menuitem" data-today-menu="swap" data-day="' + dd + '" data-slot="' + ds + '">Swap meal</button>';
       if (r) html += '<button type="button" class="today-meal-menu-item" role="menuitem" data-today-menu="save" data-day="' + dd + '" data-slot="' + ds + '" data-rid="' + r.id + '">Save recipe</button>';
       html += '<button type="button" class="today-meal-menu-item" role="menuitem" data-today-menu="remove" data-day="' + dd + '" data-slot="' + ds + '">Remove meal</button>';
@@ -10355,6 +10539,7 @@ function renderToday() {
   }
 
   updateReflectionBannerUI();
+  renderTodayShopPreviewBanner();
 }
 
 function applyTodayMealAction(act, day, slot) {
@@ -12731,6 +12916,15 @@ function generateWeeklyPlan(intent) {
         setTimeout(function() {
           if (myGen !== recipeGenId) return;
           saveUserProfile();
+          var isFirstWeek = (intent && intent.mode === 'first') || bwState.mode === 'first';
+          if (isFirstWeek) {
+            UP.arcShopGate = { phase: 'welcome' };
+            saveUserProfile();
+            showScreen('s-shop-gate');
+            renderShopGateScreen();
+            stopGenLoadingUI();
+            return;
+          }
           tab('today');
           renderToday();
           scheduleWeeklyRecapAutoCheck();
@@ -15982,6 +16176,24 @@ function renderShopping() {
 
   el('shop-count').textContent = lines.length ? lines.length + ' items' : '';
 
+  var gateBannerHost = el('shop-gate-banner-host');
+  if (!gateBannerHost) {
+    var content = document.querySelector('#s-shopping > .content');
+    if (content) {
+      gateBannerHost = document.createElement('div');
+      gateBannerHost.id = 'shop-gate-banner-host';
+      var shopTotal = el('shop-total');
+      if (shopTotal && shopTotal.parentNode === content) {
+        content.insertBefore(gateBannerHost, shopTotal);
+      } else {
+        content.insertBefore(gateBannerHost, content.firstChild);
+      }
+    }
+  }
+  if (gateBannerHost) {
+    gateBannerHost.innerHTML = arcShopGateActive() && UP.arcShopGate.phase === 'shopping' ? renderShopGateBanner() : '';
+  }
+
   var chaosNoteEl = el('shop-chaos-note');
   var chaosShopPlan = buildChaosRecoveryPlan(todayKey(), getSlots(), {});
   if (chaosNoteEl) {
@@ -16108,9 +16320,25 @@ function renderShopping() {
   if (exportWrap) {
     exportWrap.style.display = 'block';
     exportWrap.setAttribute('aria-hidden', 'false');
-    exportWrap.innerHTML = '<button type="button" class="btn-shop-export" id="shop-export-cart-btn">Send to Grocery Cart</button>';
-    var exb = el('shop-export-cart-btn');
-    if (exb) exb.onclick = function() { exportToRetailerCart(); };
+    var gateShopping = arcShopGateActive() && UP.arcShopGate.phase === 'shopping';
+    var prog = arcShopGateProgress(lines);
+    if (gateShopping) {
+      var todayCls = 'btn-shop-gate-today' + (prog.ready ? ' is-ready' : ' is-locked');
+      var todayLabel = prog.ready ? 'Go to Today' : ('Go to Today (' + prog.handled + '/' + Math.min(3, prog.total) + ' items)';
+      exportWrap.innerHTML = '<button type="button" class="' + todayCls + '" id="shop-gate-today-btn"' +
+        (prog.ready ? '' : ' disabled aria-disabled="true"') + '>' + shopEsc(todayLabel) + '</button>';
+      var todayBtn = el('shop-gate-today-btn');
+      if (todayBtn) {
+        todayBtn.onclick = function() {
+          if (!arcShopGateProgress(lastShopLines).ready) return;
+          arcCompleteShopGate();
+        };
+      }
+    } else {
+      exportWrap.innerHTML = '<button type="button" class="btn-shop-export" id="shop-export-cart-btn">Send to Grocery Cart</button>';
+      var exb = el('shop-export-cart-btn');
+      if (exb) exb.onclick = function() { exportToRetailerCart(); };
+    }
   }
 
   var schks = document.querySelectorAll('.scheck');
@@ -16187,12 +16415,17 @@ function buildFoodReportTriagePrompt() {
     'Return ONLY valid JSON (no markdown):\n' +
     '{"items":["normalized food 1","normalized food 2"],' +
     '"mealCharacter":"one warm phrase about meal size or heft, e.g. This was probably a fuller meal.",' +
+    '"needsFollowUp":true|false,' +
+    '"followUpQuestion":"short clarifying question when portions are vague (pizza slices, restaurant size, shared plate) — empty string if not needed",' +
+    '"assumptions":["3 slices","large burrito bowl"],' +
     '"replySimple":"2 warm sentences, qualitative only, NO calorie or macro digits",' +
     '"replyAdvanced":"same tone as replySimple but may include one rough ~kcal estimate in plain words",' +
     '"signals":{"quickMealPreference":0-1,"restaurantFrequency":0-1,"breakfastAdherence":0-1,"lunchAdherence":0-1,"dinnerAdherence":0-1,"proteinFocus":0-1,"conveniencePreference":0-1,"groceryAvoidance":0-1,"cuisinePreferences":{"mexican":0-1}},' +
     '"estimate":{"calories":number,"proteinG":number,"impactClass":"light|moderate|heavy","confidence":"C3|C4|C5"}}\n' +
+    'Set needsFollowUp true when portion/size is unclear (pizza, restaurant meals, "something", shared plates). ' +
+    'Put your best-guess portions in assumptions even when asking a follow-up. ' +
     'Normalize restaurant names when obvious (Canes -> Raising Cane\'s). Infer reasonably from context. ' +
-    'Never include questions in the JSON. replySimple must never contain numbers.';
+    'Never include questions in replySimple/replyAdvanced. replySimple must never contain numbers.';
 }
 
 function normalizeFoodImpactClass(v) {
@@ -16257,6 +16490,87 @@ function mapFoodReportConfidence(triage, extraction) {
   }
   if (extraction && extraction.confidence >= 0.55) return 'C3';
   return 'C4';
+}
+
+function buildCoachDefaultFollowUp(userText, derived) {
+  var t = String(userText || '').toLowerCase();
+  if (/pizza|slice/.test(t)) return 'About how many slices was that?';
+  if (/chipotle|burrito|bowl|restaurant|takeout|ate out|ordered/.test(t)) return 'Roughly what size — snack, regular meal, or a bigger plate?';
+  if (/something|some food|a bit|snack/.test(t)) return 'What was it, and about how much did you have?';
+  if (derived && derived.items && derived.items.length === 1) {
+    return 'How much of the ' + derived.items[0] + ' did you have?';
+  }
+  return 'Can you share a bit more about the portion?';
+}
+
+function foodReportNeedsFollowUp(triage, derived, userText) {
+  if (coachFoodPending && coachFoodPending.followUpRound >= 1) return false;
+  triage = triage || {};
+  if (triage.needsFollowUp === true) {
+    if (!triage.followUpQuestion) triage.followUpQuestion = buildCoachDefaultFollowUp(userText, derived);
+    return true;
+  }
+  var conf = derived.confidence || 'C4';
+  var t = String(userText || '').toLowerCase();
+  if (conf === 'C5') {
+    if (!triage.followUpQuestion) triage.followUpQuestion = buildCoachDefaultFollowUp(userText, derived);
+    return true;
+  }
+  if (conf === 'C4' && /pizza|slice|chipotle|burrito|restaurant|takeout|buffet|something|some food|ate out|ordered|shared/.test(t)) {
+    if (!triage.followUpQuestion) triage.followUpQuestion = buildCoachDefaultFollowUp(userText, derived);
+    return true;
+  }
+  return false;
+}
+
+function buildFoodReportAssumptionsLine(derived, triage) {
+  var parts = [];
+  if (triage && Array.isArray(triage.assumptions)) {
+    for (var i = 0; i < triage.assumptions.length; i++) {
+      var a = String(triage.assumptions[i] || '').trim();
+      if (a) parts.push(a);
+    }
+  }
+  if (!parts.length && derived && derived.items && derived.items.length) {
+    parts.push(derived.items.join(' + '));
+  }
+  if (derived && derived.cal != null && isFinite(derived.cal)) {
+    parts.push('~' + Math.round(derived.cal) + ' kcal');
+  }
+  var conf = derived && derived.confidence ? derived.confidence : 'C4';
+  if (conf === 'C4' || conf === 'C5') parts.push('estimate');
+  return parts.join(' · ');
+}
+
+function renderCoachFoodConfirmUI(userText, triage, derived, options) {
+  options = options || {};
+  coachFoodPending = {
+    conversationText: userText,
+    triage: triage,
+    items: derived.items,
+    mealCharacter: (triage && triage.mealCharacter) ? String(triage.mealCharacter).trim() : '',
+    confidence: derived.confidence,
+    aiSig: derived.aiSig,
+    source: options.source || 'coach_sheet',
+    options: options,
+    followUpRound: coachFoodPending && coachFoodPending.followUpRound ? coachFoodPending.followUpRound : 0
+  };
+  showCoachFoodConfirmStage();
+  var lead = el('coach-food-confirm-lead');
+  var assumptions = el('coach-food-assumptions');
+  var question = el('coach-food-confirm-q');
+  var logBtn = el('coach-food-log');
+  var mealChar = coachFoodPending.mealCharacter;
+  if (lead) {
+    lead.textContent = mealChar || derived.replySimple || 'Here\'s what I heard.';
+  }
+  if (assumptions) {
+    assumptions.textContent = buildFoodReportAssumptionsLine(derived, triage);
+  }
+  if (question) question.textContent = 'Sound right?';
+  if (logBtn) logBtn.textContent = 'Yes, log it';
+  setCoachFoodSheetBusy(false);
+  if (typeof options.onDone === 'function') options.onDone({ ok: false, pending: true });
 }
 
 function foodReportItemsFromTriage(triage, userText) {
@@ -16585,26 +16899,36 @@ function processCoachLauncherMessage(text) {
 function presentFoodReportConfirmation(userText, triage, options) {
   options = options || {};
   var derived = foodReportDerivedFromTriage(userText, triage);
-  coachFoodPending = {
-    conversationText: userText,
-    triage: triage,
-    items: derived.items,
-    mealCharacter: (triage && triage.mealCharacter) ? String(triage.mealCharacter).trim() : '',
-    confidence: derived.confidence,
-    aiSig: derived.aiSig,
-    source: options.source || 'coach_sheet',
-    options: options
-  };
-  showCoachFoodConfirmStage();
-  setCoachFoodSheetBusy(false);
-  if (typeof options.onDone === 'function') options.onDone({ ok: false, pending: true });
+  if (foodReportNeedsFollowUp(triage, derived, userText)) {
+    var prevRound = coachFoodPending && coachFoodPending.followUpRound ? coachFoodPending.followUpRound : 0;
+    coachFoodPending = {
+      conversationText: userText,
+      triage: triage,
+      items: derived.items,
+      confidence: derived.confidence,
+      aiSig: derived.aiSig,
+      source: options.source || 'coach_sheet',
+      options: options,
+      followUpRound: prevRound
+    };
+    showCoachFoodInputStage();
+    setCoachFoodPrompt(triage.followUpQuestion || buildCoachDefaultFollowUp(userText, derived));
+    var sendBtn = el('coach-food-send');
+    if (sendBtn) sendBtn.textContent = 'Send answer';
+    setCoachFoodSheetBusy(false);
+    if (typeof options.onDone === 'function') options.onDone({ ok: false, pending: true, followUp: true });
+    return;
+  }
+  renderCoachFoodConfirmUI(userText, triage, derived, options);
 }
 
 function coachFoodTellMore() {
   if (!coachFoodPending) return;
   showCoachFoodInputStage();
-  setCoachFoodPrompt('');
+  setCoachFoodPrompt('What should I adjust?');
   var inp = el('coach-food-inp');
+  var sendBtn = el('coach-food-send');
+  if (sendBtn) sendBtn.textContent = 'Send to Coach';
   if (inp) {
     inp.value = '';
     inp.disabled = false;
@@ -16665,6 +16989,10 @@ function processFoodReport(text, options) {
   if (!text) return null;
 
   setCoachFoodSheetBusy(true);
+  if (options.followUpRound) {
+    coachFoodPending = coachFoodPending || {};
+    coachFoodPending.followUpRound = options.followUpRound;
+  }
 
   triageFoodReportText(text, function(err, triage) {
     presentFoodReportConfirmation(text, triage, options);
@@ -17300,6 +17628,13 @@ function arcCompletePendingOAuthOnboardingFlow() {
 
 function arcWireApplicationDom() {
   syncDisplayModeDom();
+  arcWireShopGateDom();
+  document.addEventListener('click', function(e) {
+    var backLink = e.target.closest('[data-shop-gate-back]');
+    if (!backLink) return;
+    e.preventDefault();
+    arcStartFirstShopFlow();
+  });
   if (arcRestoredFromStorage) {
     applySafeProfileDefaults(UP);
     var storedProfileCheck = validateUserProfile(UP);
@@ -17576,6 +17911,7 @@ function arcWireApplicationDom() {
       if (menuAct === 'swap') openAssign(menuDay, menuSlot, 'replace');
       else if (menuAct === 'save') saveTodayRecipe(menuRid);
       else if (menuAct === 'remove') removeTodayMealSlot(menuDay, menuSlot);
+      else if (menuAct === 'undo') applyTodayMealAction('undo', menuDay, menuSlot);
       return;
     }
     var card = e.target.closest('.today-meal-card--link');
@@ -17816,10 +18152,12 @@ function arcWireApplicationDom() {
     if (!inp) return;
     var text = String(inp.value || '').trim();
     if (!text) return;
+    var opts = { source: 'coach_sheet' };
     if (coachFoodPending && coachFoodPending.conversationText) {
       text = coachFoodPending.conversationText + '\n' + text;
+      opts.followUpRound = (coachFoodPending.followUpRound || 0) + 1;
     }
-    processFoodReport(text, { source: 'coach_sheet' });
+    processFoodReport(text, opts);
     inp.value = '';
   });
   var coachFoodLog = el('coach-food-log');

@@ -26,13 +26,18 @@ function loadRecoverySpine(extraUp = {}) {
       foodReports: [],
       chaosRecovery: { version: 1, learning: { signalCounts: {}, actionCounts: {} }, days: {} },
       ...extraUp
+    },
+    ensureChaosRecovery(p) {
+      p = p || sandbox.UP;
+      if (!p.chaosRecovery) {
+        p.chaosRecovery = { version: 1, learning: { signalCounts: {}, actionCounts: {} }, days: {} };
+      }
     }
   };
   const ctx = vm.createContext(sandbox);
   const chunks = [
-    sliceIndexLines(6589, 6605),
-    sliceIndexLines(9480, 9503),
-    sliceIndexLines(9300, 9442)
+    sliceIndexLines(6756, 6772),
+    sliceIndexLines(9484, 9626)
   ];
   for (const src of chunks) vm.runInContext(src, ctx);
   return sandbox;
@@ -75,7 +80,7 @@ function loadReflectionSpine(extraUp = {}) {
   };
   const ctx = vm.createContext(sandbox);
   const chunks = [
-    sliceIndexLines(7226, 7330)
+    sliceIndexLines(7393, 7497)
   ];
   for (const src of chunks) vm.runInContext(src, ctx);
   return sandbox;
@@ -107,14 +112,18 @@ function loadCoachSpine(extraUp = {}) {
     ensureCoach(p) {
       p = p || sandbox.UP;
       if (!p.coach) p.coach = { dismissedDay: null, dismissedType: null };
+    },
+    ensureRecovery(p) {
+      p = p || sandbox.UP;
+      if (!Array.isArray(p.foodReports)) p.foodReports = [];
     }
   };
   const ctx = vm.createContext(sandbox);
   const chunks = [
-    sliceIndexLines(9029, 9044),
-    sliceIndexLines(9050, 9103),
-    sliceIndexLines(9176, 9181),
-    sliceIndexLines(9228, 9260)
+    sliceIndexLines(9215, 9228),
+    sliceIndexLines(9234, 9287),
+    sliceIndexLines(9360, 9365),
+    sliceIndexLines(9412, 9444)
   ];
   for (const src of chunks) vm.runInContext(src, ctx);
   return sandbox;
@@ -142,7 +151,7 @@ function loadDisplaySpine(extraUp = {}) {
     el() { return null; }
   };
   const ctx = vm.createContext(sandbox);
-  vm.runInContext(sliceIndexLines(9176, 9191), ctx);
+  vm.runInContext(sliceIndexLines(9360, 9375), ctx);
   return sandbox;
 }
 
