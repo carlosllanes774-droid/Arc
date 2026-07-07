@@ -84,6 +84,15 @@
 
   /** Full-page OAuth redirect (no popup). Caller should persist local state before await. */
   function signInWithGoogle() {
+    return signInWithOAuthProvider('google');
+  }
+
+  /** Sign in with Apple — enable in Supabase + set APPLE_AUTH_ENABLED on server. */
+  function signInWithApple() {
+    return signInWithOAuthProvider('apple');
+  }
+
+  function signInWithOAuthProvider(provider) {
     var c = getClient();
     if (!c) return Promise.reject(new Error('Supabase not configured'));
     var origin = '';
@@ -107,7 +116,7 @@
     var redirectTo = (origin || '') + path + search;
     if (!redirectTo) redirectTo = undefined;
     return c.auth.signInWithOAuth({
-      provider: 'google',
+      provider: provider,
       options: {
         redirectTo: redirectTo
       }
@@ -216,6 +225,38 @@
     });
   }
 
+  /** Server-side delete (profile + auth user). Requires SUPABASE_SERVICE_ROLE_KEY on server. */
+  function deleteAccount() {
+    var c = getClient();
+    if (!c) return Promise.reject(new Error('Supabase not configured'));
+    return c.auth.getSession().then(function (sessRes) {
+      var token = sessRes && sessRes.data && sessRes.data.session && sessRes.data.session.access_token;
+      if (!token) return Promise.reject(new Error('Not signed in'));
+      var base = '';
+      try {
+        if (global.ARC_API && global.ARC_API.baseUrl) {
+          base = String(global.ARC_API.baseUrl).replace(/\/$/, '');
+        } else if (global.location && global.location.origin) {
+          base = String(global.location.origin);
+        }
+      } catch (e0) {
+        base = '';
+      }
+      return fetch(base + '/api/account', {
+        method: 'DELETE',
+        headers: { Authorization: 'Bearer ' + token }
+      }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (body) {
+          if (!r.ok) {
+            var msg = body.message || body.error || 'Could not delete account';
+            return Promise.reject(new Error(msg));
+          }
+          return c.auth.signOut().then(function () { return body; });
+        });
+      });
+    });
+  }
+
   global.ArcBackend = {
     TABLE: TABLE,
     readConfig: readConfig,
@@ -226,6 +267,7 @@
     signInWithPassword: signInWithPassword,
     signUpWithPassword: signUpWithPassword,
     signInWithGoogle: signInWithGoogle,
+    signInWithApple: signInWithApple,
     resendSignupEmail: resendSignupEmail,
     resetPasswordForEmail: resetPasswordForEmail,
     isDuplicateSignupError: isDuplicateSignupError,
@@ -234,6 +276,7 @@
     onAuthStateChange: onAuthStateChange,
     fetchProfileRow: fetchProfileRow,
     mergeProfileState: mergeProfileState,
-    upsertProfileBundle: upsertProfileBundle
+    upsertProfileBundle: upsertProfileBundle,
+    deleteAccount: deleteAccount
   };
 })(typeof window !== 'undefined' ? window : this);

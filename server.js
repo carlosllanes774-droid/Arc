@@ -4,6 +4,7 @@ import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
+import * as Sentry from "@sentry/node";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -12,6 +13,14 @@ import vm from "node:vm";
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 
 dotenv.config();
+
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || "development",
+    tracesSampleRate: 0.1,
+  });
+}
 
 const __dirname = ROOT;
 
@@ -270,6 +279,14 @@ const supabaseAuthClient =
       })
     : null;
 
+const supabaseServiceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+const supabaseAdminClient =
+  supabaseAuthUrl && supabaseServiceKey
+    ? createClient(supabaseAuthUrl, supabaseServiceKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      })
+    : null;
+
 /** Validates Supabase JWT from Authorization: Bearer <token>. */
 async function requireAuth(req, res, next) {
   const authHeader = String(req.headers.authorization || "");
@@ -340,18 +357,69 @@ app.get("/index.html", sendArcUi);
 app.get("/Index.html", sendArcUi);
 app.get("/Index1.html", sendArcUi); // legacy alias
 
+app.get("/legal/privacy", (_req, res) => {
+  res.sendFile(path.join(ROOT, "legal", "privacy.html"));
+});
+app.get("/legal/terms", (_req, res) => {
+  res.sendFile(path.join(ROOT, "legal", "terms.html"));
+});
+
 /** Public client config — anon key only (RLS-protected), no service role. */
 app.get("/api/config/public", (req, res) => {
   const supabaseUrl = (process.env.SUPABASE_URL || "").trim().replace(/\/rest\/v1\/?$/i, "").replace(/\/$/, "");
+  const origin = requestPublicOrigin(req);
+  const contactEmail = (process.env.ARC_CONTACT_EMAIL || "").trim();
+  const appleEnabled =
+    process.env.APPLE_AUTH_ENABLED === "true" ||
+    !!(process.env.SUPABASE_APPLE_CLIENT_ID || "").trim();
   res.json({
-    arcApiBase: requestPublicOrigin(req),
+    arcApiBase: origin,
     supabase: {
       url: supabaseUrl,
       anonKey: (process.env.SUPABASE_ANON_KEY || "").trim(),
     },
     environment: apiValidation.environment,
     providers: apiValidation.providers,
+    legal: {
+      privacyUrl: `${origin}/legal/privacy`,
+      termsUrl: `${origin}/legal/terms`,
+      contactEmail: contactEmail || null,
+    },
+    auth: {
+      appleEnabled,
+    },
+    accountDeletionEnabled: !!supabaseAdminClient,
   });
+});
+
+/** Delete authenticated user + cloud profile (requires SUPABASE_SERVICE_ROLE_KEY). */
+app.delete("/api/account", requireAuth, async (req, res) => {
+  if (!supabaseAdminClient) {
+    return res.status(503).json({
+      error: "not_configured",
+      message: "Account deletion is not configured on the server yet.",
+    });
+  }
+  const userId = req.user.id;
+  try {
+    const { error: profileErr } = await supabaseAdminClient
+      .from("arc_profiles")
+      .delete()
+      .eq("id", userId);
+    if (profileErr) {
+      console.error("account delete profile", profileErr);
+    }
+    const { error: authErr } = await supabaseAdminClient.auth.admin.deleteUser(userId);
+    if (authErr) throw authErr;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("account delete", err);
+    Sentry.captureException(err);
+    res.status(500).json({
+      error: "delete_failed",
+      message: "Could not delete your account. Try again or contact support.",
+    });
+  }
 });
 
 /** Public config status — no secrets exposed. */
@@ -1838,6 +1906,10 @@ async function handleLiveGroceryPrices(req, res) {
 
 app.post("/api/grocery/prices", handleLiveGroceryPrices);
 app.post("/api/kroger/prices", handleLiveGroceryPrices);
+
+if (process.env.SENTRY_DSN) {
+  Sentry.setupExpressErrorHandler(app);
+}
 
 const PORT = process.env.PORT || 3000;
 

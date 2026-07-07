@@ -30,9 +30,9 @@ function loadRecoverySpine(extraUp = {}) {
   };
   const ctx = vm.createContext(sandbox);
   const chunks = [
-    sliceIndexLines(5725, 5741),
-    sliceIndexLines(8216, 8358),
-    sliceIndexLines(8396, 8419)
+    sliceIndexLines(6589, 6605),
+    sliceIndexLines(9480, 9503),
+    sliceIndexLines(9300, 9442)
   ];
   for (const src of chunks) vm.runInContext(src, ctx);
   return sandbox;
@@ -75,8 +75,7 @@ function loadReflectionSpine(extraUp = {}) {
   };
   const ctx = vm.createContext(sandbox);
   const chunks = [
-    sliceIndexLines(5725, 5741),
-    sliceIndexLines(6362, 6466)
+    sliceIndexLines(7226, 7330)
   ];
   for (const src of chunks) vm.runInContext(src, ctx);
   return sandbox;
@@ -85,6 +84,7 @@ function loadReflectionSpine(extraUp = {}) {
 function loadCoachSpine(extraUp = {}) {
   const sandbox = {
     console,
+    DAYS: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
     UP: {
       displayMode: 'simple',
       recovery: { tier: 0 },
@@ -103,13 +103,18 @@ function loadCoachSpine(extraUp = {}) {
     ensureRecovery(p) {
       p = p || sandbox.UP;
       if (!Array.isArray(p.foodReports)) p.foodReports = [];
+    },
+    ensureCoach(p) {
+      p = p || sandbox.UP;
+      if (!p.coach) p.coach = { dismissedDay: null, dismissedType: null };
     }
   };
   const ctx = vm.createContext(sandbox);
   const chunks = [
-    sliceIndexLines(7919, 7993),
-    sliceIndexLines(7995, 8000),
-    sliceIndexLines(8047, 8067)
+    sliceIndexLines(9029, 9044),
+    sliceIndexLines(9050, 9103),
+    sliceIndexLines(9176, 9181),
+    sliceIndexLines(9228, 9260)
   ];
   for (const src of chunks) vm.runInContext(src, ctx);
   return sandbox;
@@ -137,7 +142,7 @@ function loadDisplaySpine(extraUp = {}) {
     el() { return null; }
   };
   const ctx = vm.createContext(sandbox);
-  vm.runInContext(sliceIndexLines(7995, 8010), ctx);
+  vm.runInContext(sliceIndexLines(9176, 9191), ctx);
   return sandbox;
 }
 

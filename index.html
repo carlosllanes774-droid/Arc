@@ -2074,7 +2074,22 @@ button:not(:disabled):active,
 #s-today:not(.today--no-plan) .prepday-banner{display:none!important}
 .today-plan-ui{display:none}
 #s-today:not(.today--no-plan) .today-plan-ui{display:block}
-.today-status-row{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:22px}
+.today-status-row{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:22px;flex-wrap:wrap}
+.week-status-chip{display:none;font-size:11px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;padding:6px 12px;border-radius:999px;background:rgba(241,101,50,.12);color:#F16532;border:1px solid rgba(241,101,50,.22)}
+#s-today:not(.today--no-plan) .week-status-chip{background:rgba(241,101,50,.14);color:#f4a082;border-color:rgba(241,101,50,.28)}
+.coach-card{display:none;margin:18px 0 6px;padding:16px 18px;border-radius:20px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)}
+.coach-card.is-visible{display:block}
+.coach-card-h{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:rgba(241,101,50,.85);margin-bottom:6px}
+.coach-card-headline{font-size:16px;font-weight:600;color:#F8F4F0;line-height:1.45;margin:0 0 6px}
+.coach-card-reassurance{font-size:13px;color:rgba(255,255,255,.55);line-height:1.5;margin:0 0 12px}
+.coach-card-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+.coach-card-act{padding:8px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#F4F1EE;font-size:13px;font-weight:600;cursor:pointer}
+.coach-card-dismiss{background:none;border:none;color:rgba(255,255,255,.45);font-size:12px;cursor:pointer;padding:4px 0}
+.arc-auth-apple{margin-bottom:18px;display:none}
+.arc-auth-apple.is-available{display:block}
+.arc-auth-apple-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:14px 18px;border-radius:var(--r-md);border:1px solid rgba(255,255,255,.14);background:#000;color:#fff;font-size:var(--fs-body);font-weight:600;cursor:pointer;min-height:var(--tap-min)}
+.settings-delete-account-btn{width:100%;margin-top:10px;border-radius:14px;padding:12px;font-size:14px;font-weight:600;color:#b42318;border-color:rgba(180,35,24,.25)}
+.ob-health-note{font-size:12px;color:var(--arc-subtext);line-height:1.5;margin-top:14px;padding:12px 14px;border-radius:12px;background:var(--arc-surface-2);border:1px solid var(--arc-border)}
 #s-today:not(.today--no-plan) #today-date{display:block!important;margin:0;padding:0;flex:0 0 auto;text-align:center;font-family:Inter,system-ui,-apple-system,sans-serif;font-size:18px;font-weight:500;color:rgba(255,255,255,.55);background:none;border:none}
 .today-meals-list{display:flex;flex-direction:column;gap:12px;margin-top:28px;padding-bottom:8px}
 .today-meal-block{display:flex;flex-direction:column;gap:10px}
@@ -2556,6 +2571,12 @@ button:not(:disabled):active,
               <span id="arc-auth-google-label">Continue with Google</span>
             </button>
           </div>
+          <div class="arc-auth-apple" id="arc-auth-apple-wrap">
+            <button type="button" class="arc-auth-apple-btn" id="arc-auth-apple" aria-label="Continue with Apple">
+              <span aria-hidden="true"></span>
+              <span id="arc-auth-apple-label">Continue with Apple</span>
+            </button>
+          </div>
           <div class="arc-auth-divider" aria-hidden="true"><span id="arc-auth-divider-txt">or continue with email</span></div>
           <div class="arc-auth-field arc-auth-field-row" id="arc-auth-field-email">
             <label for="arc-auth-email">Email</label>
@@ -2660,7 +2681,15 @@ button:not(:disabled):active,
     <div class="today-plan-ui">
       <div class="today-status-row">
         <p id="today-date">—</p>
+        <span id="week-status-chip" class="week-status-chip" aria-live="polite"></span>
       </div>
+      <section id="coach-card" class="coach-card" aria-live="polite" aria-label="Arc Coach" hidden>
+        <div class="coach-card-h">Arc Coach</div>
+        <p class="coach-card-headline" id="coach-card-headline"></p>
+        <p class="coach-card-reassurance" id="coach-card-reassurance"></p>
+        <div class="coach-card-actions" id="coach-quick-actions" role="group" aria-label="Coach quick actions"></div>
+        <button type="button" class="coach-card-dismiss" id="coach-card-dismiss">Dismiss for today</button>
+      </section>
       <div class="today-meals-list" id="today-meals-list" aria-label="Today's meals"></div>
     </div>
     <div class="prepday-banner" id="prepday-banner" style="display:none" role="region" aria-label="Prep day suggestion">
@@ -3150,6 +3179,8 @@ button:not(:disabled):active,
         <span class="settings-account-val" id="s-account-provider">—</span>
       </div>
       <button type="button" class="btn-outline settings-logout-btn" id="s-logout">Log out</button>
+      <button type="button" class="btn-outline settings-delete-account-btn" id="s-delete-account">Delete account</button>
+      <p style="font-size:12px;color:var(--arc-subtext);margin:8px 0 0;line-height:1.45">Deletes your cloud profile and sign-in. This cannot be undone.</p>
     </div>
 
     <!-- PERSONALIZATION -->
@@ -3281,8 +3312,8 @@ button:not(:disabled):active,
     <div class="settings-sec">
       <div class="settings-sec-title">Support</div>
       <button type="button" class="settings-support-link" id="s-support-privacy">Privacy Policy</button>
-      <button type="button" class="settings-support-link" id="s-support-terms" disabled>Terms of Service</button>
-      <button type="button" class="settings-support-link" id="s-support-contact" disabled>Contact</button>
+      <button type="button" class="settings-support-link" id="s-support-terms">Terms of Service</button>
+      <button type="button" class="settings-support-link" id="s-support-contact">Contact</button>
     </div>
 
     <!-- PAST REFLECTIONS -->
@@ -3364,6 +3395,7 @@ button:not(:disabled):active,
 <script src="js/arc-engine/arcAdherenceEngine.js"></script>
 <script src="js/arc-engine/arcEngine.js"></script>
 <script src="js/arc-runtime.js"></script>
+<script src="js/arc-platform.js"></script>
 <script src="js/arc-food-log-signals.js"></script>
 <script src="js/arc-adaptive-recipe-scoring.js"></script>
 <script src="js/arc-nutrition-pipeline.js"></script>
@@ -3393,6 +3425,9 @@ function arcExtractJsonParsePosition(err, text) {
 }
 
 function arcLogJsonParseDiagnostics(raw, cleaned, err, context, aiMeta) {
+  if (typeof ArcPlatform !== 'undefined' && ArcPlatform.isProdClient && ArcPlatform.isProdClient()) {
+    return;
+  }
   context = context || 'parseJSON';
   aiMeta = aiMeta || null;
   var rawStr = raw == null ? '' : (typeof raw === 'string' ? raw : JSON.stringify(raw));
@@ -3777,6 +3812,38 @@ function arcScgAvgOverlapWithWeek(candidate, weekRecipeIds, recipeById) {
   return n ? sum / n : 0;
 }
 
+function arcScgMacroFitScore(candidate, slot, mealTargets, goal) {
+  var t = arcSlotMealTarget(slot, mealTargets);
+  var targetCal = Number(t.cal) || 600;
+  var cal = Number(candidate.cal) || 0;
+  if (cal <= 0) return -2;
+  var ratio = cal / targetCal;
+  var score = 0;
+  if (ratio > 1.35) score -= (ratio - 1.35) * 8;
+  else if (ratio > 1.15) score -= (ratio - 1.15) * 4;
+  else if (ratio < 0.55) score -= (0.55 - ratio) * 4;
+  else if (ratio >= 0.85 && ratio <= 1.1) score += 2;
+  var goalKey = String(goal || (UP && UP.goal) || '').toLowerCase();
+  if (/lose|recomp/.test(goalKey) && ratio > 1.2) score -= 1.5;
+  if (/muscle|gain/.test(goalKey)) {
+    var tp = Number(t.p) || 30;
+    var p = Number(candidate.p) || 0;
+    if (tp > 0 && p / Math.max(cal, 1) < tp / Math.max(targetCal, 1) * 0.75) score -= 1;
+    else if (p >= tp * 0.85) score += 0.75;
+  }
+  return score;
+}
+
+function arcSlotMealTarget(slot, mealTargets) {
+  mealTargets = mealTargets || {};
+  var cat = slotNameToMealCategory(slot);
+  if (cat === 'Breakfast' && mealTargets.Breakfast) return mealTargets.Breakfast;
+  if (cat === 'Lunch' && mealTargets.Lunch) return mealTargets.Lunch;
+  if (cat === 'Dinner' && mealTargets.Dinner) return mealTargets.Dinner;
+  if (cat === 'Snack' && mealTargets.Snack) return mealTargets.Snack;
+  return mealTargets.perSlot || { cal: 600, p: 40, c: 50, f: 18 };
+}
+
 function arcScgCoreScore(candidate, ctx) {
   var wOverlap = 3.0;
   var wStyle = 2.0;
@@ -3803,7 +3870,8 @@ function arcScgAdaptiveDelta(candidate, ctx) {
 }
 
 function arcScgScoreCandidate(candidate, ctx) {
-  return arcScgCoreScore(candidate, ctx) + arcScgAdaptiveDelta(candidate, ctx);
+  return arcScgCoreScore(candidate, ctx) + arcScgAdaptiveDelta(candidate, ctx) +
+    arcScgMacroFitScore(candidate, ctx.slot, ctx.mealTargets, ctx.goal);
 }
 
 function arcScgSortPool(pool, ctx) {
@@ -3862,6 +3930,12 @@ function buildScgWeekMealPlan(libraryRecipes, slots, intent) {
     ? BW_STYLE_META[intent.style]
     : ((typeof BW_STYLE_META !== 'undefined' && BW_STYLE_META.balanced) ? BW_STYLE_META.balanced : { repeats: 2 });
   var blockLen = styleMeta.repeats || 2;
+  var mealTargets = intent.mealTargets;
+  if (!mealTargets) {
+    var ne = buildNutritionEngine();
+    mealTargets = ne.mealTargets;
+  }
+  var goal = intent.goal || (UP && UP.goal) || '';
   var byCat = groupLibraryRecipesByCategory(libraryRecipes);
   var recipeById = {};
   libraryRecipes.forEach(function (r) { if (r && r.id != null) recipeById[r.id] = r; });
@@ -3901,7 +3975,9 @@ function buildScgWeekMealPlan(libraryRecipes, slots, intent) {
         blockLen: blockLen,
         adaptiveCtx: adaptiveCtx,
         slot: slot,
-        slotCat: cat
+        slotCat: cat,
+        mealTargets: mealTargets,
+        goal: goal
       };
       var ranked = arcScgSortPool(pool, ctx);
       var pick = ranked[0].recipe;
@@ -5702,6 +5778,7 @@ function arcAuthSetMode(mode) {
   var forgotWrap = el('arc-auth-forgot-wrap');
   var pwField = el('arc-auth-field-password');
   var googleWrap = document.querySelector('.arc-auth-google');
+  var appleWrap = el('arc-auth-apple-wrap');
   var divider = document.querySelector('.arc-auth-divider');
   var foot = document.querySelector('.arc-auth-foot');
   if (arcAuthUiMode === 'forgot') {
@@ -5711,6 +5788,7 @@ function arcAuthSetMode(mode) {
     if (forgotWrap) forgotWrap.hidden = true;
     if (pwField) pwField.style.display = 'none';
     if (googleWrap) googleWrap.style.display = 'none';
+    if (appleWrap) appleWrap.style.display = 'none';
     if (divider) divider.style.display = 'none';
     if (foot) foot.style.display = 'none';
     var lblForgot = el('arc-auth-submit-label');
@@ -5720,6 +5798,8 @@ function arcAuthSetMode(mode) {
     if (forgotWrap) forgotWrap.hidden = arcAuthMode !== 'signin';
     if (pwField) pwField.style.display = '';
     if (googleWrap) googleWrap.style.display = '';
+    if (appleWrap) appleWrap.style.display = '';
+    arcApplyAuthProviders();
     if (divider) divider.style.display = '';
     if (foot) foot.style.display = '';
     if (h) h.textContent = arcAuthMode === 'signin' ? (ac.headlineSignIn || 'Welcome back.') : (ac.headlineSave || 'Your Arc system is ready.');
@@ -5827,6 +5907,78 @@ function arcAuthSetGoogleBusy(isBusy) {
   }
 }
 
+function arcLegalUrl(kind) {
+  var cfg = window.ARC_PUBLIC_CONFIG || {};
+  var legal = cfg.legal || {};
+  if (kind === 'privacy') return legal.privacyUrl || ((window.location && window.location.origin) ? window.location.origin + '/legal/privacy' : '/legal/privacy');
+  if (kind === 'terms') return legal.termsUrl || ((window.location && window.location.origin) ? window.location.origin + '/legal/terms' : '/legal/terms');
+  return null;
+}
+
+function arcContactHref() {
+  var cfg = window.ARC_PUBLIC_CONFIG || {};
+  var email = cfg.legal && cfg.legal.contactEmail;
+  return email ? ('mailto:' + email) : null;
+}
+
+function arcApplyAuthProviders() {
+  var appleWrap = el('arc-auth-apple-wrap');
+  if (!appleWrap) return;
+  var show = typeof ArcPlatform !== 'undefined' && ArcPlatform.shouldShowAppleSignIn && ArcPlatform.shouldShowAppleSignIn();
+  appleWrap.classList.toggle('is-available', !!show);
+}
+
+function arcWireSupportLinks() {
+  var privacyBtn = el('s-support-privacy');
+  var termsBtn = el('s-support-terms');
+  var contactBtn = el('s-support-contact');
+  if (privacyBtn && !privacyBtn._arcLegalBound) {
+    privacyBtn._arcLegalBound = true;
+    privacyBtn.addEventListener('click', function () {
+      var url = arcLegalUrl('privacy');
+      if (url) window.open(url, '_blank', 'noopener,noreferrer');
+    });
+  }
+  if (termsBtn && !termsBtn._arcLegalBound) {
+    termsBtn._arcLegalBound = true;
+    termsBtn.addEventListener('click', function () {
+      var url = arcLegalUrl('terms');
+      if (url) window.open(url, '_blank', 'noopener,noreferrer');
+    });
+  }
+  if (contactBtn && !contactBtn._arcLegalBound) {
+    contactBtn._arcLegalBound = true;
+    contactBtn.addEventListener('click', function () {
+      var href = arcContactHref();
+      if (href) window.location.href = href;
+      else showToast('Add ARC_CONTACT_EMAIL in Render to enable Contact.');
+    });
+  }
+}
+
+function arcConfirmDeleteAccount() {
+  if (!window.confirm('Delete your Arc account permanently? This removes your cloud profile and cannot be undone.')) return;
+  if (typeof ArcBackend === 'undefined' || !ArcBackend.deleteAccount) {
+    showToast('Account deletion is not available yet.');
+    return;
+  }
+  var btn = el('s-delete-account');
+  if (btn) btn.disabled = true;
+  ArcBackend.deleteAccount()
+    .then(function () {
+      return arcLogout();
+    })
+    .then(function () {
+      showToast('Your account was deleted.');
+    })
+    .catch(function (err) {
+      showToast(err && err.message ? err.message : 'Could not delete account.');
+    })
+    .finally(function () {
+      if (btn) btn.disabled = false;
+    });
+}
+
 function arcHandleGoogleAuth() {
   if (!arcIsCloudAuthEnabled() || arcAuthBusy) return;
   if (arcAuthAwaitingVerify) return;
@@ -5849,7 +6001,36 @@ function arcHandleGoogleAuth() {
     });
 }
 
+function arcHandleAppleAuth() {
+  if (!arcIsCloudAuthEnabled() || arcAuthBusy) return;
+  if (arcAuthAwaitingVerify) return;
+  arcClearAuthMsg();
+  arcAuthSetGoogleBusy(true);
+  try {
+    saveUserProfile();
+  } catch (eSv) {}
+  ArcBackend.signInWithApple()
+    .then(function (res) {
+      if (res && res.error) {
+        arcSetAuthMsg(ArcBackend.mapAuthError(res.error));
+        arcAuthSetGoogleBusy(false);
+        return;
+      }
+    })
+    .catch(function (err) {
+      arcSetAuthMsg(ArcBackend.mapAuthError(err));
+      arcAuthSetGoogleBusy(false);
+    });
+}
+
 function arcWireAuthScreen() {
+  var aBtn = el('arc-auth-apple');
+  if (aBtn && !aBtn._arcBound) {
+    aBtn._arcBound = true;
+    aBtn.addEventListener('click', function () {
+      arcHandleAppleAuth();
+    });
+  }
   var gBtn = el('arc-auth-google');
   if (gBtn && !gBtn._arcBound) {
     gBtn._arcBound = true;
@@ -8921,6 +9102,77 @@ function buildCoachResponse(ctx) {
   return _buildCoachFoodReportResponse(out, copy, day, foodFr);
 }
 
+function dismissCoach(eventType) {
+  ensureCoach(UP);
+  UP.coach.dismissedDay = todayKey();
+  UP.coach.dismissedType = eventType || 'food_report';
+  saveUserProfile();
+  renderToday();
+}
+
+function renderCoachQuickActions(day, chaosPlan, container, response) {
+  if (!container) return;
+  container.innerHTML = '';
+  var actions = (chaosPlan && chaosPlan.active && chaosPlan.actions) ? chaosPlan.actions : [];
+  if (!actions.length) {
+    actions = [
+      { label: 'I ate something', type: 'ate_out' },
+      { label: 'I skipped a meal', type: 'skipped_meal' }
+    ];
+  }
+  for (var i = 0; i < actions.length; i++) {
+    (function (act) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'coach-card-act';
+      btn.textContent = act.label || 'Action';
+      btn.addEventListener('click', function () {
+        if (act.type === 'ate_out' || act.type === 'food_report') {
+          coachLauncherOpenFoodSheet();
+        } else if (act.type === 'skipped_meal') {
+          evaluateEventAndAct('skipped_meal', { day: day });
+        } else if (act.type === 'swap' && act.slot) {
+          openAssign(day, act.slot, 'plan');
+        } else {
+          openCoachLauncherSheet();
+        }
+      });
+      container.appendChild(btn);
+    })(actions[i]);
+  }
+}
+
+function renderCoach(day, response) {
+  var card = el('coach-card');
+  if (!card) return;
+  response = response || buildCoachResponse({ day: day || todayKey() });
+  if (!response.visible) {
+    card.classList.remove('is-visible');
+    card.hidden = true;
+    card.setAttribute('aria-hidden', 'true');
+    return;
+  }
+  card.classList.add('is-visible');
+  card.hidden = false;
+  card.setAttribute('aria-hidden', 'false');
+  var headline = el('coach-card-headline');
+  var reassurance = el('coach-card-reassurance');
+  var actions = el('coach-quick-actions');
+  if (headline) headline.textContent = response.headline || '';
+  if (reassurance) {
+    reassurance.textContent = response.reassurance || '';
+    reassurance.style.display = response.reassurance ? '' : 'none';
+  }
+  renderCoachQuickActions(day, response.chaosPlan, actions, response);
+  var dismissBtn = el('coach-card-dismiss');
+  if (dismissBtn && !dismissBtn._arcBound) {
+    dismissBtn._arcBound = true;
+    dismissBtn.addEventListener('click', function () {
+      dismissCoach(response.eventType || response.source || 'food_report');
+    });
+  }
+}
+
 var ARC_DISPLAY_SIMPLE = 'simple';
 var ARC_DISPLAY_ADVANCED = 'advanced';
 
@@ -10023,6 +10275,13 @@ function renderToday() {
   var calTarget = eff.calTarget;
   var macros = eff.macros;
   var chaosPlan = eff.chaosPlan;
+  var coachResp = buildCoachResponse({
+    day: day,
+    slots: slots,
+    chaosPlan: chaosPlan,
+    eff: eff
+  });
+  renderCoach(day, coachResp);
   var consumed = getDayConsumedTotals(day, slots);
   var planned = getDayPlannedTotals(day, slots);
   var behaviorState = buildDailyBehaviorState(day, slots, {
@@ -12318,6 +12577,9 @@ function generateWeeklyPlan(intent) {
       console.log('[ARC PIPELINE] Week recipe library ready', { count: weekLibraryRecipes.length });
       setGenPhase('balancing');
       UP.arcWeekPlanner = 'scg';
+      intent = intent || {};
+      intent.mealTargets = built.mt;
+      intent.goal = UP.goal;
       var weekPayload = buildDeterministicWeekMealPlan(weekLibraryRecipes, built.slots, intent);
       if (!weekPayload) {
         failWeekGeneration('Could not build week assignment from library', raw);
@@ -17174,10 +17436,8 @@ function arcWireApplicationDom() {
   });
 
   var privacyBtn = el('s-support-privacy');
-  if (privacyBtn) {
-    privacyBtn.addEventListener('click', function () {
-      openMotion('privacy-modal', 'flex');
-    });
+  if (privacyBtn && !privacyBtn._arcModalBound) {
+    privacyBtn._arcModalBound = true;
   }
   var privacyClose = el('privacy-modal-close');
   if (privacyClose) {
@@ -17228,6 +17488,11 @@ function arcWireApplicationDom() {
         logoutBtn.disabled = false;
       });
     });
+  }
+  var deleteBtn = el('s-delete-account');
+  if (deleteBtn && !deleteBtn._arcBound) {
+    deleteBtn._arcBound = true;
+    deleteBtn.addEventListener('click', arcConfirmDeleteAccount);
   }
 
   // Welcome intro (first-use) → Onboarding
@@ -17611,6 +17876,8 @@ function arcScheduleSplashDismiss() {
 function arcBootAfterConfig() {
   applyArcBrandingToStaticDom();
   syncDisplayModeDom();
+  arcApplyAuthProviders();
+  arcWireSupportLinks();
   arcRegisterAuthListener();
   if (!arcIsCloudAuthEnabled()) {
     restorePersistedState();

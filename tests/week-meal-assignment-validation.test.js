@@ -33,11 +33,22 @@ function loadSandbox(extraUp = {}) {
     mealJournal: {},
     getSlots() {
       return this.SLOT_SETS[String(this.UP.meals || '3')] || this.SLOT_SETS['3'];
+    },
+    buildNutritionEngine() {
+      return {
+        mealTargets: {
+          perSlot: { cal: 600, p: 40, c: 50, f: 18 },
+          Breakfast: { cal: 500, p: 35, c: 45, f: 15 },
+          Lunch: { cal: 600, p: 40, c: 55, f: 18 },
+          Dinner: { cal: 700, p: 45, c: 60, f: 20 },
+          Snack: { cal: 250, p: 15, c: 25, f: 8 }
+        }
+      };
     }
   };
   const ctx = vm.createContext(sandbox);
   const chunks = [
-    sliceIndexLines(3141, 3580)
+    sliceIndexLines(3735, 4290)
   ];
   for (const src of chunks) vm.runInContext(src, ctx);
   return sandbox;
