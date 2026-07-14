@@ -16324,7 +16324,7 @@ function renderShopping() {
     var prog = arcShopGateProgress(lines);
     if (gateShopping) {
       var todayCls = 'btn-shop-gate-today' + (prog.ready ? ' is-ready' : ' is-locked');
-      var todayLabel = prog.ready ? 'Go to Today' : ('Go to Today (' + prog.handled + '/' + Math.min(3, prog.total) + ' items)';
+      var todayLabel = prog.ready ? 'Go to Today' : ('Go to Today (' + prog.handled + '/' + Math.min(3, prog.total) + ' items)');
       exportWrap.innerHTML = '<button type="button" class="' + todayCls + '" id="shop-gate-today-btn"' +
         (prog.ready ? '' : ' disabled aria-disabled="true"') + '>' + shopEsc(todayLabel) + '</button>';
       var todayBtn = el('shop-gate-today-btn');
